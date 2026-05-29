@@ -226,3 +226,13 @@ export function matchesFuzzy(target: string, query: string): boolean {
   return true
 }
 
+export function normalizarTelefono(telefono: string): string {
+  if (!telefono) return ''
+  const limpio = telefono.replace(/\D/g, '')
+  if (limpio.length === 9) {
+    return `51${limpio}`
+  }
+  return limpio
+}
+
+

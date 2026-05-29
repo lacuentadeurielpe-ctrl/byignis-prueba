@@ -4,6 +4,7 @@ import { getSessionInfo } from '@/lib/auth/roles'
 import { geocodificarDireccion } from '@/lib/delivery/geocoding'
 import { calcularETA } from '@/lib/delivery/eta'
 import { crearEntrega } from '@/lib/delivery/assignment'
+import { normalizarTelefono } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +62,42 @@ export async function POST(request: Request) {
   if (errNum || !numeroPedido)
     return NextResponse.json({ error: `Error generando número: ${errNum?.message}` }, { status: 500 })
 
+  // ── Buscar o crear cliente ───────────────────────────────────────────
+  let clienteId: string | null = null
+  const telefonoNormalizado = normalizarTelefono(telefono_cliente)
+
+  const { data: clienteExistente } = await supabase
+    .from('clientes')
+    .select('id')
+    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('telefono', telefonoNormalizado)
+    .maybeSingle()
+
+  if (clienteExistente) {
+    clienteId = clienteExistente.id
+    if (nombre_cliente) {
+      await supabase
+        .from('clientes')
+        .update({ nombre: nombre_cliente.trim() })
+        .eq('id', clienteId)
+    }
+  } else {
+    const { data: nuevoCliente, error: errCliente } = await supabase
+      .from('clientes')
+      .insert({
+        ferreteria_id: session.ferreteriaId,
+        telefono: telefonoNormalizado,
+        nombre: nombre_cliente.trim(),
+      })
+      .select('id')
+      .single()
+
+    if (errCliente || !nuevoCliente) {
+      return NextResponse.json({ error: 'Error al registrar cliente: ' + errCliente?.message }, { status: 500 })
+    }
+    clienteId = nuevoCliente.id
+  }
+
   // Si hay fecha programada, el pedido nace en 'programado' y no en 'pendiente'
   const estadoInicial = fecha_entrega_programada ? 'programado' : 'pendiente'
 
@@ -68,9 +105,11 @@ export async function POST(request: Request) {
     .from('pedidos')
     .insert({
       ferreteria_id:            session.ferreteriaId,
+      cotizacion_id:            null,
+      cliente_id:               clienteId,
       numero_pedido:            numeroPedido,
       nombre_cliente:           nombre_cliente.trim(),
-      telefono_cliente:         telefono_cliente.trim(),
+      telefono_cliente:         telefonoNormalizado,
       modalidad,
       direccion_entrega:        direccion_entrega?.trim() ?? null,
       zona_delivery_id:         zona_delivery_id ?? null,
@@ -82,6 +121,7 @@ export async function POST(request: Request) {
     })
     .select('id, numero_pedido')
     .single()
+
 
   if (errPedido || !pedido)
     return NextResponse.json({ error: errPedido?.message ?? 'Error creando pedido' }, { status: 500 })

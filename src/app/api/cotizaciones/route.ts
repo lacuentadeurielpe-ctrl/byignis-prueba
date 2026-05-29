@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { normalizarTelefono } from '@/lib/utils'
 
 // GET /api/cotizaciones
 export async function GET(request: Request) {
@@ -56,9 +57,10 @@ export async function POST(request: Request) {
 
   // 1. Buscar o crear cliente
   let clienteId: string | null = null
-  const telNormal = telefono_cliente.replace(/^\+/, '').trim()
+  const telNormal = normalizarTelefono(telefono_cliente)
   
   const { data: clienteExistente } = await supabase
+
     .from('clientes')
     .select('id')
     .eq('ferreteria_id', session.ferreteriaId)

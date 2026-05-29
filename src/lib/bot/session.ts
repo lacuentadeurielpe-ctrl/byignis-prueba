@@ -2,6 +2,7 @@
 // Una sesión es una conversación activa entre cliente y ferretería
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Conversacion, Cliente } from '@/types/database'
+import { normalizarTelefono } from '@/lib/utils'
 
 interface GetOrCreateSessionResult {
   conversacion: Conversacion
@@ -17,23 +18,25 @@ export async function getOrCreateSession(
   timeoutSesionMinutos: number
 ): Promise<GetOrCreateSessionResult> {
   // 1. Obtener o crear cliente
+  const telNormal = normalizarTelefono(telefonoCliente)
   let { data: cliente } = await supabase
     .from('clientes')
     .select('*')
     .eq('ferreteria_id', ferreteriaId)
-    .eq('telefono', telefonoCliente)
+    .eq('telefono', telNormal)
     .single()
 
   if (!cliente) {
     const { data: nuevoCliente, error } = await supabase
       .from('clientes')
-      .insert({ ferreteria_id: ferreteriaId, telefono: telefonoCliente })
+      .insert({ ferreteria_id: ferreteriaId, telefono: telNormal })
       .select()
       .single()
 
     if (error) throw new Error(`Error creando cliente: ${error.message}`)
     cliente = nuevoCliente
   }
+
 
   // 2. Buscar la conversación más reciente del cliente — modelo WhatsApp:
   //    una sola conversación por número de teléfono, permanente, nunca expira.
@@ -183,12 +186,14 @@ export async function pausarBotPorDueno(
   telefonoCliente: string
 ): Promise<void> {
   // Find the client by phone
+  const telNormal = normalizarTelefono(telefonoCliente)
   const { data: cliente } = await supabase
     .from('clientes')
     .select('id')
     .eq('ferreteria_id', ferreteriaId)
-    .eq('telefono', telefonoCliente)
+    .eq('telefono', telNormal)
     .maybeSingle()
+
 
   if (!cliente) return
 

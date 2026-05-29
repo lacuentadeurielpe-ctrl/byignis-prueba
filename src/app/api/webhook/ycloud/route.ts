@@ -26,6 +26,7 @@ import { pausarBotPorDueno } from '@/lib/bot/session'
 import { acumularOProcesar } from '@/lib/bot/debounce'
 import { extraerComprobante } from '@/lib/pagos/extractor'
 import { procesarPago } from '@/lib/pagos/matcher'
+import { normalizarTelefono } from '@/lib/utils'
 
 // Vercel: hasta 60s para poder hacer download + Whisper + DeepSeek en secuencia
 export const maxDuration = 60
@@ -279,7 +280,7 @@ export async function POST(request: Request) {
               const datosComprobante = await extraerComprobante(media.buffer, media.mimeType)
 
               // Buscar cliente en la ferretería actual — FERRETERÍA AISLADA
-              const telefonoClienteNorm = telefonoCliente.replace(/^\+/, '')
+              const telefonoClienteNorm = normalizarTelefono(telefonoCliente)
               const { data: clienteData } = await supabase
                 .from('clientes')
                 .select('id')
