@@ -222,8 +222,8 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
       : item.precio_unitario
 
     const subtotalSinIgv = redondear2(valorUnitario * item.cantidad)
-    const igvItem        = redondear2(subtotalSinIgv * IGV_RATE)
     const totalItem      = redondear2(precioConIgv * item.cantidad)
+    const igvItem        = redondear2(totalItem - subtotalSinIgv)
 
     return {
       unidad_de_medida:  mapearUnidadSunat(item.unidad),
@@ -496,8 +496,8 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
       : item.precio_unitario
 
     const subtotalSinIgv = redondear2(valorUnitario * item.cantidad)
-    const igvItem        = redondear2(subtotalSinIgv * IGV_RATE)
     const totalItem      = redondear2(precioConIgv * item.cantidad)
+    const igvItem        = redondear2(totalItem - subtotalSinIgv)
 
     return {
       unidad_de_medida:  mapearUnidadSunat(item.unidad),
@@ -681,6 +681,26 @@ export async function emitirNotaCredito(opts: OpcionesNotaCredito): Promise<Resu
   if (errRef || !ref) return { ok: false, error: 'Comprobante original no encontrado' }
   if (ref.estado !== 'emitido') return { ok: false, error: 'Solo se puede emitir NC a un comprobante emitido' }
 
+  // 2.5 Verificar si ya existe nota de crédito emitida
+  const { data: yaEmitida } = await supabase
+    .from('comprobantes')
+    .select('id, numero_completo, estado, pdf_url, xml_url')
+    .eq('pedido_id', ref.pedido_id)
+    .eq('ferreteria_id', opts.ferreteriaId)
+    .eq('tipo', 'nota_credito')
+    .eq('estado', 'emitido')
+    .maybeSingle()
+
+  if (yaEmitida) {
+    return {
+      ok:             true,
+      comprobanteId:  yaEmitida.id,
+      numeroCompleto: yaEmitida.numero_completo,
+      pdfUrl:         yaEmitida.pdf_url   ?? undefined,
+      xmlUrl:         yaEmitida.xml_url   ?? undefined,
+    }
+  }
+
   // 3. Generar correlativo
   // Si modifica boleta usa serie que empiece con B (ej. BC01), si factura con F (ej. FC01)
   const isBoleta = ref.tipo === 'boleta'
@@ -713,8 +733,8 @@ export async function emitirNotaCredito(opts: OpcionesNotaCredito): Promise<Resu
     const precioConIgv = igvIncluido ? item.precio_unitario : item.precio_unitario * (1 + IGV_RATE)
     const valorUnitario = igvIncluido ? redondear2(item.precio_unitario / (1 + IGV_RATE)) : item.precio_unitario
     const subtotalSinIgv = redondear2(valorUnitario * item.cantidad)
-    const igvItem        = redondear2(subtotalSinIgv * IGV_RATE)
     const totalItem      = redondear2(precioConIgv * item.cantidad)
+    const igvItem        = redondear2(totalItem - subtotalSinIgv)
 
     return {
       unidad_de_medida:  mapearUnidadSunat(item.unidad),
