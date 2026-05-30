@@ -5,14 +5,20 @@ import { Loader2 } from 'lucide-react'
 import type { Pedido } from '@/types/database'
 
 interface Props {
-  pedido:    Pedido
-  onClose:   () => void
-  onEmitida: (resultado: { numeroCompleto: string; pdfUrl?: string }) => void
+  pedido:               Pedido
+  clienteRuc?:          string | null   // pre-llenado desde ficha del cliente
+  clienteRazonSocial?:  string | null   // pre-llenado desde ficha del cliente
+  onClose:              () => void
+  onEmitida:            (resultado: { numeroCompleto: string; pdfUrl?: string }) => void
 }
 
-export default function ModalEmitirFactura({ pedido, onClose, onEmitida }: Props) {
-  const [ruc,          setRuc]          = useState('')
-  const [razonSocial,  setRazonSocial]  = useState('')
+export default function ModalEmitirFactura({ pedido, clienteRuc, clienteRazonSocial, onClose, onEmitida }: Props) {
+  // Pre-llenar si el cliente tiene RUC en su ficha (11 dígitos = empresa)
+  const rucInicial = clienteRuc && clienteRuc.replace(/\D/g, '').length === 11
+    ? clienteRuc.replace(/\D/g, '')
+    : ''
+  const [ruc,          setRuc]          = useState(rucInicial)
+  const [razonSocial,  setRazonSocial]  = useState(clienteRazonSocial ?? '')
   const [verificando,  setVerificando]  = useState(false)
   const [rucError,     setRucError]     = useState<string | null>(null)
   const [loading,      setLoading]      = useState(false)

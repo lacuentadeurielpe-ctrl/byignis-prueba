@@ -244,13 +244,29 @@ export interface ConfiguracionBot {
   umbral_upsell_soles: number        // F5: monto mínimo S/ para activar upsell — default 0
 }
 
+export type TipoCliente = 'persona' | 'empresa' | 'anonimo'
+
 export interface Cliente {
   id: string
   ferreteria_id: string
-  telefono: string
+  telefono: string | null
   nombre: string | null
-  ruc_cliente: string | null     // F1: RUC del cliente (para facturas)
+  // Identificación fiscal
+  dni_ruc: string | null          // DNI (8 dígitos) o RUC (11 dígitos)
+  // Tipo de cliente
+  tipo: TipoCliente               // 'persona' | 'empresa' | 'anonimo'
+  // Perfil extendido
+  alias: string | null            // apodo interno del vendedor
+  email: string | null
+  telefono_secundario: string | null
+  direccion_habitual: string | null
+  tags: string[]                  // ['vip', 'mayorista', 'constructor', ...]
+  notas_internas: string | null
+  // Legado
+  ruc_cliente: string | null      // legacy — usar dni_ruc
   tipo_persona: TipoPersona | null
+  // Memoria del bot
+  perfil: Record<string, unknown>
   created_at: string
   updated_at: string
 }

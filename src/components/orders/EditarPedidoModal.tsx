@@ -46,7 +46,7 @@ interface PedidoEditable {
   direccion_entrega: string | null
   notas: string | null
   items_pedido: ItemPedidoExistente[]
-  clientes?: { nombre: string | null; telefono: string } | null
+  clientes?: { nombre: string | null; telefono: string | null; dni_ruc?: string | null } | null
   zonas_delivery?: { nombre: string } | null
 }
 

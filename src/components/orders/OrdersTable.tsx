@@ -59,7 +59,7 @@ interface Pedido {
   eta_minutos: number | null
   direccion_entrega: string | null
   fecha_entrega_programada: string | null
-  clientes: { nombre: string | null; telefono: string } | null
+  clientes: { nombre: string | null; telefono: string | null; dni_ruc: string | null } | null
   zonas_delivery: { nombre: string } | null
   items_pedido: ItemPedido[]
   entregas: EntregaResumen[] | null
@@ -1081,6 +1081,7 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
       {modalBoleta && (
         <ModalEmitirBoleta
           pedido={modalBoleta as PedidoDB}
+          clienteDniRuc={(modalBoleta as any).clientes?.dni_ruc ?? null}
           onClose={() => setModalBoleta(null)}
           onEmitida={(r) => handleBoletaEmitida(modalBoleta.id, r)}
         />
@@ -1090,6 +1091,8 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
       {modalFactura && (
         <ModalEmitirFactura
           pedido={modalFactura as PedidoDB}
+          clienteRuc={(modalFactura as any).clientes?.dni_ruc ?? null}
+          clienteRazonSocial={(modalFactura as any).clientes?.nombre ?? null}
           onClose={() => setModalFactura(null)}
           onEmitida={(r) => handleFacturaEmitida(modalFactura.id, r)}
         />

@@ -44,7 +44,7 @@ export default async function VentasPage({
     ] = await Promise.all([
       supabase
         .from('pedidos')
-        .select('*, clientes(nombre, telefono), zonas_delivery(nombre), items_pedido(*), metodo_pago, estado_pago, pago_confirmado_por, pago_confirmado_at')
+        .select('*, clientes(nombre, telefono, dni_ruc), zonas_delivery(nombre), items_pedido(*), metodo_pago, estado_pago, pago_confirmado_por, pago_confirmado_at')
         .eq('ferreteria_id', session.ferreteriaId)
         .order('created_at', { ascending: false })
         .limit(100),
