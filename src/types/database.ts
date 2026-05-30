@@ -620,6 +620,41 @@ export interface LibroContable {
   updated_at: string
 }
 
+// ══════════════════════════════════════════════════════════════════
+// ORDENES DE COMPRA (PROVEEDORES)
+// ══════════════════════════════════════════════════════════════════
+
+export type EstadoOrdenCompra = 'borrador' | 'enviado' | 'entregado' | 'cancelado'
+
+export interface OrdenCompra {
+  id: string
+  ferreteria_id: string
+  proveedor: string
+  numero_orden: string
+  estado: EstadoOrdenCompra
+  costo_total: number
+  notas: string | null
+  created_at: string
+  updated_at: string
+  // joins
+  items_orden_compra?: ItemOrdenCompra[]
+}
+
+export interface ItemOrdenCompra {
+  id: string
+  orden_compra_id: string
+  producto_id: string | null
+  nombre_producto: string
+  marca: string | null
+  unidad: string
+  cantidad: number
+  precio_unitario: number
+  subtotal: number
+  created_at: string
+  // joins
+  productos?: Producto
+}
+
 // Ferreteria extendida con campos SaaS
 export interface FerreteriaSaaS extends Ferreteria {
   plan_id: string | null

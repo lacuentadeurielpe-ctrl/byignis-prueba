@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation'
 import { 
   Search, Plus, ClipboardList, Trash2, Check, RefreshCw, 
   Send, Download, Tag, FileText, AlertTriangle, Building, 
-  Bookmark, Package, Sparkles, X, ChevronDown, CheckCircle
+  Bookmark, Package, Sparkles, X, ChevronDown, CheckCircle, Save, Clock
 } from 'lucide-react'
 import { type Producto, type Categoria } from '@/types/database'
 import { formatPEN } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
+import SupplierOrdersHistory from './SupplierOrdersHistory'
 
 interface SupplierOrdersManagerProps {
   productos: Producto[]
@@ -33,6 +34,7 @@ export default function SupplierOrdersManager({
   const router = useRouter()
 
   // --- Estados locales ---
+  const [activeTab, setActiveTab] = useState<'crear' | 'historial'>('crear')
   const [productos, setProductos] = useState<Producto[]>(initialProductos)
   const [manualItems, setManualItems] = useState<ManualItem[]>([])
   
@@ -51,6 +53,7 @@ export default function SupplierOrdersManager({
   
   // Guardado inline
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [isSavingOrder, setIsSavingOrder] = useState<string | null>(null)
   const [editProveedorId, setEditProveedorId] = useState<string | null>(null)
   const [editMarcaId, setEditMarcaId] = useState<string | null>(null)
   
@@ -316,10 +319,105 @@ export default function SupplierOrdersManager({
     link.click()
     document.body.removeChild(link)
   }
+  const handleSaveOrder = async (proveedor: string) => {
+    const group = orderGroups[proveedor]
+    if (!group) return
+
+    const items = [
+      ...group.catalog.map(c => ({
+        producto_id: c.product.id,
+        nombre_producto: c.product.nombre,
+        marca: c.product.marca,
+        unidad: c.product.unidad,
+        cantidad: c.cantidad,
+        precio_unitario: c.costo,
+        subtotal: c.cantidad * c.costo
+      })),
+      ...group.manual.map(m => ({
+        producto_id: null,
+        nombre_producto: m.nombre,
+        marca: m.marca,
+        unidad: m.unidad,
+        cantidad: m.cantidad,
+        precio_unitario: m.precio_compra,
+        subtotal: m.cantidad * m.precio_compra
+      }))
+    ]
+
+    const totalCostoGroup = items.reduce((s, i) => s + i.subtotal, 0)
+
+    setIsSavingOrder(proveedor)
+    try {
+      const res = await fetch('/api/ordenes-compra', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          proveedor,
+          costo_total: totalCostoGroup,
+          items
+        })
+      })
+
+      if (res.ok) {
+        const orden = await res.json()
+        alert('Orden guardada correctamente.')
+        // Abrir PDF en nueva pestaña
+        window.open(`/api/ordenes-compra/${orden.id}/pdf`, '_blank')
+        
+        // Limpiar selección para este proveedor
+        const catIds = group.catalog.map(c => c.product.id)
+        const manIds = group.manual.map(m => m.id)
+        setSelectedProductIds(prev => prev.filter(id => !catIds.includes(id)))
+        setSelectedManualIds(prev => prev.filter(id => !manIds.includes(id)))
+      } else {
+        const err = await res.json()
+        alert('Error al guardar: ' + (err.error || 'Desconocido'))
+      }
+    } catch (e) {
+      console.error(e)
+      alert('Ocurrió un error al guardar la orden.')
+    } finally {
+      setIsSavingOrder(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {/* Resumen de Pedido y Métricas */}
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-zinc-200 mb-6">
+        <button
+          onClick={() => setActiveTab('crear')}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === 'crear' 
+              ? 'border-violet-600 text-violet-700' 
+              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Crear Orden
+          </div>
+        </button>
+        <button
+          onClick={() => setActiveTab('historial')}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === 'historial' 
+              ? 'border-violet-600 text-violet-700' 
+              : 'border-transparent text-zinc-500 hover:text-zinc-800'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            Historial de Órdenes
+          </div>
+        </button>
+      </div>
+
+      {activeTab === 'historial' ? (
+        <SupplierOrdersHistory />
+      ) : (
+        <>
+          {/* Resumen de Pedido y Métricas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-zinc-950 text-white rounded-2xl p-5 relative overflow-hidden">
           <div className="absolute right-3 bottom-3 text-white/[0.03]">
@@ -842,6 +940,17 @@ export default function SupplierOrdersManager({
                       {/* Botones de acción por proveedor */}
                       <div className="flex items-center gap-1.5 pt-1">
                         <button
+                          onClick={() => handleSaveOrder(proveedor)}
+                          disabled={isSavingOrder === proveedor}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition disabled:opacity-50"
+                          title="Guardar en BD y generar proforma PDF corporativa"
+                        >
+                          {isSavingOrder === proveedor ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          Guardar y Generar PDF
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <button
                           onClick={() => copyWhatsAppMessage(proveedor)}
                           className="flex-1 flex items-center justify-center gap-1 px-2.5 py-2 text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg transition"
                           title="Copiar lista de productos para enviar por WhatsApp"
@@ -866,6 +975,8 @@ export default function SupplierOrdersManager({
         </div>
 
       </div>
+        </>
+      )}
     </div>
   )
 }
