@@ -7,7 +7,7 @@ import {
   Send, Download, Tag, FileText, AlertTriangle, Building, 
   Bookmark, Package, Sparkles, X, ChevronDown, CheckCircle, Save, Clock
 } from 'lucide-react'
-import { type Producto, type Categoria } from '@/types/database'
+import { type Producto, type Categoria, type OrdenCompra } from '@/types/database'
 import { formatPEN } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
 import SupplierOrdersHistory from './SupplierOrdersHistory'
@@ -37,6 +37,11 @@ export default function SupplierOrdersManager({
   const [activeTab, setActiveTab] = useState<'crear' | 'historial'>('crear')
   const [productos, setProductos] = useState<Producto[]>(initialProductos)
   const [manualItems, setManualItems] = useState<ManualItem[]>([])
+
+  // --- Estados de edición de orden existente ---
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
+  const [editingOrderNumber, setEditingOrderNumber] = useState<string | null>(null)
+  const [editingOrderProveedor, setEditingOrderProveedor] = useState<string | null>(null)
   
   // Filtros
   const [busqueda, setBusqueda] = useState('')
@@ -319,6 +324,67 @@ export default function SupplierOrdersManager({
     link.click()
     document.body.removeChild(link)
   }
+  const handleStartEditOrder = (orden: OrdenCompra) => {
+    setEditingOrderId(orden.id)
+    setEditingOrderNumber(orden.numero_orden)
+    setEditingOrderProveedor(orden.proveedor)
+
+    // Limpiar selección actual
+    setSelectedProductIds([])
+    setSelectedManualIds([])
+    setOrderQuantities({})
+    setOrderCosts({})
+    setManualItems([])
+
+    const catalogIds: string[] = []
+    const manualItemsList: ManualItem[] = []
+    const manualIds: string[] = []
+    const quantities: Record<string, number> = {}
+    const costs: Record<string, number> = {}
+
+    orden.items_orden_compra?.forEach(item => {
+      if (item.producto_id) {
+        catalogIds.push(item.producto_id)
+        quantities[item.producto_id] = item.cantidad
+        costs[item.producto_id] = item.precio_unitario
+      } else {
+        const mId = `manual_edit_${Date.now()}_${Math.random()}`
+        manualIds.push(mId)
+        manualItemsList.push({
+          id: mId,
+          nombre: item.nombre_producto,
+          marca: item.marca || '',
+          proveedor: orden.proveedor,
+          cantidad: item.cantidad,
+          precio_compra: item.precio_unitario,
+          unidad: item.unidad
+        })
+      }
+    })
+
+    setSelectedProductIds(catalogIds)
+    setOrderQuantities(quantities)
+    setOrderCosts(costs)
+    setManualItems(manualItemsList)
+    setSelectedManualIds(manualIds)
+
+    setProveedorFiltro(orden.proveedor)
+    setMostrarTodos(true)
+    setActiveTab('crear')
+  }
+
+  const handleCancelEdit = () => {
+    setEditingOrderId(null)
+    setEditingOrderNumber(null)
+    setEditingOrderProveedor(null)
+    setSelectedProductIds([])
+    setSelectedManualIds([])
+    setOrderQuantities({})
+    setOrderCosts({})
+    setManualItems([])
+    setProveedorFiltro('todos')
+  }
+
   const handleSaveOrder = async (proveedor: string) => {
     const group = orderGroups[proveedor]
     if (!group) return
@@ -348,8 +414,12 @@ export default function SupplierOrdersManager({
 
     setIsSavingOrder(proveedor)
     try {
-      const res = await fetch('/api/ordenes-compra', {
-        method: 'POST',
+      const isEditing = editingOrderId !== null && proveedor === editingOrderProveedor
+      const url = isEditing ? `/api/ordenes-compra/${editingOrderId}` : '/api/ordenes-compra'
+      const method = isEditing ? 'PATCH' : 'POST'
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           proveedor,
@@ -360,15 +430,20 @@ export default function SupplierOrdersManager({
 
       if (res.ok) {
         const orden = await res.json()
-        alert('Orden guardada correctamente.')
+        alert(isEditing ? 'Orden actualizada correctamente.' : 'Orden guardada correctamente.')
         // Abrir PDF en nueva pestaña
         window.open(`/api/ordenes-compra/${orden.id}/pdf`, '_blank')
         
-        // Limpiar selección para este proveedor
-        const catIds = group.catalog.map(c => c.product.id)
-        const manIds = group.manual.map(m => m.id)
-        setSelectedProductIds(prev => prev.filter(id => !catIds.includes(id)))
-        setSelectedManualIds(prev => prev.filter(id => !manIds.includes(id)))
+        if (isEditing) {
+          handleCancelEdit()
+          setActiveTab('historial')
+        } else {
+          // Limpiar selección para este proveedor
+          const catIds = group.catalog.map(c => c.product.id)
+          const manIds = group.manual.map(m => m.id)
+          setSelectedProductIds(prev => prev.filter(id => !catIds.includes(id)))
+          setSelectedManualIds(prev => prev.filter(id => !manIds.includes(id)))
+        }
       } else {
         const err = await res.json()
         alert('Error al guardar: ' + (err.error || 'Desconocido'))
@@ -413,8 +488,30 @@ export default function SupplierOrdersManager({
         </button>
       </div>
 
+      {editingOrderId && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-zinc-900">
+                Modo Edición Activo: {editingOrderNumber}
+              </p>
+              <p className="text-xs text-zinc-600">
+                Estás editando la orden para <strong>{editingOrderProveedor}</strong>. Puedes modificar cantidades, precios, agregar o quitar productos.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleCancelEdit}
+            className="px-3.5 py-1.5 border border-amber-300 text-amber-800 hover:bg-amber-100/50 rounded-xl text-xs font-semibold transition"
+          >
+            Cancelar Edición
+          </button>
+        </div>
+      )}
+
       {activeTab === 'historial' ? (
-        <SupplierOrdersHistory />
+        <SupplierOrdersHistory onEditOrder={handleStartEditOrder} />
       ) : (
         <>
           {/* Resumen de Pedido y Métricas */}
@@ -946,7 +1043,7 @@ export default function SupplierOrdersManager({
                           title="Guardar en BD y generar proforma PDF corporativa"
                         >
                           {isSavingOrder === proveedor ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                          Guardar y Generar PDF
+                          {editingOrderId && proveedor === editingOrderProveedor ? 'Actualizar y Generar PDF' : 'Guardar y Generar PDF'}
                         </button>
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">

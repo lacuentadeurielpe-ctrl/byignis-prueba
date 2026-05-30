@@ -6,7 +6,11 @@ import { formatPEN, formatFechaHoraLima } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
 import type { OrdenCompra } from '@/types/database'
 
-export default function SupplierOrdersHistory() {
+interface SupplierOrdersHistoryProps {
+  onEditOrder?: (orden: OrdenCompra) => void
+}
+
+export default function SupplierOrdersHistory({ onEditOrder }: SupplierOrdersHistoryProps) {
   const [ordenes, setOrdenes] = useState<OrdenCompra[]>([])
   const [cargando, setCargando] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -134,6 +138,16 @@ export default function SupplierOrdersHistory() {
                   )}
                 </td>
                 <td className="px-5 py-4 text-right flex items-center justify-end gap-2">
+                  {onEditOrder && (
+                    <button
+                      onClick={() => onEditOrder(orden)}
+                      disabled={savingId === orden.id}
+                      className="p-2 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                      title="Editar orden"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
                   <a
                     href={`/api/ordenes-compra/${orden.id}/pdf`}
                     target="_blank"
