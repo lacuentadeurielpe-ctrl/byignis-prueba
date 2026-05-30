@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { cn, formatPEN, formatFecha, formatFechaHoraLima, labelEstadoPedido, colorEstadoPedido, labelEstadoPago, colorEstadoPago, matchesFuzzy } from '@/lib/utils'
 import { ChevronDown, Package, Loader2, Search, X, FileText, Send, ExternalLink, Plus, Bell, Download, CreditCard, CheckCircle2, Mic, Clock, Pencil } from 'lucide-react'
 import NuevoPedidoModal from './NuevoPedidoModal'
+import { toast } from 'sonner'
 import PedidoVozModal from './PedidoVozModal'
 import EditarPedidoModal from './EditarPedidoModal'
 import ModalEmitirBoleta from '@/components/comprobantes/ModalEmitirBoleta'
@@ -348,8 +349,9 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
           : p))
       )
       router.refresh()
+      toast.success('Estado actualizado correctamente')
     } catch {
-      alert('Error al actualizar el estado')
+      toast.error('Error al actualizar el estado')
     } finally {
       setActualizando(null)
       setCancelDialog(null)
@@ -382,8 +384,9 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
             : p
         )
       )
+      toast.success('Pago actualizado')
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Error al actualizar el pago')
+      toast.error(e instanceof Error ? e.message : 'Error al actualizar el pago')
     } finally {
       setPagando(null)
     }
@@ -391,7 +394,10 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
 
   async function aprobarCredito() {
     if (!creditoDialog) return
-    if (!creditoDialog.fechaLimite) return alert('Selecciona la fecha límite del crédito')
+    if (!creditoDialog.fechaLimite) {
+      toast.error('Selecciona la fecha límite del crédito')
+      return
+    }
 
     setAprobandoCredito(true)
     try {
@@ -417,8 +423,9 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
         )
       )
       setCreditoDialog(null)
+      toast.success('Crédito aprobado')
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Error al aprobar crédito')
+      toast.error(e instanceof Error ? e.message : 'Error al aprobar crédito')
     } finally {
       setAprobandoCredito(false)
     }
@@ -437,8 +444,9 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
       setPedidos((prev) => prev.map((p) => p.id === pedidoId
         ? { ...p, repartidor_id: repartidorId === 'ninguno' ? null : repartidorId }
         : p))
+      toast.success('Repartidor asignado')
     } catch {
-      alert('Error al asignar repartidor')
+      toast.error('Error al asignar repartidor')
     } finally {
       setAsignando(null)
     }
@@ -1029,13 +1037,13 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                                     })
                                     const res = await req.json()
                                     if (res.ok) {
-                                      alert('Comprobante anulado correctamente.')
-                                      window.location.reload()
+                                      toast.success('Comprobante anulado correctamente.')
+                                      setTimeout(() => window.location.reload(), 1000)
                                     } else {
-                                      alert('Error: ' + res.error)
+                                      toast.error('Error: ' + res.error)
                                     }
                                   } catch (e) {
-                                    alert('Error de conexión al anular')
+                                    toast.error('Error de conexión al anular')
                                   }
                                 }}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium rounded-lg transition"
@@ -1049,13 +1057,13 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                                     const req = await fetch(`/api/orders/${pedido.id}/comprobante/consultar`, { method: 'POST' })
                                     const res = await req.json()
                                     if (res.ok) {
-                                      alert(res.mensaje + (res.datos?.aceptada_por_sunat ? ' (ACEPTADA)' : ' (RECHAZADA/PENDIENTE)'))
-                                      window.location.reload()
+                                      toast.info(res.mensaje + (res.datos?.aceptada_por_sunat ? ' (ACEPTADA)' : ' (RECHAZADA/PENDIENTE)'))
+                                      setTimeout(() => window.location.reload(), 2000)
                                     } else {
-                                      alert('Error: ' + res.error)
+                                      toast.error('Error: ' + res.error)
                                     }
                                   } catch (e) {
-                                    alert('Error de conexión al consultar')
+                                    toast.error('Error de conexión al consultar')
                                   }
                                 }}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition"

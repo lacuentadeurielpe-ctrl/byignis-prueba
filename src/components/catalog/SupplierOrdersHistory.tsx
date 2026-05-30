@@ -18,17 +18,27 @@ export default function SupplierOrdersHistory({ onEditOrder }: SupplierOrdersHis
   const [savingId, setSavingId] = useState<string | null>(null)
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar esta orden de compra?')) return
-    setSavingId(id)
-    try {
-      await fetcher(`/api/ordenes-compra/${id}`, { method: 'DELETE' })
-      toast.success('Orden eliminada correctamente')
-      mutate(ordenes?.filter(o => o.id !== id), false)
-    } catch (e: any) {
-      toast.error(e.message || 'Error al eliminar la orden')
-    } finally {
-      setSavingId(null)
-    }
+    toast('¿Estás seguro de eliminar esta orden de compra?', {
+      action: {
+        label: 'Sí, eliminar',
+        onClick: async () => {
+          setSavingId(id)
+          try {
+            await fetcher(`/api/ordenes-compra/${id}`, { method: 'DELETE' })
+            toast.success('Orden eliminada correctamente')
+            mutate(ordenes?.filter(o => o.id !== id), false)
+          } catch (e: any) {
+            toast.error(e.message || 'Error al eliminar la orden')
+          } finally {
+            setSavingId(null)
+          }
+        }
+      },
+      cancel: {
+        label: 'Cancelar',
+        onClick: () => {}
+      }
+    })
   }
 
   const handleChangeEstado = async (id: string, nuevoEstado: string) => {
