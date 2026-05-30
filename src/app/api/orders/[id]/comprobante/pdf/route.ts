@@ -19,6 +19,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   if (!comprobante) return new Response('Comprobante no encontrado', { status: 404 })
 
-  // Redirigir al endpoint de React-PDF para forzar el formato 80mm en todos los comprobantes
+  if (comprobante.pdf_url) {
+    return NextResponse.redirect(comprobante.pdf_url)
+  }
+
+  // Redirigir al endpoint de React-PDF para Notas de Venta internas (formato 80mm)
   return NextResponse.redirect(new URL(`/api/comprobantes/${comprobante.id}/pdf`, request.url))
 }
