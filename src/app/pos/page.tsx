@@ -30,6 +30,7 @@ export default async function POSPage() {
     <ClientPOS 
       productos={productos || []} 
       nombreFerreteria={ferreteria?.nombre ?? 'Ferretería'} 
+      ferreteriaId={session.ferreteriaId}
     />
   )
 }

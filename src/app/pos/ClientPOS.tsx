@@ -7,6 +7,9 @@ import { ArrowLeft, ScanLine, Search, Package, Trash2, Banknote, CreditCard, Sma
 import ScannerModal from '@/components/ui/ScannerModal'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import { type Cliente } from '@/types/database'
+import CustomerSelectorModal from '@/components/pos/CustomerSelectorModal'
+import { User, ReceiptText } from 'lucide-react'
 
 interface Producto {
   id: string
@@ -30,15 +33,20 @@ interface ItemCarrito {
 interface ClientPOSProps {
   productos: Producto[]
   nombreFerreteria: string
+  ferreteriaId: string
 }
 
-export default function ClientPOS({ productos, nombreFerreteria }: ClientPOSProps) {
+export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }: ClientPOSProps) {
   const router = useRouter()
   const [items, setItems] = useState<ItemCarrito[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [cobrando, setCobrando] = useState(false)
+
+  const [clienteActivo, setClienteActivo] = useState<Cliente | null>(null)
+  const [tipoComprobante, setTipoComprobante] = useState<'ninguno' | 'boleta' | 'factura'>('ninguno')
+  const [showCustomerModal, setShowCustomerModal] = useState(false)
 
   const busquedaRef = useRef<HTMLInputElement>(null)
   const scanBuffer = useRef('')
@@ -135,12 +143,19 @@ export default function ClientPOS({ productos, nombreFerreteria }: ClientPOSProp
 
   async function procesarVenta(metodo: 'efectivo' | 'yape' | 'tarjeta') {
     if (items.length === 0) return
+
+    if (tipoComprobante === 'factura' && (!clienteActivo || !clienteActivo.dni_ruc || clienteActivo.dni_ruc.length !== 11)) {
+      toast.error('Factura requiere un cliente con RUC válido (11 dígitos)')
+      setShowCustomerModal(true)
+      return
+    }
+
     setCobrando(true)
     try {
       // 1. Crear el pedido directo como entregado y pagado
       const payload = {
-        nombre_cliente: 'Cliente Mostrador',
-        telefono_cliente: '000000000',
+        nombre_cliente: clienteActivo ? clienteActivo.nombre : 'Cliente Mostrador',
+        telefono_cliente: clienteActivo ? (clienteActivo.telefono || '000000000') : '000000000',
         modalidad: 'recojo',
         estado: 'entregado',
         estado_pago: 'pagado',
@@ -158,12 +173,32 @@ export default function ClientPOS({ productos, nombreFerreteria }: ClientPOSProp
       
       const { id } = await res.json()
       
+      // 2. Emitir comprobante si se requiere
+      if (tipoComprobante !== 'ninguno') {
+        const emitRes = await fetch('/api/comprobantes/emitir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pedido_id: id,
+            tipo: tipoComprobante,
+            cliente_nombre: clienteActivo?.nombre || 'CLIENTE VARIOS',
+            cliente_dni: tipoComprobante === 'boleta' ? (clienteActivo?.dni_ruc || '') : undefined,
+            cliente_ruc: tipoComprobante === 'factura' ? (clienteActivo?.dni_ruc || '') : undefined,
+          })
+        })
+        
+        if (!emitRes.ok) {
+          toast.error('Venta registrada, pero falló el comprobante')
+        } else {
+          const { pdfUrl } = await emitRes.json()
+          if (pdfUrl) window.open(pdfUrl, '_blank')
+        }
+      }
+
       toast.success('Venta registrada con éxito')
       setItems([])
-      
-      // Opcional: Auto-imprimir comprobante
-      // window.open(`/api/orders/${id}/comprobante/pdf`, '_blank')
-
+      setClienteActivo(null)
+      setTipoComprobante('ninguno')
     } catch (error) {
       toast.error('Ocurrió un error al cobrar')
     } finally {
@@ -181,13 +216,20 @@ export default function ClientPOS({ productos, nombreFerreteria }: ClientPOSProp
       {/* ── PANEL IZQUIERDO: TICKET ── */}
       <div className="flex-1 flex flex-col bg-white border-r border-zinc-200">
         {/* Header POS */}
-        <div className="h-16 flex items-center px-4 border-b border-zinc-100 shrink-0">
-          <Link href="/dashboard" className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition mr-3">
+        <div className="h-16 flex items-center px-4 border-b border-zinc-100 shrink-0 gap-3">
+          <Link href="/dashboard" className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div className="flex-1">
-            <h1 className="font-bold text-zinc-800 leading-tight">Terminal POS</h1>
-            <p className="text-xs text-zinc-400">{nombreFerreteria}</p>
+          <div className="flex-1 min-w-0 flex items-center">
+            <button 
+              onClick={() => setShowCustomerModal(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition max-w-full"
+            >
+              <User className="w-4 h-4 shrink-0 text-zinc-600" />
+              <span className="font-bold text-sm text-zinc-800 truncate">
+                {clienteActivo ? clienteActivo.nombre : 'Cliente Mostrador'}
+              </span>
+            </button>
           </div>
           <button 
             onClick={() => setItems([])}
@@ -227,10 +269,25 @@ export default function ClientPOS({ productos, nombreFerreteria }: ClientPOSProp
         </div>
 
         {/* Total y Cobro Footer */}
-        <div className="shrink-0 bg-white border-t border-zinc-200 p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-10">
-          <div className="flex items-end justify-between mb-6">
-            <span className="text-zinc-500 font-medium uppercase tracking-wider text-sm">Total a pagar</span>
-            <span className="text-5xl font-black text-zinc-900 tracking-tight tabular-nums">{formatPEN(total)}</span>
+        <div className="shrink-0 bg-white border-t border-zinc-200 p-4 md:p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-10">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-4 gap-4">
+            
+            <div className="flex bg-zinc-100 p-1 rounded-xl">
+              {(['ninguno', 'boleta', 'factura'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTipoComprobante(t)}
+                  className={`flex-1 md:flex-none px-4 py-2 text-sm font-semibold rounded-lg transition capitalize ${tipoComprobante === t ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-col items-end">
+              <span className="text-zinc-500 font-medium uppercase tracking-wider text-xs md:text-sm">Total a pagar</span>
+              <span className="text-4xl md:text-5xl font-black text-zinc-900 tracking-tight tabular-nums">{formatPEN(total)}</span>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <button
@@ -325,6 +382,17 @@ export default function ClientPOS({ productos, nombreFerreteria }: ClientPOSProp
           onScan={(codigo) => {
             handleScanCode(codigo)
             setShowScanner(false)
+          }}
+        />
+      )}
+      
+      {showCustomerModal && (
+        <CustomerSelectorModal 
+          ferreteriaId={ferreteriaId}
+          onClose={() => setShowCustomerModal(false)}
+          onSelect={(c) => {
+            setClienteActivo(c)
+            setShowCustomerModal(false)
           }}
         />
       )}
