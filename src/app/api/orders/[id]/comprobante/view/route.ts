@@ -19,14 +19,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     .eq('pedido_id', pedidoId)
     .single()
 
-  if (!comprobante?.pdf_url) {
+  if (!comprobante) {
     return new Response(`
       <html><body style="font-family:sans-serif;padding:2rem;color:#666">
         <h2>Sin comprobante</h2>
         <p>El comprobante aún no fue generado para este pedido.</p>
         <p>Asegúrate de que el pedido esté en estado <strong>confirmado</strong>.</p>
       </body></html>
-    `, { headers: { 'Content-Type': 'text/html' }, status: 404 })
+    `, { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 404 })
   }
 
   const pdfProxyUrl = `/api/orders/${pedidoId}/comprobante/pdf`
