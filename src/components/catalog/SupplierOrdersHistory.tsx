@@ -1,53 +1,31 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { FileText, Download, Trash2, Edit2, RefreshCw, CheckCircle, Clock, XCircle, Package } from 'lucide-react'
 import { formatPEN, formatFechaHoraLima } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
 import type { OrdenCompra } from '@/types/database'
+import useSWR from 'swr'
+import { swrFetcher, fetcher } from '@/lib/api/client'
+import { toast } from 'sonner'
 
 interface SupplierOrdersHistoryProps {
   onEditOrder?: (orden: OrdenCompra) => void
 }
 
 export default function SupplierOrdersHistory({ onEditOrder }: SupplierOrdersHistoryProps) {
-  const [ordenes, setOrdenes] = useState<OrdenCompra[]>([])
-  const [cargando, setCargando] = useState(true)
+  const { data: ordenes, error, isLoading, mutate } = useSWR<OrdenCompra[]>('/api/ordenes-compra', swrFetcher)
   const [savingId, setSavingId] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetchOrdenes()
-  }, [])
-
-  const fetchOrdenes = async () => {
-    setCargando(true)
-    try {
-      const res = await fetch('/api/ordenes-compra')
-      if (res.ok) {
-        const data = await res.json()
-        setOrdenes(data)
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setCargando(false)
-    }
-  }
 
   const handleDelete = async (id: string) => {
     if (!confirm('¿Estás seguro de eliminar esta orden de compra?')) return
     setSavingId(id)
     try {
-      const res = await fetch(`/api/ordenes-compra/${id}`, { method: 'DELETE' })
-      if (res.ok) {
-        setOrdenes(prev => prev.filter(o => o.id !== id))
-      } else {
-        const err = await res.json()
-        alert('Error al eliminar: ' + (err.error || 'Desconocido'))
-      }
+      await fetcher(`/api/ordenes-compra/${id}`, { method: 'DELETE' })
+      toast.success('Orden eliminada correctamente')
+      mutate(ordenes?.filter(o => o.id !== id), false)
     } catch (e: any) {
-      console.error(e)
-      alert('Error de red al eliminar: ' + e.message)
+      toast.error(e.message || 'Error al eliminar la orden')
     } finally {
       setSavingId(null)
     }
@@ -56,21 +34,15 @@ export default function SupplierOrdersHistory({ onEditOrder }: SupplierOrdersHis
   const handleChangeEstado = async (id: string, nuevoEstado: string) => {
     setSavingId(id)
     try {
-      const res = await fetch(`/api/ordenes-compra/${id}`, {
+      const updated = await fetcher(`/api/ordenes-compra/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estado: nuevoEstado })
       })
-      if (res.ok) {
-        const updated = await res.json()
-        setOrdenes(prev => prev.map(o => o.id === id ? { ...o, estado: updated.estado } : o))
-      } else {
-        const err = await res.json()
-        alert('Error al actualizar estado: ' + (err.error || 'Desconocido'))
-      }
+      toast.success('Estado actualizado correctamente')
+      mutate(ordenes?.map(o => o.id === id ? { ...o, estado: updated.estado } : o), false)
     } catch (e: any) {
-      console.error(e)
-      alert('Error de red al actualizar: ' + e.message)
+      toast.error(e.message || 'Error al actualizar el estado')
     } finally {
       setSavingId(null)
     }
@@ -86,11 +58,15 @@ export default function SupplierOrdersHistory({ onEditOrder }: SupplierOrdersHis
     }
   }
 
-  if (cargando) {
+  if (isLoading) {
     return <div className="py-12 flex justify-center"><RefreshCw className="w-6 h-6 animate-spin text-violet-500" /></div>
   }
 
-  if (ordenes.length === 0) {
+  if (error) {
+    return <div className="py-12 text-center text-red-500 font-semibold bg-red-50 rounded-2xl border border-red-100 p-6">Error al cargar el historial: {error.message}</div>
+  }
+
+  if (!ordenes || ordenes.length === 0) {
     return (
       <div className="text-center py-16 text-zinc-500 bg-white rounded-2xl border border-zinc-100">
         <Package className="w-10 h-10 mx-auto text-zinc-300 mb-2" />

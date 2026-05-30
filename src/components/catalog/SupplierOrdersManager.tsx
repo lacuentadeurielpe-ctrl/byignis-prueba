@@ -11,6 +11,9 @@ import { type Producto, type Categoria, type OrdenCompra } from '@/types/databas
 import { formatPEN } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
 import SupplierOrdersHistory from './SupplierOrdersHistory'
+import { toast } from 'sonner'
+import { fetcher } from '@/lib/api/client'
+import { useSWRConfig } from 'swr'
 
 interface SupplierOrdersManagerProps {
   productos: Producto[]
@@ -32,6 +35,7 @@ export default function SupplierOrdersManager({
   categorias 
 }: SupplierOrdersManagerProps) {
   const router = useRouter()
+  const { mutate } = useSWRConfig()
 
   // --- Estados locales ---
   const [activeTab, setActiveTab] = useState<'crear' | 'historial'>('crear')
@@ -131,16 +135,15 @@ export default function SupplierOrdersManager({
   const handleSaveProductField = async (productId: string, field: 'proveedor' | 'marca', value: string) => {
     setSavingId(productId)
     try {
-      const res = await fetch(`/api/products/${productId}`, {
+      await fetcher(`/api/products/${productId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value.trim() || null })
       })
-      if (res.ok) {
-        setProductos(prev => prev.map(p => p.id === productId ? { ...p, [field]: value.trim() || null } : p))
-      }
-    } catch (e) {
-      console.error(e)
+      setProductos(prev => prev.map(p => p.id === productId ? { ...p, [field]: value.trim() || null } : p))
+      toast.success('Producto actualizado')
+    } catch (e: any) {
+      toast.error(e.message || 'Error al actualizar')
     } finally {
       setSavingId(null)
       setEditProveedorId(null)
@@ -296,7 +299,7 @@ export default function SupplierOrdersManager({
     text += `Por favor confirmar precios y disponibilidad de stock.`
 
     navigator.clipboard.writeText(text)
-    alert(`Mensaje de WhatsApp para "${proveedor}" copiado al portapapeles.`)
+    toast.success(`Mensaje de WhatsApp para "${proveedor}" copiado al portapapeles.`)
   }
 
   const exportCsv = (proveedor: string) => {
@@ -423,7 +426,7 @@ export default function SupplierOrdersManager({
       const url = isEditing ? `/api/ordenes-compra/${editingOrderId}` : '/api/ordenes-compra'
       const method = isEditing ? 'PATCH' : 'POST'
 
-      const res = await fetch(url, {
+      const orden = await fetcher(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -433,29 +436,25 @@ export default function SupplierOrdersManager({
         })
       })
 
-      if (res.ok) {
-        const orden = await res.json()
-        alert(isEditing ? 'Orden actualizada correctamente.' : 'Orden guardada correctamente.')
-        // Abrir PDF en nueva pestaña
-        window.open(`/api/ordenes-compra/${orden.id}/pdf`, '_blank')
-        
-        if (isEditing) {
-          handleCancelEdit()
-          setActiveTab('historial')
-        } else {
-          // Limpiar selección para este proveedor
-          const catIds = group.catalog.map(c => c.product.id)
-          const manIds = group.manual.map(m => m.id)
-          setSelectedProductIds(prev => prev.filter(id => !catIds.includes(id)))
-          setSelectedManualIds(prev => prev.filter(id => !manIds.includes(id)))
-        }
+      toast.success(isEditing ? 'Orden actualizada correctamente.' : 'Orden guardada correctamente.')
+      window.open(`/api/ordenes-compra/${orden.id}/pdf`, '_blank')
+      
+      // Invalidate SWR cache
+      mutate('/api/ordenes-compra')
+      
+      if (isEditing) {
+        handleCancelEdit()
+        setActiveTab('historial')
       } else {
-        const err = await res.json()
-        alert('Error al guardar: ' + (err.error || 'Desconocido'))
+        // Limpiar selección para este proveedor
+        const catIds = group.catalog.map(c => c.product.id)
+        const manIds = group.manual.map(m => m.id)
+        setSelectedProductIds(prev => prev.filter(id => !catIds.includes(id)))
+        setSelectedManualIds(prev => prev.filter(id => !manIds.includes(id)))
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
-      alert('Ocurrió un error al guardar la orden.')
+      toast.error(e.message || 'Ocurrió un error al guardar la orden.')
     } finally {
       setIsSavingOrder(null)
     }

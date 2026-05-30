@@ -126,15 +126,15 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="w-60 shrink-0 bg-white border-r border-zinc-100 h-full flex flex-col">
+    <aside className="w-64 shrink-0 glass shadow-soft border-r border-glass-border h-full flex flex-col transition-ui z-40 relative">
 
       {/* ── Brand ──────────────────────────────────────────────────────── */}
       <div className="px-4 py-4 border-b border-zinc-100">
         <div className="flex items-center gap-3">
 
           {/* Logo — clickeable para el dueño */}
-          <div className="relative shrink-0 group">
-            <div className="w-9 h-9 rounded-xl overflow-hidden bg-zinc-100 flex items-center justify-center border border-zinc-200 shrink-0">
+          <div className="relative shrink-0 group transition-ui hover:scale-105">
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/80 shadow-sm flex items-center justify-center border border-zinc-200/50 shrink-0">
               {subiendoLogo
                 ? <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" />
                 : logoLocal
@@ -208,15 +208,15 @@ export default function Sidebar({
                       key={href}
                       href={href}
                       className={cn(
-                        'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition',
+                        'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-ui',
                         active
-                          ? 'bg-zinc-100 text-zinc-950 font-semibold'
-                          : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900'
+                          ? 'bg-primary/10 text-primary font-bold shadow-sm ring-1 ring-primary/20'
+                          : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 hover:translate-x-1'
                       )}
                     >
                       <Icon className={cn(
-                        'w-4 h-4 shrink-0',
-                        active ? 'text-zinc-800' : 'text-zinc-400'
+                        'w-4 h-4 shrink-0 transition-ui',
+                        active ? 'text-primary scale-110' : 'text-zinc-400'
                       )} />
                       <span className="truncate flex-1">{label}</span>
                       {badge && (
@@ -243,10 +243,10 @@ export default function Sidebar({
       <div className="px-3 py-3 border-t border-zinc-100">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm
-                     text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 transition w-full"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm
+                     text-zinc-500 hover:bg-red-50 hover:text-red-600 transition-ui w-full group"
         >
-          <LogOut className="w-4 h-4 shrink-0 text-zinc-400" />
+          <LogOut className="w-4 h-4 shrink-0 text-zinc-400 group-hover:text-red-500 transition-ui" />
           <span>Cerrar sesión</span>
         </button>
       </div>

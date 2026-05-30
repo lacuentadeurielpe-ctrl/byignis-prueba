@@ -91,7 +91,7 @@ export default function MobileSidebarWrapper({
         </main>
 
         {/* ── Bottom tab bar — solo móvil ─────────────────────────────── */}
-        <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-zinc-100">
+        <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 glass border-t border-glass-border shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
           <div className="flex items-stretch h-16">
 
             {tabsVisibles.map(({ label, href, icon: Icon, badge, exact }) => {
@@ -101,18 +101,18 @@ export default function MobileSidebarWrapper({
                   key={href}
                   href={href}
                   className={cn(
-                    'flex-1 flex flex-col items-center justify-center gap-1 relative transition-colors',
-                    active ? 'text-zinc-950' : 'text-zinc-400'
+                    'flex-1 flex flex-col items-center justify-center gap-1 relative transition-ui py-2',
+                    active ? 'text-primary font-bold' : 'text-zinc-400 hover:text-zinc-600'
                   )}
                 >
                   {/* Indicador activo — línea superior */}
                   {active && (
-                    <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-zinc-900 rounded-full" />
+                    <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-b-full shadow-[0_0_8px_var(--color-primary)]" />
                   )}
 
                   {/* Icono + badge */}
-                  <div className="relative">
-                    <Icon className={cn('w-5 h-5', active ? 'text-zinc-900' : 'text-zinc-400')} />
+                  <div className="relative mt-1">
+                    <Icon className={cn('w-5 h-5 transition-ui', active ? 'text-primary scale-110' : 'text-zinc-400')} />
                     {badge && (
                       <div className="absolute -top-1.5 -right-2 pointer-events-none">
                         <NotificationBadge
@@ -133,14 +133,16 @@ export default function MobileSidebarWrapper({
             <button
               onClick={() => setDrawerOpen(true)}
               className={cn(
-                'flex-1 flex flex-col items-center justify-center gap-1 relative transition-colors',
-                drawerOpen ? 'text-zinc-950' : 'text-zinc-400'
+                'flex-1 flex flex-col items-center justify-center gap-1 relative transition-ui py-2',
+                drawerOpen ? 'text-primary font-bold' : 'text-zinc-400 hover:text-zinc-600'
               )}
             >
               {drawerOpen && (
-                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-zinc-900 rounded-full" />
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-b-full shadow-[0_0_8px_var(--color-primary)]" />
               )}
-              <MoreHorizontal className={cn('w-5 h-5', drawerOpen ? 'text-zinc-900' : 'text-zinc-400')} />
+              <div className="relative mt-1">
+                <MoreHorizontal className={cn('w-5 h-5 transition-ui', drawerOpen ? 'text-primary scale-110' : 'text-zinc-400')} />
+              </div>
               <span className="text-[10px] font-medium leading-none">Más</span>
             </button>
 

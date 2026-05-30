@@ -1,139 +1,101 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { getSessionInfo } from '@/lib/auth/roles'
+import { withAuth } from '@/lib/api/withAuth'
+import { ApiSuccess, ApiError } from '@/lib/api/response'
+import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSessionInfo()
-  if (!session) return new Response('No autorizado', { status: 401 })
+const ItemSchema = z.object({
+  producto_id: z.string().uuid().optional().nullable(),
+  nombre_producto: z.string().min(1, 'El nombre del producto es obligatorio'),
+  marca: z.string().optional().nullable(),
+  unidad: z.string().default('unidad'),
+  cantidad: z.number().positive(),
+  precio_unitario: z.number().min(0),
+  subtotal: z.number().min(0)
+})
 
+const UpdateOrderSchema = z.object({
+  estado: z.string().optional(),
+  notas: z.string().optional().nullable(),
+  proveedor: z.string().optional(),
+  costo_total: z.number().optional(),
+  items: z.array(ItemSchema).optional()
+})
+
+export const GET = withAuth(async (req, { params }) => {
   const { id } = await params
-  const supabase = await createClient()
 
-  const { data, error } = await supabase
+  const { data, error } = await req.supabase
     .from('ordenes_compra')
     .select('*, items_orden_compra(*)')
     .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('ferreteria_id', req.session.ferreteriaId)
     .single()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 })
-  }
+  if (error) return ApiError(error.message)
+  return ApiSuccess(data)
+})
 
-  return NextResponse.json(data)
-}
-
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSessionInfo()
-  if (!session) return new Response('No autorizado', { status: 401 })
-
+export const PATCH = withAuth(async (req, { params }) => {
   const { id } = await params
-  const supabase = await createClient()
   const body = await req.json()
+  const parsed = UpdateOrderSchema.parse(body)
 
-  const { estado, notas, proveedor, costo_total, items } = body
-  const updateData: any = {}
-  if (estado !== undefined) updateData.estado = estado
-  if (notas !== undefined) updateData.notas = notas
-  if (proveedor !== undefined) updateData.proveedor = proveedor
-  if (costo_total !== undefined) updateData.costo_total = costo_total
+  const { items, ...updateData } = parsed
 
-  // Si hay items a actualizar, validamos primero
-  if (items !== undefined) {
-    if (!Array.isArray(items)) {
-      return NextResponse.json({ error: 'Items debe ser un array' }, { status: 400 })
-    }
-    for (const item of items) {
-      if (!item.nombre_producto) {
-        return NextResponse.json({ error: 'Todos los items deben tener un nombre_producto' }, { status: 400 })
-      }
-      if (typeof item.cantidad !== 'number' || item.cantidad <= 0) {
-        return NextResponse.json({ error: 'La cantidad debe ser un número mayor a 0' }, { status: 400 })
-      }
-    }
-  }
-
-  // Si hay campos de cabecera a actualizar
   if (Object.keys(updateData).length > 0) {
-    const { error: updateError } = await supabase
+    const { error: updateError } = await req.supabase
       .from('ordenes_compra')
       .update(updateData)
       .eq('id', id)
-      .eq('ferreteria_id', session.ferreteriaId)
+      .eq('ferreteria_id', req.session.ferreteriaId)
 
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 400 })
-    }
+    if (updateError) return ApiError(updateError.message)
   }
 
-  // Si se pasaron items, eliminamos los anteriores e insertamos los nuevos
   if (items !== undefined) {
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await req.supabase
       .from('items_orden_compra')
       .delete()
       .eq('orden_compra_id', id)
 
-    if (deleteError) {
-      return NextResponse.json({ error: 'Error al limpiar items anteriores: ' + deleteError.message }, { status: 400 })
-    }
+    if (deleteError) return ApiError('Error al limpiar items anteriores: ' + deleteError.message)
 
     if (items.length > 0) {
-      const itemsToInsert = items.map((i: any) => ({
-        orden_compra_id: id,
-        producto_id: i.producto_id || null,
-        nombre_producto: i.nombre_producto,
-        marca: i.marca || null,
-        unidad: i.unidad || 'unidad',
-        cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario,
-        subtotal: i.subtotal
+      const itemsToInsert = items.map(i => ({
+        ...i,
+        orden_compra_id: id
       }))
 
-      const { error: insertItemsError } = await supabase
+      const { error: insertItemsError } = await req.supabase
         .from('items_orden_compra')
         .insert(itemsToInsert)
 
-      if (insertItemsError) {
-        return NextResponse.json({ error: 'Error al insertar nuevos items: ' + insertItemsError.message }, { status: 400 })
-      }
+      if (insertItemsError) return ApiError('Error al insertar nuevos items: ' + insertItemsError.message)
     }
   }
 
-  // Retornar la orden actualizada con sus nuevos items
-  const { data: updatedOrden, error: fetchError } = await supabase
+  const { data: updatedOrden, error: fetchError } = await req.supabase
     .from('ordenes_compra')
     .select('*, items_orden_compra(*)')
     .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('ferreteria_id', req.session.ferreteriaId)
     .single()
 
-  if (fetchError) {
-    return NextResponse.json({ error: fetchError.message }, { status: 400 })
-  }
+  if (fetchError) return ApiError(fetchError.message)
+  return ApiSuccess(updatedOrden)
+})
 
-  return NextResponse.json(updatedOrden)
-}
-
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSessionInfo()
-  if (!session) return new Response('No autorizado', { status: 401 })
-
+export const DELETE = withAuth(async (req, { params }) => {
   const { id } = await params
-  const supabase = await createClient()
 
-  // Eliminar la orden. (Los items se eliminarán automáticamente por ON DELETE CASCADE)
-  const { error } = await supabase
+  const { error } = await req.supabase
     .from('ordenes_compra')
     .delete()
     .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('ferreteria_id', req.session.ferreteriaId)
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 })
-  }
-
-  return NextResponse.json({ success: true })
-}
+  if (error) return ApiError(error.message)
+  return ApiSuccess({ deleted: true })
+})
 

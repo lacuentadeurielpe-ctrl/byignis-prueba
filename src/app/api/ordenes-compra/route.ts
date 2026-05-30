@@ -1,55 +1,52 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { getSessionInfo } from '@/lib/auth/roles'
+import { withAuth } from '@/lib/api/withAuth'
+import { ApiSuccess, ApiError } from '@/lib/api/response'
+import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const session = await getSessionInfo()
-  if (!session) return new Response('No autorizado', { status: 401 })
+const ItemSchema = z.object({
+  producto_id: z.string().uuid().optional().nullable(),
+  nombre_producto: z.string().min(1, 'El nombre del producto es obligatorio'),
+  marca: z.string().optional().nullable(),
+  unidad: z.string().default('unidad'),
+  cantidad: z.number().positive('La cantidad debe ser positiva'),
+  precio_unitario: z.number().min(0),
+  subtotal: z.number().min(0)
+})
 
-  const supabase = await createClient()
-  
-  const { data, error } = await supabase
+const CreateOrderSchema = z.object({
+  proveedor: z.string().min(1, 'El proveedor es obligatorio'),
+  costo_total: z.number().min(0),
+  notas: z.string().optional().nullable(),
+  items: z.array(ItemSchema).min(1, 'La orden debe tener al menos un ítem')
+})
+
+export const GET = withAuth(async (req) => {
+  const { data, error } = await req.supabase
     .from('ordenes_compra')
     .select('*, items_orden_compra(*)')
-    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('ferreteria_id', req.session.ferreteriaId)
     .order('created_at', { ascending: false })
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 })
-  }
+  if (error) return ApiError(error.message)
+  return ApiSuccess(data)
+})
 
-  return NextResponse.json(data)
-}
-
-export async function POST(req: Request) {
-  const session = await getSessionInfo()
-  if (!session) return new Response('No autorizado', { status: 401 })
-
-  const supabase = await createClient()
+export const POST = withAuth(async (req) => {
   const body = await req.json()
-  const { proveedor, costo_total, notas, items } = body
+  const parsed = CreateOrderSchema.parse(body)
+  const { proveedor, costo_total, notas, items } = parsed
 
-  if (!proveedor || !items || items.length === 0) {
-    return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 })
-  }
-
-  // Obtener siguiente número de orden
-  const { data: numeroData, error: numError } = await supabase
+  const { data: numeroData, error: numError } = await req.supabase
     .rpc('generar_numero_orden_compra')
 
-  if (numError) {
-    return NextResponse.json({ error: 'Error generando correlativo', detalle: numError.message }, { status: 500 })
-  }
-
+  if (numError) return ApiError('Error generando correlativo', 500, numError)
   const numero_orden = numeroData || `OC-TEMP-${Date.now()}`
 
-  // Insertar cabecera
-  const { data: orden, error: insertError } = await supabase
+  const { data: orden, error: insertError } = await req.supabase
     .from('ordenes_compra')
     .insert({
-      ferreteria_id: session.ferreteriaId,
+      ferreteria_id: req.session.ferreteriaId,
       proveedor,
       numero_orden,
       costo_total,
@@ -59,31 +56,21 @@ export async function POST(req: Request) {
     .select()
     .single()
 
-  if (insertError || !orden) {
-    return NextResponse.json({ error: insertError?.message }, { status: 400 })
-  }
+  if (insertError || !orden) return ApiError(insertError?.message || 'Error al crear orden')
 
-  // Insertar items
-  const itemsToInsert = items.map((i: any) => ({
-    orden_compra_id: orden.id,
-    producto_id: i.producto_id || null,
-    nombre_producto: i.nombre_producto,
-    marca: i.marca || null,
-    unidad: i.unidad || 'unidad',
-    cantidad: i.cantidad,
-    precio_unitario: i.precio_unitario,
-    subtotal: i.subtotal
+  const itemsToInsert = items.map(i => ({
+    ...i,
+    orden_compra_id: orden.id
   }))
 
-  const { error: itemsError } = await supabase
+  const { error: itemsError } = await req.supabase
     .from('items_orden_compra')
     .insert(itemsToInsert)
 
   if (itemsError) {
-    // Revertir si hay error
-    await supabase.from('ordenes_compra').delete().eq('id', orden.id)
-    return NextResponse.json({ error: itemsError.message }, { status: 400 })
+    await req.supabase.from('ordenes_compra').delete().eq('id', orden.id)
+    return ApiError(itemsError.message)
   }
 
-  return NextResponse.json(orden)
-}
+  return ApiSuccess(orden, 201)
+})
