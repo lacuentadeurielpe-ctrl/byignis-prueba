@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn, matchesFuzzy } from '@/lib/utils'
-import { X, Plus, Trash2, Search, Loader2, Package, Check, CalendarClock } from 'lucide-react'
+import { X, Plus, Trash2, Search, Loader2, Package, Check, CalendarClock, ScanLine } from 'lucide-react'
+import ScannerModal from '@/components/ui/ScannerModal'
+import { toast } from 'sonner'
 
 interface Producto {
   id: string
@@ -12,6 +14,7 @@ interface Producto {
   precio_base: number
   precio_compra: number
   stock: number
+  codigo_barras?: string | null
 }
 
 interface Zona {
@@ -56,6 +59,56 @@ export default function NuevoPedidoModal({ productos, zonas, onClose }: NuevoPed
   // Fase V: entrega programada
   const [esProgramado, setEsProgramado] = useState(false)
   const [fechaProgramada, setFechaProgramada] = useState('')   // "YYYY-MM-DDTHH:MM" local Lima
+  const [showScanner, setShowScanner] = useState(false)
+  const scanBuffer = useRef('')
+  const lastKeyTime = useRef(0)
+
+  // Manejador del escáner (Hardware y Software)
+  function handleScanCode(codigo: string) {
+    const p = productos.find(x => x.codigo_barras === codigo)
+    if (p) {
+      agregarProducto(p)
+      toast.success(`Añadido al carrito: ${p.nombre}`)
+      try {
+        // Generar un beep corto sin archivos de audio externos (Web Audio API)
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(800, ctx.currentTime)
+        gain.gain.setValueAtTime(0.1, ctx.currentTime)
+        osc.start()
+        osc.stop(ctx.currentTime + 0.1)
+      } catch (e) {}
+    } else {
+      toast.error(`Producto no encontrado (Código: ${codigo})`)
+    }
+  }
+
+  // Escucha activa de pistola láser en segundo plano
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const now = Date.now()
+      // Si pasan más de 100ms entre teclas, se asume que es escritura humana, no escáner
+      if (now - lastKeyTime.current > 100) {
+        scanBuffer.current = ''
+      }
+      lastKeyTime.current = now
+
+      if (e.key === 'Enter' && scanBuffer.current.length >= 4) {
+        handleScanCode(scanBuffer.current)
+        scanBuffer.current = ''
+        e.preventDefault()
+      } else if (e.key.length === 1) {
+        scanBuffer.current += e.key
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [productos])
+
   // Mínimo = ahora + 30 min (redondeado a los próximos 15 min) en Lima
   const minFechaProgramada = (() => {
     const d = new Date(Date.now() + 30 * 60_000)
@@ -218,8 +271,8 @@ export default function NuevoPedidoModal({ productos, zonas, onClose }: NuevoPed
 
             {/* Buscador de catálogo */}
             {!modoManual && (
-              <div className="relative" data-busqueda>
-                <div className="relative">
+              <div className="relative flex gap-2 items-start" data-busqueda>
+                <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     ref={busquedaRef}
@@ -229,32 +282,40 @@ export default function NuevoPedidoModal({ productos, zonas, onClose }: NuevoPed
                     placeholder="Buscar producto del catálogo…"
                     className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 transition"
                   />
+                  {mostrarSugerencias && sugerencias.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden">
+                      {sugerencias.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onMouseDown={() => agregarProducto(p)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-orange-50 transition text-left"
+                        >
+                          <div className="w-7 h-7 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
+                            <Package className="w-3.5 h-3.5 text-orange-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                            <p className="text-xs text-gray-400">S/{p.precio_base.toFixed(2)} / {p.unidad} · stk: {p.stock}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {mostrarSugerencias && busqueda.trim().length >= 1 && sugerencias.length === 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3 text-sm text-gray-400">
+                      Sin resultados. Usa "Producto personalizado" para añadir uno libre.
+                    </div>
+                  )}
                 </div>
-                {mostrarSugerencias && sugerencias.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden">
-                    {sugerencias.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onMouseDown={() => agregarProducto(p)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-orange-50 transition text-left"
-                      >
-                        <div className="w-7 h-7 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
-                          <Package className="w-3.5 h-3.5 text-orange-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
-                          <p className="text-xs text-gray-400">S/{p.precio_base.toFixed(2)} / {p.unidad} · stk: {p.stock}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {mostrarSugerencias && busqueda.trim().length >= 1 && sugerencias.length === 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3 text-sm text-gray-400">
-                    Sin resultados. Usa "Producto personalizado" para añadir uno libre.
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setShowScanner(true)}
+                  className="flex items-center justify-center w-[42px] h-[42px] shrink-0 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition"
+                  title="Escanear con cámara"
+                >
+                  <ScanLine className="w-5 h-5" />
+                </button>
               </div>
             )}
 
@@ -522,6 +583,16 @@ export default function NuevoPedidoModal({ productos, zonas, onClose }: NuevoPed
           </div>
         )}
       </div>
+
+      {showScanner && (
+        <ScannerModal
+          onClose={() => setShowScanner(false)}
+          onScan={(codigo) => {
+            handleScanCode(codigo)
+            setShowScanner(false)
+          }}
+        />
+      )}
     </div>
   )
 }

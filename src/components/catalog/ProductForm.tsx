@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, TrendingUp, AlertTriangle, Copy, Plus, Trash2, Package2, Receipt } from 'lucide-react'
+import { Loader2, TrendingUp, AlertTriangle, Copy, Plus, Trash2, Package2, Receipt, ScanLine } from 'lucide-react'
 import { type Producto, type Categoria } from '@/types/database'
 import DiscountRulesEditor, { type ReglaForm } from './DiscountRulesEditor'
+import ScannerModal from '@/components/ui/ScannerModal'
 import { cn, formatPEN } from '@/lib/utils'
 import { UNIDADES_SUNAT, normalizarUnidad, labelUnidad, UNIDAD_DEFAULT } from '@/lib/constantes/unidades'
 
@@ -57,6 +58,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
     nombre: producto?.nombre ?? '',
     descripcion: producto?.descripcion ?? '',
     categoria_id: producto?.categoria_id ?? '',
+    codigo_barras: producto?.codigo_barras ?? '',
     precio_base: producto?.precio_base?.toString() ?? '',
     precio_compra: producto?.precio_compra?.toString() ?? '',
     unidad: normalizarUnidad(producto?.unidad) ?? UNIDAD_DEFAULT,
@@ -95,6 +97,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [seccion, setSeccion] = useState<'basico' | 'descuentos' | 'unidades'>('basico')
+  const [showScanner, setShowScanner] = useState(false)
 
   // ── Dedup: solo para nuevo producto ─────────────────────────────────────────
   const [productosExistentes, setProductosExistentes] = useState<{ nombre: string }[]>([])
@@ -180,6 +183,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
       nombre: form.nombre.trim(),
       descripcion: form.descripcion.trim() || null,
       categoria_id: form.categoria_id || null,
+      codigo_barras: form.codigo_barras.trim() || null,
       precio_base: parseFloat(form.precio_base),
       precio_compra: parseFloat(form.precio_compra) || 0,
       unidad: form.unidad,
@@ -281,6 +285,30 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
                   </span>
                 </div>
               )}
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">
+                Código de Barras / SKU <span className="text-xs text-zinc-400 font-normal">(opcional)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  name="codigo_barras"
+                  value={form.codigo_barras}
+                  onChange={handleChange}
+                  placeholder="Ej: 775123456789 o escanéalo..."
+                  className="flex-1 px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-300 transition font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowScanner(true)}
+                  className="flex items-center justify-center w-11 h-[42px] bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition"
+                  title="Escanear con cámara"
+                >
+                  <ScanLine className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-xs text-zinc-400 mt-1">Si lo dejas en blanco, se auto-generará uno interno.</p>
             </div>
 
             <div className="col-span-2">
@@ -749,6 +777,16 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
           {loading ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear producto'}
         </button>
       </div>
+
+      {showScanner && (
+        <ScannerModal
+          onClose={() => setShowScanner(false)}
+          onScan={(codigo) => {
+            setForm((p) => ({ ...p, codigo_barras: codigo }))
+            setShowScanner(false)
+          }}
+        />
+      )}
     </form>
   )
 }
