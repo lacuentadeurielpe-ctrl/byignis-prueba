@@ -160,6 +160,12 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
 
     if (!form.nombre.trim()) { setError('El nombre del producto es obligatorio.'); return }
     if (!form.precio_base || parseFloat(form.precio_base) < 0) { setError('El precio debe ser un número válido.'); return }
+    const stockVal = parseInt(form.stock) || 0
+    if (stockVal > 999999999999) { setError('El stock disponible no puede superar los 999,999,999,999 unidades.'); return }
+    if (form.stock_minimo) {
+      const minVal = parseInt(form.stock_minimo)
+      if (minVal > 999999999999) { setError('El stock mínimo no puede superar los 999,999,999,999 unidades.'); return }
+    }
 
     // Validar unidades adicionales
     for (const u of unidades) {
