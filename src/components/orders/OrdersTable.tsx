@@ -3,9 +3,10 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn, formatPEN, formatFecha, formatFechaHoraLima, labelEstadoPedido, colorEstadoPedido, labelEstadoPago, colorEstadoPago, matchesFuzzy } from '@/lib/utils'
-import { ChevronDown, Package, Loader2, Search, X, FileText, Send, ExternalLink, Plus, Bell, Download, CreditCard, CheckCircle2, Mic, Clock } from 'lucide-react'
+import { ChevronDown, Package, Loader2, Search, X, FileText, Send, ExternalLink, Plus, Bell, Download, CreditCard, CheckCircle2, Mic, Clock, Pencil } from 'lucide-react'
 import NuevoPedidoModal from './NuevoPedidoModal'
 import PedidoVozModal from './PedidoVozModal'
+import EditarPedidoModal from './EditarPedidoModal'
 import ModalEmitirBoleta from '@/components/comprobantes/ModalEmitirBoleta'
 import ModalEmitirFactura from '@/components/comprobantes/ModalEmitirFactura'
 import { createClient } from '@/lib/supabase/client'
@@ -176,6 +177,9 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
     setFacturasEmitidas((prev) => ({ ...prev, [pedidoId]: resultado }))
     setModalFactura(null)
   }
+
+  // Modal editar pedido
+  const [modalEditar, setModalEditar] = useState<typeof pedidos[0] | null>(null)
 
   // Realtime: notificar cuando llega un pedido nuevo
   useEffect(() => {
@@ -932,6 +936,19 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                       </p>
                     )}
 
+                    {/* ── Botón Editar pedido ──────────────────────────────── */}
+                    {pedido.estado_pago !== 'pagado' && !boletasEmitidas[pedido.id] && !facturasEmitidas[pedido.id] && pedido.estado !== 'cancelado' && (
+                      <div className="mb-3">
+                        <button
+                          onClick={() => setModalEditar(pedido)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium rounded-lg border border-amber-200 transition"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Editar pedido
+                        </button>
+                      </div>
+                    )}
+
                     {/* Botones de comprobante */}
                     {ESTADOS_CON_COMPROBANTE.has(pedido.estado) && (() => {
                       const cp = estadoComprobante(pedido.id)
@@ -1075,6 +1092,16 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
           pedido={modalFactura as PedidoDB}
           onClose={() => setModalFactura(null)}
           onEmitida={(r) => handleFacturaEmitida(modalFactura.id, r)}
+        />
+      )}
+
+      {/* Modal editar pedido */}
+      {modalEditar && (
+        <EditarPedidoModal
+          pedido={modalEditar}
+          productos={productos}
+          zonas={zonas}
+          onClose={() => setModalEditar(null)}
         />
       )}
     </div>

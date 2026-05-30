@@ -5,6 +5,7 @@ import { enviarMensaje } from '@/lib/whatsapp/ycloud'
 import { generarYEnviarComprobante } from '@/lib/pdf/generar-comprobante'
 import { getYCloudApiKey } from '@/lib/tenant'
 import { logAccion } from '@/lib/audit'
+import { normalizarTelefono } from '@/lib/utils'
 
 const ESTADOS_VALIDOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'enviado', 'entregado', 'cancelado']
 
@@ -208,4 +209,164 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
   return NextResponse.json(data)
+}
+
+// ── Interfaces para PUT ──────────────────────────────────────────────────────
+interface ItemEditado {
+  producto_id: string | null
+  nombre_producto: string
+  unidad: string
+  cantidad: number
+  precio_unitario: number
+  costo_unitario: number
+}
+
+// PUT /api/orders/[id] — editar pedido (solo si no hay comprobante SUNAT emitido)
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSessionInfo()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const supabase = await createClient()
+  const { id } = await params
+  const body = await request.json()
+
+  const {
+    nombre_cliente,
+    telefono_cliente,
+    modalidad,
+    direccion_entrega,
+    zona_delivery_id,
+    notas,
+    items,
+  }: {
+    nombre_cliente: string
+    telefono_cliente: string
+    modalidad: 'delivery' | 'recojo'
+    direccion_entrega?: string | null
+    zona_delivery_id?: string
+    notas?: string | null
+    items: ItemEditado[]
+  } = body
+
+  // Validaciones básicas
+  if (!nombre_cliente?.trim()) return NextResponse.json({ error: 'Nombre del cliente requerido' }, { status: 400 })
+  if (!telefono_cliente?.trim()) return NextResponse.json({ error: 'Teléfono del cliente requerido' }, { status: 400 })
+  if (!modalidad) return NextResponse.json({ error: 'Modalidad requerida' }, { status: 400 })
+  if (!items?.length) return NextResponse.json({ error: 'Debe incluir al menos un item' }, { status: 400 })
+  if (modalidad === 'delivery' && !direccion_entrega?.trim())
+    return NextResponse.json({ error: 'Dirección requerida para delivery' }, { status: 400 })
+
+  // Obtener pedido actual y verificar que pertenece a esta ferretería
+  const { data: pedidoActual, error: errPedido } = await supabase
+    .from('pedidos')
+    .select('id, ferreteria_id, estado_pago, estado, numero_pedido, cliente_id')
+    .eq('id', id)
+    .eq('ferreteria_id', session.ferreteriaId)
+    .single()
+
+  if (errPedido || !pedidoActual)
+    return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
+
+  // Bloquear edición si el pago ya fue confirmado (pre-requisito de boleta/factura SUNAT)
+  if (pedidoActual.estado_pago === 'pagado') {
+    return NextResponse.json({
+      error: 'No se puede editar un pedido con pago confirmado. Para modificarlo, primero anula el comprobante SUNAT si ya fue emitido.',
+      codigo: 'PAGO_CONFIRMADO',
+    }, { status: 400 })
+  }
+
+  // Calcular totales
+  const total = items.reduce((s: number, i: ItemEditado) => s + i.cantidad * i.precio_unitario, 0)
+  const costo_total = items.reduce((s: number, i: ItemEditado) => s + i.cantidad * i.costo_unitario, 0)
+
+  // Buscar o actualizar cliente
+  const telefonoNormalizado = normalizarTelefono(telefono_cliente)
+  let clienteId: string | null = pedidoActual.cliente_id ?? null
+
+  const { data: clienteExistente } = await supabase
+    .from('clientes')
+    .select('id')
+    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('telefono', telefonoNormalizado)
+    .maybeSingle()
+
+  if (clienteExistente) {
+    clienteId = clienteExistente.id
+    await supabase
+      .from('clientes')
+      .update({ nombre: nombre_cliente.trim() })
+      .eq('id', clienteId)
+  } else {
+    // Nuevo teléfono — crear cliente
+    const { data: nuevoCliente } = await supabase
+      .from('clientes')
+      .insert({
+        ferreteria_id: session.ferreteriaId,
+        telefono: telefonoNormalizado,
+        nombre: nombre_cliente.trim(),
+      })
+      .select('id')
+      .single()
+    if (nuevoCliente) clienteId = nuevoCliente.id
+  }
+
+  // Actualizar pedido
+  const { error: errUpdate } = await supabase
+    .from('pedidos')
+    .update({
+      nombre_cliente:   nombre_cliente.trim(),
+      telefono_cliente: telefonoNormalizado,
+      cliente_id:       clienteId,
+      modalidad,
+      direccion_entrega: modalidad === 'delivery' ? (direccion_entrega?.trim() ?? null) : null,
+      zona_delivery_id:  modalidad === 'delivery' && zona_delivery_id ? zona_delivery_id : null,
+      notas:            notas?.trim() ?? null,
+      total,
+      costo_total,
+    })
+    .eq('id', id)
+    .eq('ferreteria_id', session.ferreteriaId)
+
+  if (errUpdate)
+    return NextResponse.json({ error: errUpdate.message }, { status: 500 })
+
+  // Reemplazar items: borrar los anteriores e insertar los nuevos
+  const { error: errDelItems } = await supabase
+    .from('items_pedido')
+    .delete()
+    .eq('pedido_id', id)
+
+  if (errDelItems)
+    return NextResponse.json({ error: 'Error eliminando items anteriores: ' + errDelItems.message }, { status: 500 })
+
+  const itemsInsert = items.map((i: ItemEditado) => ({
+    pedido_id:       id,
+    producto_id:     i.producto_id,
+    nombre_producto: i.nombre_producto,
+    unidad:          i.unidad,
+    cantidad:        i.cantidad,
+    precio_unitario: i.precio_unitario,
+    costo_unitario:  i.costo_unitario,
+    subtotal:        i.cantidad * i.precio_unitario,
+  }))
+
+  const { error: errItems } = await supabase.from('items_pedido').insert(itemsInsert)
+  if (errItems)
+    return NextResponse.json({ error: 'Error insertando nuevos items: ' + errItems.message }, { status: 500 })
+
+  // Auditoría
+  await logAccion({
+    ferreteriaId: session.ferreteriaId,
+    usuarioId:    session.userId,
+    accion:       'editar_pedido',
+    entidad:      'pedido',
+    entidadId:    id,
+    detalle: {
+      numero_pedido: pedidoActual.numero_pedido,
+      total_nuevo:   total,
+      items_count:   items.length,
+    },
+  })
+
+  return NextResponse.json({ id, total, costo_total, items_count: items.length })
 }
