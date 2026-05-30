@@ -13,12 +13,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const admin = createAdminClient()
   const { data: comprobante } = await admin
     .from('comprobantes')
-    .select('id')
+    .select('id, pdf_url')
     .eq('pedido_id', pedidoId)
     .single()
 
   if (!comprobante) return new Response('Comprobante no encontrado', { status: 404 })
 
-  // Redirigir al nuevo endpoint de React-PDF
+  if (comprobante.pdf_url) {
+    return NextResponse.redirect(comprobante.pdf_url)
+  }
+
+  // Redirigir al nuevo endpoint de React-PDF (para Notas de Venta internas)
   return NextResponse.redirect(new URL(`/api/comprobantes/${comprobante.id}/pdf`, request.url))
 }
