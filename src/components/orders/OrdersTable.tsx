@@ -64,6 +64,7 @@ interface Pedido {
   zonas_delivery: { nombre: string } | null
   items_pedido: ItemPedido[]
   entregas: EntregaResumen[] | null
+  comprobantes?: { id: string; tipo: string; numero_completo: string; estado: string; pdf_url: string | null }[]
 }
 
 // ── Helpers de pago ───────────────────────────────────────────────────────────
@@ -162,7 +163,14 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
   // Modal emitir boleta electrónica (F3)
   const [modalBoleta, setModalBoleta] = useState<PedidoDB | null>(null)
   // Boletas ya emitidas en esta sesión: pedidoId → { numeroCompleto, pdfUrl }
-  const [boletasEmitidas, setBoletasEmitidas] = useState<Record<string, { numeroCompleto: string; pdfUrl?: string }>>({})
+  const [boletasEmitidas, setBoletasEmitidas] = useState<Record<string, { numeroCompleto: string; pdfUrl?: string }>>(() => {
+    const init: Record<string, { numeroCompleto: string; pdfUrl?: string }> = {}
+    for (const p of pedidos) {
+      const b = p.comprobantes?.find(c => c.tipo === 'boleta' && c.estado === 'emitido')
+      if (b) init[p.id] = { numeroCompleto: b.numero_completo, pdfUrl: b.pdf_url ?? undefined }
+    }
+    return init
+  })
 
   function handleBoletaEmitida(pedidoId: string, resultado: { numeroCompleto: string; pdfUrl?: string }) {
     setBoletasEmitidas((prev) => ({ ...prev, [pedidoId]: resultado }))
@@ -172,7 +180,14 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
   // Modal emitir factura electrónica (F4)
   const [modalFactura, setModalFactura] = useState<PedidoDB | null>(null)
   // Facturas ya emitidas en esta sesión: pedidoId → { numeroCompleto, pdfUrl }
-  const [facturasEmitidas, setFacturasEmitidas] = useState<Record<string, { numeroCompleto: string; pdfUrl?: string }>>({})
+  const [facturasEmitidas, setFacturasEmitidas] = useState<Record<string, { numeroCompleto: string; pdfUrl?: string }>>(() => {
+    const init: Record<string, { numeroCompleto: string; pdfUrl?: string }> = {}
+    for (const p of pedidos) {
+      const f = p.comprobantes?.find(c => c.tipo === 'factura' && c.estado === 'emitido')
+      if (f) init[p.id] = { numeroCompleto: f.numero_completo, pdfUrl: f.pdf_url ?? undefined }
+    }
+    return init
+  })
 
   function handleFacturaEmitida(pedidoId: string, resultado: { comprobanteId: string; numeroCompleto: string; pdfUrl?: string }) {
     setFacturasEmitidas((prev) => ({ ...prev, [pedidoId]: resultado }))
