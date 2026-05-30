@@ -15,10 +15,10 @@ CREATE TABLE public.ordenes_compra (
 
 -- Políticas RLS
 ALTER TABLE public.ordenes_compra ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Ordenes de compra visibles por ferreteria" ON public.ordenes_compra FOR SELECT USING (ferreteria_id = (current_setting('app.current_ferreteria_id'::text))::uuid);
-CREATE POLICY "Ordenes de compra insertables por ferreteria" ON public.ordenes_compra FOR INSERT WITH CHECK (ferreteria_id = (current_setting('app.current_ferreteria_id'::text))::uuid);
-CREATE POLICY "Ordenes de compra actualizables por ferreteria" ON public.ordenes_compra FOR UPDATE USING (ferreteria_id = (current_setting('app.current_ferreteria_id'::text))::uuid);
-CREATE POLICY "Ordenes de compra eliminables por ferreteria" ON public.ordenes_compra FOR DELETE USING (ferreteria_id = (current_setting('app.current_ferreteria_id'::text))::uuid);
+CREATE POLICY "Ordenes de compra visibles por ferreteria" ON public.ordenes_compra FOR SELECT USING (ferreteria_id = mi_ferreteria_id());
+CREATE POLICY "Ordenes de compra insertables por ferreteria" ON public.ordenes_compra FOR INSERT WITH CHECK (ferreteria_id = mi_ferreteria_id());
+CREATE POLICY "Ordenes de compra actualizables por ferreteria" ON public.ordenes_compra FOR UPDATE USING (ferreteria_id = mi_ferreteria_id());
+CREATE POLICY "Ordenes de compra eliminables por ferreteria" ON public.ordenes_compra FOR DELETE USING (ferreteria_id = mi_ferreteria_id());
 
 
 CREATE TABLE public.items_orden_compra (
@@ -39,22 +39,22 @@ ALTER TABLE public.items_orden_compra ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Items OC visibles por orden" ON public.items_orden_compra FOR SELECT
 USING (orden_compra_id IN (
-    SELECT id FROM public.ordenes_compra WHERE ferreteria_id = (current_setting('app.current_ferreteria_id'::text))::uuid
+    SELECT id FROM public.ordenes_compra WHERE ferreteria_id = mi_ferreteria_id()
 ));
 
 CREATE POLICY "Items OC insertables" ON public.items_orden_compra FOR INSERT
 WITH CHECK (orden_compra_id IN (
-    SELECT id FROM public.ordenes_compra WHERE ferreteria_id = (current_setting('app.current_ferreteria_id'::text))::uuid
+    SELECT id FROM public.ordenes_compra WHERE ferreteria_id = mi_ferreteria_id()
 ));
 
 CREATE POLICY "Items OC actualizables" ON public.items_orden_compra FOR UPDATE
 USING (orden_compra_id IN (
-    SELECT id FROM public.ordenes_compra WHERE ferreteria_id = (current_setting('app.current_ferreteria_id'::text))::uuid
+    SELECT id FROM public.ordenes_compra WHERE ferreteria_id = mi_ferreteria_id()
 ));
 
 CREATE POLICY "Items OC eliminables" ON public.items_orden_compra FOR DELETE
 USING (orden_compra_id IN (
-    SELECT id FROM public.ordenes_compra WHERE ferreteria_id = (current_setting('app.current_ferreteria_id'::text))::uuid
+    SELECT id FROM public.ordenes_compra WHERE ferreteria_id = mi_ferreteria_id()
 ));
 
 -- Triggers for updated_at
