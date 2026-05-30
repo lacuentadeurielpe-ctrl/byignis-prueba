@@ -113,8 +113,8 @@ export default function SupplierOrdersManager({
 
       // Filtro de proveedor
       let matchProveedor = true
-      if (proveedorFiltro === 'sin_proveedor') {
-        matchProveedor = !p.proveedor || p.proveedor.trim() === ''
+      if (proveedorFiltro === 'sin_provider' || proveedorFiltro === 'sin_proveedor') {
+        matchProveedor = !p.proveedor || p.proveedor.trim() === '' || p.proveedor.trim() === 'Sin proveedor asignado'
       } else if (proveedorFiltro !== 'todos') {
         matchProveedor = p.proveedor?.trim() === proveedorFiltro
       }
@@ -325,9 +325,10 @@ export default function SupplierOrdersManager({
     document.body.removeChild(link)
   }
   const handleStartEditOrder = (orden: OrdenCompra) => {
+    const targetProveedor = orden.proveedor || 'Sin proveedor asignado'
     setEditingOrderId(orden.id)
     setEditingOrderNumber(orden.numero_orden)
-    setEditingOrderProveedor(orden.proveedor)
+    setEditingOrderProveedor(targetProveedor)
 
     // Limpiar selección actual
     setSelectedProductIds([])
@@ -354,7 +355,7 @@ export default function SupplierOrdersManager({
           id: mId,
           nombre: item.nombre_producto,
           marca: item.marca || '',
-          proveedor: orden.proveedor,
+          proveedor: targetProveedor,
           cantidad: item.cantidad,
           precio_compra: item.precio_unitario,
           unidad: item.unidad
@@ -368,7 +369,11 @@ export default function SupplierOrdersManager({
     setManualItems(manualItemsList)
     setSelectedManualIds(manualIds)
 
-    setProveedorFiltro(orden.proveedor)
+    if (!orden.proveedor || orden.proveedor === 'Sin proveedor asignado') {
+      setProveedorFiltro('sin_proveedor')
+    } else {
+      setProveedorFiltro(orden.proveedor)
+    }
     setMostrarTodos(true)
     setActiveTab('crear')
   }
@@ -542,7 +547,7 @@ export default function SupplierOrdersManager({
           <div>
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Proveedores en el Pedido</p>
             <p className="text-3xl font-extrabold text-zinc-900 tracking-tight mt-1">
-              {Object.keys(orderGroups).filter(k => k !== 'Sin proveedor asignado').length}
+              {Object.keys(orderGroups).length}
             </p>
           </div>
           <p className="text-xs text-zinc-400 mt-2">Diferentes órdenes de compra agrupadas</p>
@@ -565,8 +570,9 @@ export default function SupplierOrdersManager({
         {/* Proveedor */}
         <select
           value={proveedorFiltro}
+          disabled={editingOrderId !== null}
           onChange={(e) => setProveedorFiltro(e.target.value)}
-          className="px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition bg-white"
+          className="px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition bg-white disabled:bg-zinc-50 disabled:text-zinc-500 disabled:cursor-not-allowed"
         >
           <option value="todos">Todos los proveedores</option>
           <option value="sin_proveedor">Sin proveedor asignado</option>
