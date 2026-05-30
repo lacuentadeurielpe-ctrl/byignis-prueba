@@ -1,47 +1,39 @@
 import React from 'react'
-import { Document, Page, Text, View, StyleSheet, Font, Image as PdfImage } from '@react-pdf/renderer'
-import { formatPEN } from '../utils' // Asumiendo que utils está accesible o usaré formato básico
-
-Font.register({
-  family: 'Inter',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/inter/v12/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiA.woff2' },
-    { src: 'https://fonts.gstatic.com/s/inter/v12/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuGKYAZ9hiA.woff2', fontWeight: 700 }
-  ]
-})
+import { Document, Page, Text, View, StyleSheet, Image as PdfImage } from '@react-pdf/renderer'
+import { formatPEN } from '../utils'
 
 const styles = StyleSheet.create({
-  page: { padding: 40, fontFamily: 'Inter', fontSize: 10, color: '#18181b' },
+  page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10, color: '#18181b' },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 30 },
   logo: { width: 120, maxHeight: 60, objectFit: 'contain' },
   headerRight: { alignItems: 'flex-end', justifyContent: 'center' },
-  title: { fontSize: 20, fontWeight: 700, color: '#18181b', marginBottom: 4 },
-  documentNumber: { fontSize: 12, color: '#71717a', fontWeight: 700 },
+  title: { fontSize: 20, fontFamily: 'Helvetica-Bold', color: '#18181b', marginBottom: 4 },
+  documentNumber: { fontSize: 12, color: '#71717a', fontFamily: 'Helvetica-Bold' },
   infoSection: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 30, backgroundColor: '#fafafa', padding: 15, borderRadius: 8 },
   infoBlock: { flex: 1 },
   infoLabel: { fontSize: 8, color: '#a1a1aa', textTransform: 'uppercase', marginBottom: 4 },
-  infoValue: { fontSize: 10, fontWeight: 700, color: '#18181b', marginBottom: 2 },
+  infoValue: { fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#18181b', marginBottom: 2 },
   infoValueLight: { fontSize: 9, color: '#52525b' },
   table: { width: '100%', marginBottom: 30 },
   tableHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e4e4e7', paddingBottom: 6, marginBottom: 8 },
-  thDesc: { flex: 3, fontSize: 9, color: '#71717a', fontWeight: 700 },
-  thMarca: { flex: 1.5, fontSize: 9, color: '#71717a', fontWeight: 700 },
-  thCant: { flex: 1, fontSize: 9, color: '#71717a', fontWeight: 700, textAlign: 'center' },
-  thUnit: { flex: 1, fontSize: 9, color: '#71717a', fontWeight: 700, textAlign: 'right' },
-  thTotal: { flex: 1.2, fontSize: 9, color: '#71717a', fontWeight: 700, textAlign: 'right' },
+  thDesc: { flex: 3, fontSize: 9, color: '#71717a', fontFamily: 'Helvetica-Bold' },
+  thMarca: { flex: 1.5, fontSize: 9, color: '#71717a', fontFamily: 'Helvetica-Bold' },
+  thCant: { flex: 1, fontSize: 9, color: '#71717a', fontFamily: 'Helvetica-Bold', textAlign: 'center' },
+  thUnit: { flex: 1, fontSize: 9, color: '#71717a', fontFamily: 'Helvetica-Bold', textAlign: 'right' },
+  thTotal: { flex: 1.2, fontSize: 9, color: '#71717a', fontFamily: 'Helvetica-Bold', textAlign: 'right' },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f4f4f5', paddingVertical: 8 },
   tdDesc: { flex: 3, fontSize: 9, paddingRight: 8 },
   tdMarca: { flex: 1.5, fontSize: 9, color: '#52525b' },
-  tdCant: { flex: 1, fontSize: 9, textAlign: 'center', fontWeight: 700 },
+  tdCant: { flex: 1, fontSize: 9, textAlign: 'center', fontFamily: 'Helvetica-Bold' },
   tdUnit: { flex: 1, fontSize: 9, textAlign: 'right', color: '#52525b' },
-  tdTotal: { flex: 1.2, fontSize: 9, textAlign: 'right', fontWeight: 700 },
+  tdTotal: { flex: 1.2, fontSize: 9, textAlign: 'right', fontFamily: 'Helvetica-Bold' },
   totals: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
   totalsBox: { width: 200, backgroundColor: '#fafafa', padding: 12, borderRadius: 8 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  totalLabel: { fontSize: 12, fontWeight: 700, color: '#18181b' },
-  totalValue: { fontSize: 14, fontWeight: 700, color: '#18181b' },
+  totalLabel: { fontSize: 12, fontFamily: 'Helvetica-Bold', color: '#18181b' },
+  totalValue: { fontSize: 14, fontFamily: 'Helvetica-Bold', color: '#18181b' },
   notes: { marginTop: 40, borderTopWidth: 1, borderTopColor: '#e4e4e7', paddingTop: 15 },
-  notesTitle: { fontSize: 9, fontWeight: 700, color: '#71717a', marginBottom: 4 },
+  notesTitle: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#71717a', marginBottom: 4 },
   notesText: { fontSize: 9, color: '#52525b', lineHeight: 1.4 },
   footer: { position: 'absolute', bottom: 30, left: 40, right: 40, textAlign: 'center', color: '#a1a1aa', fontSize: 8, borderTopWidth: 1, borderTopColor: '#f4f4f5', paddingTop: 10 }
 })
@@ -83,7 +75,7 @@ export function OrdenCompraPDF({ datos }: OrdenCompraPDFProps) {
             {datos.logo_url ? (
               <PdfImage src={datos.logo_url} style={styles.logo} />
             ) : (
-              <Text style={{ fontSize: 16, fontWeight: 700, color: '#18181b', marginBottom: 4 }}>
+              <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: '#18181b', marginBottom: 4 }}>
                 {datos.nombre_ferreteria}
               </Text>
             )}

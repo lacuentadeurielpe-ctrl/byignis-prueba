@@ -37,9 +37,13 @@ export default function SupplierOrdersHistory() {
       const res = await fetch(`/api/ordenes-compra/${id}`, { method: 'DELETE' })
       if (res.ok) {
         setOrdenes(prev => prev.filter(o => o.id !== id))
+      } else {
+        const err = await res.json()
+        alert('Error al eliminar: ' + (err.error || 'Desconocido'))
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      alert('Error de red al eliminar: ' + e.message)
     } finally {
       setSavingId(null)
     }
@@ -56,9 +60,13 @@ export default function SupplierOrdersHistory() {
       if (res.ok) {
         const updated = await res.json()
         setOrdenes(prev => prev.map(o => o.id === id ? { ...o, estado: updated.estado } : o))
+      } else {
+        const err = await res.json()
+        alert('Error al actualizar estado: ' + (err.error || 'Desconocido'))
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      alert('Error de red al actualizar: ' + e.message)
     } finally {
       setSavingId(null)
     }
