@@ -986,12 +986,12 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                             {!cp.cargando && <ExternalLink className="w-3 h-3 opacity-60" />}
                           </button>
 
-                          {(cp.id || boletaEmitida?.comprobanteId) && (
+                          {(cp.id || (boletaEmitida as any)?.comprobanteId) && (
                             <button
                               onClick={() => setModalNC({
-                                pedido: pedido as PedidoDB,
+                                pedido: pedido as unknown as PedidoDB,
                                 comprobanteOriginal: {
-                                  id: (cp.id || boletaEmitida?.comprobanteId) as string,
+                                  id: (cp.id || (boletaEmitida as any)?.comprobanteId) as string,
                                   numeroCompleto: (cp.numero_completo || boletaEmitida?.numeroCompleto) as string,
                                   tipo: cp.tipo || 'boleta'
                                 }

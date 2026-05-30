@@ -8,7 +8,7 @@ import React from 'react'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSessionInfo()
   if (!session) {
@@ -17,11 +17,13 @@ export async function GET(
 
   const supabase = createAdminClient()
 
+  const { id } = await params
+
   // 1. Obtener comprobante
   const { data: comprobante, error: errComp } = await supabase
     .from('comprobantes')
     .select('*, pedidos(items_pedido(*))')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('ferreteria_id', session.ferreteriaId)
     .single()
 
@@ -85,7 +87,7 @@ export async function GET(
 
   // 5. Renderizar PDF
   try {
-    const stream = await renderToStream(React.createElement(PlantillaTicket, { data }))
+    const stream = await renderToStream(React.createElement(PlantillaTicket, { data }) as any)
     
     // Convert Node.js stream to Web ReadableStream
     const readableStream = new ReadableStream({
