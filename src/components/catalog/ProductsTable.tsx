@@ -12,6 +12,65 @@ import Modal from '@/components/ui/Modal'
 import CategoryManager from './CategoryManager'
 import DuplicadosPanel from './DuplicadosPanel'
 
+// Helper para edición en línea
+function EditableCell({ 
+  value, 
+  onSave, 
+  type = 'text', 
+  isSaving = false,
+  className = ''
+}: { 
+  value: string | number, 
+  onSave: (val: string | number) => void, 
+  type?: 'text'|'number',
+  isSaving?: boolean,
+  className?: string
+}) {
+  const [editing, setEditing] = useState(false)
+  const [localValue, setLocalValue] = useState(value)
+
+  if (editing) {
+    return (
+      <input
+        type={type}
+        autoFocus
+        value={localValue}
+        onChange={e => setLocalValue(e.target.value)}
+        onFocus={e => e.target.select()}
+        onBlur={() => {
+          setEditing(false)
+          const finalVal = type === 'number' ? Number(localValue) : localValue
+          if (finalVal !== value && localValue !== '') onSave(finalVal)
+          else setLocalValue(value)
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+          else if (e.key === 'Escape') {
+            setLocalValue(value)
+            setEditing(false)
+          }
+        }}
+        className={`w-full px-1.5 py-0.5 text-sm border-2 border-indigo-500 rounded bg-white shadow-sm focus:outline-none ${className}`}
+      />
+    )
+  }
+
+  return (
+    <div 
+      onClick={() => { setEditing(true); setLocalValue(value) }}
+      className={`cursor-pointer hover:bg-zinc-100 px-1.5 py-0.5 -mx-1.5 rounded transition relative group flex items-center min-w-8 ${className}`}
+    >
+      <span className="truncate">{type === 'number' ? value : value || 'Sin nombre'}</span>
+      {isSaving ? (
+        <Loader2 className="w-3 h-3 animate-spin ml-1 text-indigo-500 shrink-0" />
+      ) : (
+        <Pencil className="w-3 h-3 ml-1 text-zinc-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+      )}
+    </div>
+  )
+}
+
+
 interface ProductsTableProps {
   productos: Producto[]
   categorias: Categoria[]
@@ -37,6 +96,36 @@ export default function ProductsTable({ productos: initialProductos, categorias:
   // IGV global — togglable directamente desde catálogo
   const [igv, setIgv] = useState(igvGlobal)
   const [savingIgv, setSavingIgv] = useState(false)
+
+  // Estado para inline editing
+  const [savingField, setSavingField] = useState<{ id: string, field: string } | null>(null)
+
+  async function handleInlineEdit(id: string, field: 'nombre' | 'precio_base' | 'stock', newValue: string | number) {
+    const product = productos.find(p => p.id === id)
+    if (!product || product[field] === newValue) return
+
+    const oldValue = product[field]
+    
+    // Optimistic update
+    setProductos(prev => prev.map(p => p.id === id ? { ...p, [field]: newValue } : p))
+    setSavingField({ id, field })
+
+    // API call
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: newValue }),
+      })
+      if (!res.ok) throw new Error()
+    } catch (error) {
+      // Revert on error
+      setProductos(prev => prev.map(p => p.id === id ? { ...p, [field]: oldValue } : p))
+      alert('Error al guardar el cambio.')
+    } finally {
+      setSavingField(null)
+    }
+  }
 
   async function toggleIgv() {
     setSavingIgv(true)
@@ -223,7 +312,13 @@ export default function ProductsTable({ productos: initialProductos, categorias:
                   <td className="px-4 py-3">
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-sm font-semibold text-zinc-900">{producto.nombre}</p>
+                        <EditableCell
+                          value={producto.nombre || ''}
+                          type="text"
+                          onSave={(val) => handleInlineEdit(producto.id, 'nombre', val)}
+                          isSaving={savingField?.id === producto.id && savingField?.field === 'nombre'}
+                          className="font-semibold text-zinc-900 min-w-[120px] max-w-[300px]"
+                        />
                         {producto.marca && (
                           <span className="text-[9px] font-medium bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded-full" title="Marca">
                             {producto.marca}
@@ -250,9 +345,15 @@ export default function ProductsTable({ productos: initialProductos, categorias:
                   </td>
                   {/* Columna Precio — limpia, sin datos de IGV en la tabla */}
                   <td className="px-4 py-3 text-right">
-                    <span className="text-sm font-bold text-zinc-900 tabular-nums">
-                      {formatPEN(producto.precio_base)}
-                    </span>
+                    <div className="flex justify-end">
+                      <EditableCell
+                        value={producto.precio_base}
+                        type="number"
+                        onSave={(val) => handleInlineEdit(producto.id, 'precio_base', val)}
+                        isSaving={savingField?.id === producto.id && savingField?.field === 'precio_base'}
+                        className="font-bold text-zinc-900 tabular-nums text-right w-24"
+                      />
+                    </div>
                     <div className="flex items-center justify-end gap-1 mt-0.5 flex-wrap">
                       {igv && producto.afecto_igv && (
                         <span className="text-[9px] font-semibold bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded-full">c/IGV</span>
@@ -305,9 +406,15 @@ export default function ProductsTable({ productos: initialProductos, categorias:
                         : 'text-zinc-700'
                       return (
                         <div className="flex flex-col items-end">
-                          <span className={`text-sm font-semibold tabular-nums ${colorClass}`}>
-                            {producto.stock}
-                          </span>
+                          <div className={`text-sm font-semibold tabular-nums flex justify-end ${colorClass}`}>
+                            <EditableCell
+                              value={producto.stock}
+                              type="number"
+                              onSave={(val) => handleInlineEdit(producto.id, 'stock', val)}
+                              isSaving={savingField?.id === producto.id && savingField?.field === 'stock'}
+                              className="text-right w-16"
+                            />
+                          </div>
                           {producto.stock_minimo !== null && (
                             <span className="text-[9px] text-zinc-400 font-normal">
                               mín. {producto.stock_minimo}
