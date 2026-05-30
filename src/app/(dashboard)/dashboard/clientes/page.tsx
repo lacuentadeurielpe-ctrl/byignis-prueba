@@ -2,8 +2,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { redirect } from 'next/navigation'
-import { Users } from 'lucide-react'
+import { Users, UserPlus, GitMerge } from 'lucide-react'
 import ClientesTable from '@/components/clientes/ClientesTable'
+import ClientesDashboardMetrics from '@/components/clientes/ClientesDashboardMetrics'
+import ClientesPageActions from '@/components/clientes/ClientesPageActions'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +22,8 @@ export default async function ClientesPage() {
     .select(`
       id, nombre, telefono, dni_ruc, tipo, alias, email,
       telefono_secundario, direccion_habitual, tags, notas_internas, created_at,
-      pedidos(id, total, estado, created_at)
+      pedidos(id, total, estado, created_at),
+      creditos(monto_total, monto_pagado, estado)
     `)
     .eq('ferreteria_id', session.ferreteriaId)
     .order('created_at', { ascending: false })
@@ -31,6 +34,9 @@ export default async function ClientesPage() {
     const pedidosCompletados = pedidos.filter(p => p.estado !== 'cancelado')
     const totalGastado = pedidosCompletados.reduce((s, p) => s + (p.total ?? 0), 0)
     const ultimoPedido = pedidos.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+    const creditos = (c.creditos ?? []) as Array<{ monto_total: number; monto_pagado: number; estado: string }>
+    const deuda = creditos.reduce((s, cr) => s + (cr.monto_total - cr.monto_pagado), 0)
+
     return {
       id: c.id,
       nombre: c.nombre ?? null,
@@ -47,21 +53,44 @@ export default async function ClientesPage() {
       totalPedidos: pedidos.length,
       pedidosCompletados: pedidosCompletados.length,
       totalGastado,
+      deuda,
       ultimoPedido: ultimoPedido?.created_at ?? null,
     }
   }).sort((a, b) => b.totalGastado - a.totalGastado)
 
+  // Calcular métricas globales
+  const totalClientes = clientesConMetricas.length
+  const hace30dias = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const clientesActivos30Dias = clientesConMetricas.filter(c => c.ultimoPedido && c.ultimoPedido >= hace30dias).length
+  const deudaTotal = clientesConMetricas.reduce((s, c) => s + c.deuda, 0)
+  const topComprador = clientesConMetricas[0]?.totalGastado > 0
+    ? { nombre: clientesConMetricas[0].nombre || clientesConMetricas[0].alias || 'Sin nombre', total: clientesConMetricas[0].totalGastado }
+    : null
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-9 h-9 bg-zinc-100 border border-zinc-200 rounded-2xl flex items-center justify-center">
-          <Users className="w-4 h-4 text-zinc-600" />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-zinc-100 border border-zinc-200 rounded-2xl flex items-center justify-center">
+            <Users className="w-4 h-4 text-zinc-600" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-zinc-950 tracking-tight">CRM Clientes</h1>
+            <p className="text-xs text-zinc-400">Gestión de cartera y cuentas corrientes</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-lg font-bold text-zinc-950 tracking-tight">Clientes</h1>
-          <p className="text-xs text-zinc-400">{clientesConMetricas.length} clientes registrados</p>
-        </div>
+        <ClientesPageActions
+          esVendedor={session.rol === 'vendedor'}
+          clientes={clientesConMetricas}
+        />
       </div>
+
+      <ClientesDashboardMetrics
+        totalClientes={totalClientes}
+        clientesActivos30Dias={clientesActivos30Dias}
+        deudaTotal={deudaTotal}
+        topComprador={topComprador}
+      />
 
       <ClientesTable
         clientes={clientesConMetricas}
