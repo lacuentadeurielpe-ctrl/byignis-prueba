@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Pencil, Trash2, ToggleLeft, ToggleRight, Tag, Loader2, TrendingUp, AlertTriangle, Copy, Receipt, Printer } from 'lucide-react'
@@ -96,10 +96,10 @@ export default function ProductsTable({ productos: initialProductos, categorias:
   const [modalEtiqueta, setModalEtiqueta] = useState<Producto | null>(null)
 
   // Búsqueda por láser oculta
-  const scanBuffer = React.useRef('')
-  const lastKeyTime = React.useRef(0)
+  const scanBuffer = useRef('')
+  const lastKeyTime = useRef(0)
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Evitar si está escribiendo en algún input (excepto que sea muy rápido)
       const target = e.target as HTMLElement
