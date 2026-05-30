@@ -8,6 +8,8 @@
 
 import {
   type NubefactPayload,
+  type NubefactAnulacionPayload,
+  type NubefactConsultarPayload,
   type NubefactRespuesta,
   type NubefactRespuestaOk,
   esRespuestaOk,
@@ -39,7 +41,7 @@ export interface NubefactResultado {
 export async function enviarANubefact(
   ruta: string,
   token: string,
-  payload: NubefactPayload
+  payload: NubefactPayload | NubefactAnulacionPayload | NubefactConsultarPayload
 ): Promise<NubefactResultado> {
   // Aseguramos que la ruta termina en /
   const url = ruta.endsWith('/') ? ruta : ruta + '/'

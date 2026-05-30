@@ -106,6 +106,22 @@ export interface NubefactPayload {
   items:                        NubefactItem[]
 }
 
+export interface NubefactAnulacionPayload {
+  operacion: 'generar_anulacion'
+  tipo_de_comprobante: number
+  serie: string
+  numero: number
+  motivo: string
+  codigo_unico?: string
+}
+
+export interface NubefactConsultarPayload {
+  operacion: 'consultar_comprobante'
+  tipo_de_comprobante: number
+  serie: string
+  numero: number
+}
+
 // ── Respuesta de Nubefact ─────────────────────────────────────────────────────
 
 export interface NubefactRespuestaOk {

@@ -987,19 +987,67 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                           </button>
 
                           {(cp.id || (boletaEmitida as any)?.comprobanteId) && (
-                            <button
-                              onClick={() => setModalNC({
-                                pedido: pedido as unknown as PedidoDB,
-                                comprobanteOriginal: {
-                                  id: (cp.id || (boletaEmitida as any)?.comprobanteId) as string,
-                                  numeroCompleto: (cp.numero_completo || boletaEmitida?.numeroCompleto) as string,
-                                  tipo: cp.tipo || 'boleta'
-                                }
-                              })}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-lg transition"
-                            >
-                              Devolución (NC)
-                            </button>
+                            <>
+                              <button
+                                onClick={() => setModalNC({
+                                  pedido: pedido as unknown as PedidoDB,
+                                  comprobanteOriginal: {
+                                    id: (cp.id || (boletaEmitida as any)?.comprobanteId) as string,
+                                    numeroCompleto: (cp.numero_completo || boletaEmitida?.numeroCompleto) as string,
+                                    tipo: cp.tipo || 'boleta'
+                                  }
+                                })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-lg transition"
+                              >
+                                Devolución (NC)
+                              </button>
+
+                              <button
+                                onClick={async () => {
+                                  const motivo = prompt('Motivo de la anulación (Requerido por SUNAT):')
+                                  if (!motivo) return
+                                  try {
+                                    const req = await fetch(`/api/orders/${pedido.id}/comprobante/anular`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ motivo })
+                                    })
+                                    const res = await req.json()
+                                    if (res.ok) {
+                                      alert('Comprobante anulado correctamente.')
+                                      window.location.reload()
+                                    } else {
+                                      alert('Error: ' + res.error)
+                                    }
+                                  } catch (e) {
+                                    alert('Error de conexión al anular')
+                                  }
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium rounded-lg transition"
+                              >
+                                Anular
+                              </button>
+
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const req = await fetch(`/api/orders/${pedido.id}/comprobante/consultar`, { method: 'POST' })
+                                    const res = await req.json()
+                                    if (res.ok) {
+                                      alert(res.mensaje + (res.datos?.aceptada_por_sunat ? ' (ACEPTADA)' : ' (RECHAZADA/PENDIENTE)'))
+                                      window.location.reload()
+                                    } else {
+                                      alert('Error: ' + res.error)
+                                    }
+                                  } catch (e) {
+                                    alert('Error de conexión al consultar')
+                                  }
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition"
+                              >
+                                Consultar SUNAT
+                              </button>
+                            </>
                           )}
 
                           <button
