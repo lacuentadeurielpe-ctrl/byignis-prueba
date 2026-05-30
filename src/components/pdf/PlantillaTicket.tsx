@@ -1,12 +1,20 @@
 import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/renderer'
 import { format } from 'date-fns'
 
+Font.register({
+  family: 'Roboto',
+  fonts: [
+    { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-regular-webfont.ttf', fontWeight: 'normal' },
+    { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-bold-webfont.ttf', fontWeight: 'bold' }
+  ]
+})
+
 // Configuración recomendada para impresoras térmicas (80mm)
 const styles = StyleSheet.create({
   page: {
     width: '80mm',
     padding: '5mm',
-    fontFamily: 'Helvetica', // Usamos Helvetica standard para evitar descargar fuentes si es posible, o podemos registrar una
+    fontFamily: 'Roboto', // Soporte completo para tildes y caracteres latinos
     fontSize: 9,
     color: '#000',
     backgroundColor: '#fff',
