@@ -43,6 +43,16 @@ export async function POST(request: Request) {
   if (productoData.precio_base == null || productoData.precio_base < 0)
     return NextResponse.json({ error: 'Precio inválido' }, { status: 400 })
 
+  // Autogeneración de código de barras
+  if (!productoData.codigo_barras || !productoData.codigo_barras.trim()) {
+    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    let randomStr = ''
+    for (let i = 0; i < 6; i++) randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+    productoData.codigo_barras = `FER-${randomStr}`
+  } else {
+    productoData.codigo_barras = productoData.codigo_barras.trim()
+  }
+
   // ── Resolver categoria string → categoria_id UUID (usado por el agente IA) ──
   // El agente manda { categoria: "Cemento" } — lo convertimos a { categoria_id: "uuid" }
   if (productoData.categoria && !productoData.categoria_id) {

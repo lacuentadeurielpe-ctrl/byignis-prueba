@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Pencil, Trash2, ToggleLeft, ToggleRight, Tag, Loader2, TrendingUp, AlertTriangle, Copy, Receipt } from 'lucide-react'
+import { Pencil, Trash2, ToggleLeft, ToggleRight, Tag, Loader2, TrendingUp, AlertTriangle, Copy, Receipt, Printer } from 'lucide-react'
 import { type Producto, type Categoria } from '@/types/database'
 import { formatPEN, matchesFuzzy } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
@@ -11,6 +11,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import Modal from '@/components/ui/Modal'
 import CategoryManager from './CategoryManager'
 import DuplicadosPanel from './DuplicadosPanel'
+import PrintBarcodeModal from './PrintBarcodeModal'
 
 // Helper para edición en línea
 function EditableCell({ 
@@ -92,6 +93,34 @@ export default function ProductsTable({ productos: initialProductos, categorias:
   const [loadingToggle, setLoadingToggle] = useState<string | null>(null)
   const [loadingEliminar, setLoadingEliminar] = useState(false)
   const [modalDuplicados, setModalDuplicados] = useState(false)
+  const [modalEtiqueta, setModalEtiqueta] = useState<Producto | null>(null)
+
+  // Búsqueda por láser oculta
+  const scanBuffer = React.useRef('')
+  const lastKeyTime = React.useRef(0)
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Evitar si está escribiendo en algún input (excepto que sea muy rápido)
+      const target = e.target as HTMLElement
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+      
+      const now = Date.now()
+      if (now - lastKeyTime.current > 50) scanBuffer.current = ''
+      lastKeyTime.current = now
+
+      if (e.key === 'Enter' && scanBuffer.current.length >= 3) {
+        setBusqueda(scanBuffer.current)
+        scanBuffer.current = ''
+        // Si el foco estaba en otro lado, evitamos submit accidentales
+        if (!isInput) e.preventDefault() 
+      } else if (e.key.length === 1) {
+        scanBuffer.current += e.key
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // IGV global — togglable directamente desde catálogo
   const [igv, setIgv] = useState(igvGlobal)
@@ -144,7 +173,7 @@ export default function ProductsTable({ productos: initialProductos, categorias:
 
   // Filtrado local (rápido, sin ir al servidor)
   const productosFiltrados = productos.filter((p) => {
-    const matchBusqueda = matchesFuzzy(`${p.nombre} ${p.descripcion ?? ''} ${p.marca ?? ''} ${p.proveedor ?? ''}`, busqueda)
+    const matchBusqueda = matchesFuzzy(`${p.nombre} ${p.descripcion ?? ''} ${p.marca ?? ''} ${p.proveedor ?? ''} ${p.codigo_barras ?? ''}`, busqueda)
     const matchCategoria = categoriaFiltro === 'todas' || p.categoria_id === categoriaFiltro
     const matchActivo = !soloActivos || p.activo
     
@@ -454,6 +483,11 @@ export default function ProductsTable({ productos: initialProductos, categorias:
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
+                      <button onClick={() => setModalEtiqueta(producto)}
+                        title="Imprimir etiquetas"
+                        className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition">
+                        <Printer className="w-4 h-4" />
+                      </button>
                       <Link href={`/dashboard/catalog/${producto.id}`}
                         className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition">
                         <Pencil className="w-4 h-4" />
@@ -496,6 +530,14 @@ export default function ProductsTable({ productos: initialProductos, categorias:
         loading={loadingEliminar}
         danger
       />
+
+      {/* Modal de impresión de etiquetas */}
+      {modalEtiqueta && (
+        <PrintBarcodeModal
+          producto={modalEtiqueta}
+          onClose={() => setModalEtiqueta(null)}
+        />
+      )}
     </div>
   )
 }
