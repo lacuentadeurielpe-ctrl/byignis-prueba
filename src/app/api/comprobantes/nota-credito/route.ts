@@ -12,6 +12,7 @@ export async function POST(request: Request) {
     comprobanteReferenciaId?: string
     motivoCodigo?: string
     motivoDescripcion?: string
+    itemsDevueltos?: { producto_id: string | null; cantidad: number }[]
   }
   
   try {
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
     motivoCodigo,
     motivoDescripcion,
     emitidoPor:    'dashboard',
+    itemsDevueltos: body.itemsDevueltos,
   })
 
   if (!resultado.ok) {

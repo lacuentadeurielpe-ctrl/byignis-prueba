@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, X, AlertTriangle } from 'lucide-react'
+import { Loader2, X, AlertTriangle, Minus, Plus } from 'lucide-react'
 import { formatPEN } from '@/lib/utils'
-import type { Pedido as PedidoDB } from '@/types/database'
 
 export default function ModalNotaCredito({ 
   pedido, 
@@ -11,28 +10,55 @@ export default function ModalNotaCredito({
   onCerrar, 
   onEmitida 
 }: {
-  pedido: PedidoDB
+  pedido: any // Using any to access items_pedido easily since it's a join
   comprobanteOriginal: { id: string, numeroCompleto: string, tipo: string }
   onCerrar: () => void
   onEmitida: (resultado: { numeroCompleto: string; pdfUrl?: string }) => void
 }) {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [motivoCodigo, setMotivoCodigo] = useState('01') // 01 = Anulación, 07 = Devolución
-  const [motivoDescripcion, setMotivoDescripcion] = useState('Anulación de la operación')
+  const [motivoCodigo, setMotivoCodigo] = useState('07') // 07 = Devolución por ítem
+  const [motivoDescripcion, setMotivoDescripcion] = useState('Devolución por ítem defectuoso')
+
+  // State to track how many items are being returned
+  // Initialize with max quantities
+  const [cantidadesDevueltas, setCantidadesDevueltas] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {}
+    pedido.items_pedido?.forEach((i: any) => {
+      init[i.id] = i.cantidad
+    })
+    return init
+  })
 
   const MOTIVOS = [
-    { codigo: '01', desc: 'Anulación de la operación' },
     { codigo: '07', desc: 'Devolución por ítem defectuoso' },
+    { codigo: '01', desc: 'Anulación de la operación' },
     { codigo: '02', desc: 'Anulación por error en el RUC' },
     { codigo: '06', desc: 'Devolución total' }
   ]
 
+  const totalDevolver = pedido.items_pedido?.reduce((sum: number, item: any) => {
+    const cant = cantidadesDevueltas[item.id] || 0
+    return sum + (cant * item.precio_unitario)
+  }, 0) || 0
+
+  const hasItemsToReturn = Object.values(cantidadesDevueltas).some(q => q > 0)
+
   async function emitir() {
     if (!motivoDescripcion.trim()) return setError('Debes ingresar una descripción.')
+    if (!hasItemsToReturn) return setError('Debes seleccionar al menos un ítem para devolver.')
+    
     setCargando(true)
     setError(null)
+    
     try {
+      const itemsDevueltos = pedido.items_pedido
+        ?.filter((i: any) => (cantidadesDevueltas[i.id] || 0) > 0)
+        .map((i: any) => ({
+          producto_id: i.producto_id,
+          cantidad: cantidadesDevueltas[i.id]
+        }))
+
       const res = await fetch('/api/comprobantes/nota-credito', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -40,6 +66,7 @@ export default function ModalNotaCredito({
           comprobanteReferenciaId: comprobanteOriginal.id,
           motivoCodigo,
           motivoDescripcion,
+          itemsDevueltos,
         })
       })
 
@@ -55,6 +82,14 @@ export default function ModalNotaCredito({
     } finally {
       setCargando(false)
     }
+  }
+
+  function updateCantidad(itemId: string, maxCantidad: number, delta: number) {
+    setCantidadesDevueltas(prev => {
+      const current = prev[itemId] || 0
+      const newCant = Math.max(0, Math.min(maxCantidad, current + delta))
+      return { ...prev, [itemId]: newCant }
+    })
   }
 
   return (
@@ -80,10 +115,46 @@ export default function ModalNotaCredito({
               <span className="text-zinc-500">Documento original:</span>
               <span className="font-semibold text-zinc-900">{comprobanteOriginal.numeroCompleto} ({comprobanteOriginal.tipo})</span>
             </p>
-            <p className="flex justify-between">
-              <span className="text-zinc-500">Monto total a devolver:</span>
-              <span className="font-semibold text-zinc-900 tabular-nums">{formatPEN(pedido.total ?? 0)}</span>
-            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-2">Productos a devolver</label>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+              {pedido.items_pedido?.map((item: any) => (
+                <div key={item.id} className="flex items-center justify-between p-3 border border-zinc-200 rounded-xl">
+                  <div className="flex-1 min-w-0 pr-3">
+                    <p className="text-sm font-medium text-zinc-900 truncate">{item.nombre_producto}</p>
+                    <p className="text-xs text-zinc-500">{formatPEN(item.precio_unitario)} / {item.unidad}</p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center bg-zinc-100 rounded-lg p-0.5">
+                      <button 
+                        onClick={() => updateCantidad(item.id, item.cantidad, -1)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md bg-white shadow-sm border border-zinc-200 text-zinc-600 hover:text-zinc-900 disabled:opacity-50"
+                        disabled={cantidadesDevueltas[item.id] === 0 || cargando}
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="w-8 text-center text-sm font-bold tabular-nums">
+                        {cantidadesDevueltas[item.id] || 0}
+                      </span>
+                      <button 
+                        onClick={() => updateCantidad(item.id, item.cantidad, 1)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md bg-white shadow-sm border border-zinc-200 text-zinc-600 hover:text-zinc-900 disabled:opacity-50"
+                        disabled={cantidadesDevueltas[item.id] === item.cantidad || cargando}
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-4 flex justify-between items-center py-3 border-t border-zinc-100">
+              <span className="font-medium text-zinc-700">Total a devolver:</span>
+              <span className="text-lg font-black text-red-600">{formatPEN(totalDevolver)}</span>
+            </div>
           </div>
 
           <div>
@@ -126,7 +197,7 @@ export default function ModalNotaCredito({
           </button>
           <button
             onClick={emitir}
-            disabled={cargando}
+            disabled={cargando || !hasItemsToReturn}
             className="flex items-center gap-2 px-6 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition shadow-sm"
           >
             {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : null}

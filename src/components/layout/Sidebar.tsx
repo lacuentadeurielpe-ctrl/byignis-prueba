@@ -20,6 +20,7 @@ import {
   Activity,
   Truck,
   ScanLine,
+  FileText,
 } from 'lucide-react'
 import NotificationBadge from '@/components/layout/NotificationBadge'
 import type { Rol } from '@/lib/auth/roles'
@@ -58,6 +59,7 @@ const navGroups: NavGroup[] = [
   },
   {
     items: [
+      { label: 'Facturación', href: '/dashboard/comprobantes', icon: FileText, permiso: 'ver_caja_dia'           },
       { label: 'Finanzas', href: '/dashboard/finanzas', icon: BarChart2, permiso: 'ver_caja_dia'           },
       { label: 'Salud',    href: '/dashboard/salud',    icon: Activity,  permiso: 'configurar_ferreteria'  },
       { label: 'Ajustes',  href: '/dashboard/settings', icon: Settings,  permiso: 'configurar_ferreteria'  },
