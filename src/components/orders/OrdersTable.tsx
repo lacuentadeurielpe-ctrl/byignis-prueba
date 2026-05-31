@@ -1011,7 +1011,7 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               : <FileText className="w-3.5 h-3.5" />
                             }
-                            {cp.cargando ? 'Generando…' : 'Ver comprobante'}
+                            {cp.cargando ? 'Generando…' : 'Ver Nota de Venta'}
                             {!cp.cargando && <ExternalLink className="w-3 h-3 opacity-60" />}
                           </button>
 

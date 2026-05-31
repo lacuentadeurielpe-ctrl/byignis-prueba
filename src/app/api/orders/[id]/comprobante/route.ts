@@ -19,9 +19,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     .select('*')
     .eq('pedido_id', pedidoId)
     .order('created_at', { ascending: false })
-    .limit(1)
 
-  const comprobante = comprobantesList?.[0]
+  let comprobante = comprobantesList?.find(c => c.tipo === 'nota_venta') 
+  if (!comprobante && comprobantesList && comprobantesList.length > 0) {
+    comprobante = comprobantesList[0]
+  }
 
   if (error || !comprobante) {
     return NextResponse.json({ error: 'Sin comprobante' }, { status: 404 })
