@@ -127,7 +127,7 @@ export interface TicketData {
   }
   comprobante: {
     numero_completo: string
-    tipo: 'boleta' | 'factura' | 'nota_credito'
+    tipo: 'boleta' | 'factura' | 'nota_credito' | 'nota_venta' | 'proforma'
     fecha: string
     cliente_nombre: string
     cliente_doc: string
