@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { matchesFuzzy, formatPEN } from '@/lib/utils'
-import { ArrowLeft, ScanLine, Search, Package, Trash2, Banknote, CreditCard, Smartphone, Loader2 } from 'lucide-react'
+import {
+  ArrowLeft, ScanLine, Search, Package, Trash2,
+  Banknote, CreditCard, Smartphone, Loader2,
+  User, CalendarClock, CheckCircle2
+} from 'lucide-react'
 import ScannerModal from '@/components/ui/ScannerModal'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { type Cliente } from '@/types/database'
-import CustomerSelectorModal from '@/components/pos/CustomerSelectorModal'
-import { User, ReceiptText } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface Producto {
   id: string
@@ -36,52 +37,71 @@ interface ClientPOSProps {
   ferreteriaId: string
 }
 
+type TipoComprobante = 'nota_venta' | 'boleta' | 'factura'
+
 export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }: ClientPOSProps) {
-  const router = useRouter()
   const [items, setItems] = useState<ItemCarrito[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [cobrando, setCobrando] = useState(false)
 
-  const [clienteActivo, setClienteActivo] = useState<Cliente | null>(null)
-  const [tipoComprobante, setTipoComprobante] = useState<'ninguno' | 'boleta' | 'factura'>('ninguno')
-  const [showCustomerModal, setShowCustomerModal] = useState(false)
+  // ── Datos del cliente ──
+  const [nombreCliente, setNombreCliente] = useState('')
+  const [telefonoCliente, setTelefonoCliente] = useState('')
+  const [dniRuc, setDniRuc] = useState('')
+  const [buscandoRuc, setBuscandoRuc] = useState(false)
+
+  // ── Comprobante ──
+  const [tipoComprobante, setTipoComprobante] = useState<TipoComprobante>('nota_venta')
+
+  // ── Programar pedido ──
+  const [esProgramado, setEsProgramado] = useState(false)
+  const [fechaProgramada, setFechaProgramada] = useState('')
 
   const busquedaRef = useRef<HTMLInputElement>(null)
   const scanBuffer = useRef('')
   const lastKeyTime = useRef(0)
 
-  const total = items.reduce((acc, i) => acc + (i.cantidad * i.precio_unitario), 0)
+  const total = items.reduce((acc, i) => acc + i.cantidad * i.precio_unitario, 0)
+
+  // Fecha mínima = ahora + 30min redondeado a 15min
+  const minFechaProgramada = (() => {
+    const d = new Date(Date.now() + 30 * 60_000)
+    d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  })()
 
   // ── ESCÁNER LÁSER & ATAJOS ──
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Atajos de pago rápido (si hay items y no estamos cobrando)
-      if (items.length > 0 && !cobrando) {
+      const target = e.target as HTMLElement
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+
+      // Atajos de pago rápido (solo si hay items, no estamos cobrando, y no hay foco en inputs)
+      if (items.length > 0 && !cobrando && !esProgramado && !isInput) {
         if (e.key === 'F1') { e.preventDefault(); procesarVenta('efectivo') }
         if (e.key === 'F2') { e.preventDefault(); procesarVenta('yape') }
         if (e.key === 'F3') { e.preventDefault(); procesarVenta('tarjeta') }
       }
 
-      // Lógica de Escáner
+      // Lógica de Escáner Láser
       const now = Date.now()
-      if (now - lastKeyTime.current > 50) {
-        scanBuffer.current = ''
-      }
+      if (now - lastKeyTime.current > 50) scanBuffer.current = ''
       lastKeyTime.current = now
 
       if (e.key === 'Enter' && scanBuffer.current.length >= 3) {
         handleScanCode(scanBuffer.current)
         scanBuffer.current = ''
-        e.preventDefault()
+        if (!isInput) e.preventDefault()
       } else if (e.key.length === 1) {
         scanBuffer.current += e.key
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [productos, items, cobrando])
+  }, [productos, items, cobrando, esProgramado])
 
   function handleScanCode(codigo: string) {
     const p = productos.find(x => x.codigo_barras === codigo)
@@ -98,19 +118,17 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
+      osc.connect(gain); gain.connect(ctx.destination)
       osc.type = 'sine'
       osc.frequency.setValueAtTime(800, ctx.currentTime)
       gain.gain.setValueAtTime(0.1, ctx.currentTime)
-      osc.start()
-      osc.stop(ctx.currentTime + 0.1)
-    } catch (e) {}
+      osc.start(); osc.stop(ctx.currentTime + 0.1)
+    } catch {}
   }
 
   function agregarAlCarrito(p: Producto) {
-    setItems((prev) => {
-      const existe = prev.findIndex((i) => i.producto_id === p.id)
+    setItems(prev => {
+      const existe = prev.findIndex(i => i.producto_id === p.id)
       if (existe >= 0) {
         const nuevos = [...prev]
         nuevos[existe].cantidad += 1
@@ -130,108 +148,159 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
   }
 
   function actualizarCantidad(idx: number, delta: number) {
-    setItems((prev) => {
+    setItems(prev => {
       const nuevos = [...prev]
       const next = nuevos[idx].cantidad + delta
-      if (next <= 0) {
-        return nuevos.filter((_, i) => i !== idx)
-      }
+      if (next <= 0) return nuevos.filter((_, i) => i !== idx)
       nuevos[idx].cantidad = next
       return nuevos
     })
   }
 
+  // ── Consulta SUNAT por RUC / DNI ──
+  async function consultarRuc(valor: string) {
+    const limpio = valor.replace(/\D/g, '')
+    if (limpio.length !== 11 && limpio.length !== 8) return
+    setBuscandoRuc(true)
+    try {
+      const res = await fetch('/api/sunat/ruc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruc: limpio })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const razon = data.razon_social || data.nombre || ''
+        if (razon) {
+          setNombreCliente(razon)
+          toast.success('Nombre obtenido de SUNAT')
+        }
+      }
+    } catch {}
+    setBuscandoRuc(false)
+  }
+
   async function procesarVenta(metodo: 'efectivo' | 'yape' | 'tarjeta') {
     if (items.length === 0) return
 
-    if (tipoComprobante === 'factura' && (!clienteActivo || !clienteActivo.dni_ruc || clienteActivo.dni_ruc.length !== 11)) {
-      toast.error('Factura requiere un cliente con RUC válido (11 dígitos)')
-      setShowCustomerModal(true)
-      return
+    // Validación de cliente: teléfono solo requerido si NO es nota de venta anónima
+    const esAnonimo = !telefonoCliente.trim() && !nombreCliente.trim()
+    const nombreFinal = nombreCliente.trim() || 'Cliente Mostrador'
+    const telefonoFinal = telefonoCliente.trim() || '000000000'
+
+    // Validar factura → RUC 11 dígitos obligatorio
+    if (tipoComprobante === 'factura') {
+      const rucLimpio = dniRuc.replace(/\D/g, '')
+      if (rucLimpio.length !== 11) {
+        toast.error('Factura requiere un RUC de 11 dígitos')
+        return
+      }
+      if (!nombreCliente.trim()) {
+        toast.error('Factura requiere la razón social del cliente')
+        return
+      }
     }
 
     setCobrando(true)
     try {
-      // 1. Crear el pedido directo como entregado y pagado
-      const payload = {
-        nombre_cliente: clienteActivo ? clienteActivo.nombre : 'Cliente Mostrador',
-        telefono_cliente: clienteActivo ? (clienteActivo.telefono || '000000000') : '000000000',
-        modalidad: 'recojo',
-        estado: 'entregado',
-        estado_pago: 'pagado',
-        metodo_pago: metodo,
-        items,
+      // Convertir fecha Lima → ISO UTC
+      let fechaUtc: string | undefined
+      if (esProgramado && fechaProgramada) {
+        const d = new Date(`${fechaProgramada}:00-05:00`)
+        if (isNaN(d.getTime())) { toast.error('Fecha inválida'); return }
+        fechaUtc = d.toISOString()
       }
 
+      // 1. Crear el pedido
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          nombre_cliente: nombreFinal,
+          telefono_cliente: telefonoFinal,
+          modalidad: 'recojo',
+          estado: esProgramado ? 'programado' : 'entregado',
+          estado_pago: esProgramado ? 'pendiente' : 'pagado',
+          metodo_pago: esProgramado ? undefined : metodo,
+          items,
+          fecha_entrega_programada: fechaUtc,
+        })
       })
 
-      if (!res.ok) throw new Error('Error al registrar la venta')
-      
-      const { id } = await res.json()
-      
-      // 2. Emitir comprobante si se requiere
-      if (tipoComprobante !== 'ninguno') {
+      if (!res.ok) {
+        const body = await res.json()
+        throw new Error(body.error ?? 'Error al registrar la venta')
+      }
+
+      const { id: pedidoId } = await res.json()
+
+      // 2. Comprobante según tipo
+      if (tipoComprobante === 'nota_venta') {
+        // Usar el mismo generador de nota de venta interna de la sección Ventas
+        await fetch(`/api/orders/${pedidoId}/comprobante`, { method: 'POST' })
+      } else {
+        // Boleta o Factura electrónica vía Nubefact
+        const rucLimpio = dniRuc.replace(/\D/g, '')
         const emitRes = await fetch('/api/comprobantes/emitir', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            pedido_id: id,
+            pedido_id: pedidoId,
             tipo: tipoComprobante,
-            cliente_nombre: clienteActivo?.nombre || 'CLIENTE VARIOS',
-            cliente_dni: tipoComprobante === 'boleta' ? (clienteActivo?.dni_ruc || '') : undefined,
-            cliente_ruc: tipoComprobante === 'factura' ? (clienteActivo?.dni_ruc || '') : undefined,
+            cliente_nombre: nombreFinal,
+            cliente_dni: tipoComprobante === 'boleta' ? rucLimpio : undefined,
+            cliente_ruc: tipoComprobante === 'factura' ? rucLimpio : undefined,
           })
         })
-        
-        if (!emitRes.ok) {
-          toast.error('Venta registrada, pero falló el comprobante')
-        } else {
+        if (emitRes.ok) {
           const { pdfUrl } = await emitRes.json()
           if (pdfUrl) window.open(pdfUrl, '_blank')
+        } else {
+          toast.error('Venta registrada, pero falló el comprobante electrónico')
         }
       }
 
-      toast.success('Venta registrada con éxito')
+      if (esProgramado) {
+        toast.success('Pedido programado correctamente')
+      } else {
+        toast.success('¡Venta registrada!')
+      }
+
+      // Limpiar todo para el siguiente cliente
       setItems([])
-      setClienteActivo(null)
-      setTipoComprobante('ninguno')
+      setNombreCliente('')
+      setTelefonoCliente('')
+      setDniRuc('')
+      setTipoComprobante('nota_venta')
+      setEsProgramado(false)
+      setFechaProgramada('')
+
     } catch (error) {
-      toast.error('Ocurrió un error al cobrar')
+      toast.error(error instanceof Error ? error.message : 'Error al cobrar')
     } finally {
       setCobrando(false)
     }
   }
 
   const sugerencias = busqueda.trim().length >= 1
-    ? productos.filter((p) => matchesFuzzy(p.nombre, busqueda) && p.stock > 0).slice(0, 8)
+    ? productos.filter(p => matchesFuzzy(p.nombre, busqueda) || p.codigo_barras === busqueda).slice(0, 8)
     : []
 
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row bg-zinc-50 overflow-hidden font-sans">
-      
+
       {/* ── PANEL IZQUIERDO: TICKET ── */}
-      <div className="flex-1 flex flex-col bg-white border-r border-zinc-200">
-        {/* Header POS */}
-        <div className="h-16 flex items-center px-4 border-b border-zinc-100 shrink-0 gap-3">
+      <div className="flex-1 flex flex-col bg-white border-r border-zinc-200 min-w-0">
+        {/* Header */}
+        <div className="h-14 flex items-center px-4 border-b border-zinc-100 shrink-0 gap-3">
           <Link href="/dashboard" className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div className="flex-1 min-w-0 flex items-center">
-            <button 
-              onClick={() => setShowCustomerModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition max-w-full"
-            >
-              <User className="w-4 h-4 shrink-0 text-zinc-600" />
-              <span className="font-bold text-sm text-zinc-800 truncate">
-                {clienteActivo ? clienteActivo.nombre : 'Cliente Mostrador'}
-              </span>
-            </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="font-bold text-zinc-800 text-sm leading-tight">Terminal POS</h1>
+            <p className="text-[11px] text-zinc-400 truncate">{nombreFerreteria}</p>
           </div>
-          <button 
+          <button
             onClick={() => setItems([])}
             disabled={items.length === 0}
             className="text-xs text-red-500 font-medium px-3 py-1.5 hover:bg-red-50 rounded-lg disabled:opacity-30 transition"
@@ -241,101 +310,200 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
         </div>
 
         {/* Lista de Items */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-zinc-50/50">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {items.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-zinc-400">
-              <ScanLine className="w-16 h-16 mb-4 opacity-20" />
-              <p className="font-medium text-zinc-500">Escanea un producto</p>
-              <p className="text-sm mt-1">O búscalo en el panel derecho</p>
+              <ScanLine className="w-14 h-14 mb-3 opacity-20" />
+              <p className="font-medium text-zinc-500 text-sm">Escanea un producto</p>
+              <p className="text-xs mt-1 text-zinc-400">O búscalo en el panel derecho</p>
             </div>
           ) : (
             items.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-3 bg-white p-3 rounded-xl border border-zinc-200 shadow-sm">
+              <div key={idx} className="flex items-center gap-3 bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold text-sm text-zinc-800 truncate">{item.nombre_producto}</h3>
                   <p className="text-xs text-zinc-400">{formatPEN(item.precio_unitario)} / {item.unidad}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => actualizarCantidad(idx, -1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-600 font-medium transition">-</button>
-                  <span className="w-8 text-center font-bold text-zinc-800 tabular-nums">{item.cantidad}</span>
-                  <button onClick={() => actualizarCantidad(idx, 1)} className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-600 font-medium transition">+</button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => actualizarCantidad(idx, -1)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-600 font-bold transition text-sm">-</button>
+                  <span className="w-7 text-center font-bold text-zinc-800 tabular-nums text-sm">{item.cantidad}</span>
+                  <button onClick={() => actualizarCantidad(idx, 1)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-600 font-bold transition text-sm">+</button>
                 </div>
-                <div className="w-20 text-right font-bold text-zinc-900 tabular-nums">
+                <div className="w-16 text-right font-bold text-zinc-900 tabular-nums text-sm shrink-0">
                   {formatPEN(item.cantidad * item.precio_unitario)}
                 </div>
+                <button onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))} className="text-zinc-300 hover:text-red-400 transition shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             ))
           )}
         </div>
 
-        {/* Total y Cobro Footer */}
-        <div className="shrink-0 bg-white border-t border-zinc-200 p-4 md:p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-10">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-4 gap-4">
-            
-            <div className="flex bg-zinc-100 p-1 rounded-xl">
-              {(['ninguno', 'boleta', 'factura'] as const).map((t) => (
+        {/* ── FOOTER: CLIENTE + COMPROBANTE + COBRO ── */}
+        <div className="shrink-0 bg-white border-t border-zinc-100 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]">
+
+          {/* Datos del Cliente */}
+          <div className="px-4 pt-4 pb-3 border-b border-zinc-50 space-y-2">
+            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <User className="w-3 h-3" /> Cliente
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] text-zinc-400 mb-0.5">Teléfono</label>
+                <input
+                  value={telefonoCliente}
+                  onChange={e => setTelefonoCliente(e.target.value)}
+                  placeholder="999 888 777"
+                  className="w-full px-2.5 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 transition"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-zinc-400 mb-0.5">Nombre</label>
+                <input
+                  value={nombreCliente}
+                  onChange={e => setNombreCliente(e.target.value)}
+                  placeholder="Juan Pérez"
+                  className="w-full px-2.5 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 transition"
+                />
+              </div>
+            </div>
+            {/* DNI/RUC opcional con auto-lookup SUNAT */}
+            <div className="relative">
+              <label className="block text-[10px] text-zinc-400 mb-0.5">DNI / RUC (opcional)</label>
+              <div className="flex gap-2">
+                <input
+                  value={dniRuc}
+                  onChange={e => setDniRuc(e.target.value)}
+                  onBlur={e => consultarRuc(e.target.value)}
+                  placeholder="Para boleta o factura"
+                  className="flex-1 px-2.5 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 transition font-mono"
+                />
+                {buscandoRuc && <Loader2 className="w-4 h-4 animate-spin text-zinc-400 self-center shrink-0" />}
+              </div>
+            </div>
+          </div>
+
+          {/* Tipo de Comprobante */}
+          <div className="px-4 py-3 border-b border-zinc-50">
+            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">Comprobante</p>
+            <div className="flex bg-zinc-100 p-0.5 rounded-xl gap-0.5">
+              {([
+                { key: 'nota_venta', label: 'Nota de Venta' },
+                { key: 'boleta', label: 'Boleta' },
+                { key: 'factura', label: 'Factura' },
+              ] as const).map(({ key, label }) => (
                 <button
-                  key={t}
-                  onClick={() => setTipoComprobante(t)}
-                  className={`flex-1 md:flex-none px-4 py-2 text-sm font-semibold rounded-lg transition capitalize ${tipoComprobante === t ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+                  key={key}
+                  onClick={() => setTipoComprobante(key)}
+                  className={cn(
+                    'flex-1 py-1.5 text-xs font-semibold rounded-lg transition',
+                    tipoComprobante === key
+                      ? 'bg-white shadow-sm text-zinc-900'
+                      : 'text-zinc-500 hover:text-zinc-700'
+                  )}
                 >
-                  {t}
+                  {label}
                 </button>
               ))}
             </div>
-
-            <div className="flex flex-col items-end">
-              <span className="text-zinc-500 font-medium uppercase tracking-wider text-xs md:text-sm">Total a pagar</span>
-              <span className="text-4xl md:text-5xl font-black text-zinc-900 tracking-tight tabular-nums">{formatPEN(total)}</span>
-            </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <button
-              onClick={() => procesarVenta('efectivo')}
-              disabled={items.length === 0 || cobrando}
-              className="flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-bold transition disabled:opacity-40"
-            >
-              <Banknote className="w-6 h-6" />
-              <span>Efectivo <kbd className="hidden md:inline font-mono text-[10px] bg-emerald-200/50 px-1.5 py-0.5 rounded ml-1">F1</kbd></span>
-            </button>
-            <button
-              onClick={() => procesarVenta('yape')}
-              disabled={items.length === 0 || cobrando}
-              className="flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 font-bold transition disabled:opacity-40"
-            >
-              <Smartphone className="w-6 h-6" />
-              <span>Yape / Plin <kbd className="hidden md:inline font-mono text-[10px] bg-purple-200/50 px-1.5 py-0.5 rounded ml-1">F2</kbd></span>
-            </button>
-            <button
-              onClick={() => procesarVenta('tarjeta')}
-              disabled={items.length === 0 || cobrando}
-              className="flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold transition disabled:opacity-40"
-            >
-              <CreditCard className="w-6 h-6" />
-              <span>Tarjeta <kbd className="hidden md:inline font-mono text-[10px] bg-blue-200/50 px-1.5 py-0.5 rounded ml-1">F3</kbd></span>
-            </button>
+
+          {/* Toggle Programar */}
+          <div className="px-4 py-3 border-b border-zinc-50">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <div
+                onClick={() => setEsProgramado(v => !v)}
+                className={cn(
+                  'w-9 h-5 rounded-full transition relative shrink-0',
+                  esProgramado ? 'bg-zinc-900' : 'bg-zinc-200'
+                )}
+              >
+                <span className={cn(
+                  'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all',
+                  esProgramado ? 'left-[18px]' : 'left-0.5'
+                )} />
+              </div>
+              <CalendarClock className="w-3.5 h-3.5 text-zinc-500" />
+              <span className="text-xs font-medium text-zinc-600">Programar para después</span>
+            </label>
+            {esProgramado && (
+              <input
+                type="datetime-local"
+                min={minFechaProgramada}
+                value={fechaProgramada}
+                onChange={e => setFechaProgramada(e.target.value)}
+                className="mt-2 w-full px-2.5 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 transition"
+              />
+            )}
+          </div>
+
+          {/* Total + Botones de Cobro */}
+          <div className="px-4 py-4">
+            <div className="flex items-end justify-between mb-3">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total</span>
+              <span className="text-4xl font-black text-zinc-900 tabular-nums tracking-tight">{formatPEN(total)}</span>
+            </div>
+
+            {esProgramado ? (
+              <button
+                onClick={() => procesarVenta('efectivo')}
+                disabled={items.length === 0 || cobrando || !fechaProgramada}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold transition disabled:opacity-40"
+              >
+                {cobrando ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+                Guardar Pedido Programado
+              </button>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => procesarVenta('efectivo')}
+                  disabled={items.length === 0 || cobrando}
+                  className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-bold transition disabled:opacity-40 text-xs"
+                >
+                  <Banknote className="w-5 h-5" />
+                  <span>Efectivo <kbd className="hidden md:inline font-mono text-[9px] bg-emerald-200/50 px-1 rounded">F1</kbd></span>
+                </button>
+                <button
+                  onClick={() => procesarVenta('yape')}
+                  disabled={items.length === 0 || cobrando}
+                  className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 font-bold transition disabled:opacity-40 text-xs"
+                >
+                  <Smartphone className="w-5 h-5" />
+                  <span>Yape/Plin <kbd className="hidden md:inline font-mono text-[9px] bg-purple-200/50 px-1 rounded">F2</kbd></span>
+                </button>
+                <button
+                  onClick={() => procesarVenta('tarjeta')}
+                  disabled={items.length === 0 || cobrando}
+                  className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-bold transition disabled:opacity-40 text-xs"
+                >
+                  <CreditCard className="w-5 h-5" />
+                  <span>Tarjeta <kbd className="hidden md:inline font-mono text-[9px] bg-blue-200/50 px-1 rounded">F3</kbd></span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ── PANEL DERECHO: BUSCADOR & CÁMARA ── */}
-      <div className="w-full md:w-[400px] lg:w-[480px] bg-zinc-50 flex flex-col shrink-0">
-        <div className="p-4 border-b border-zinc-200">
+      {/* ── PANEL DERECHO: BUSCADOR ── */}
+      <div className="w-full md:w-[360px] lg:w-[420px] bg-zinc-50 flex flex-col shrink-0 border-l border-zinc-100">
+        <div className="p-3 border-b border-zinc-200">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
               <input
                 ref={busquedaRef}
                 value={busqueda}
-                onChange={(e) => { setBusqueda(e.target.value); setMostrarSugerencias(true) }}
+                onChange={e => { setBusqueda(e.target.value); setMostrarSugerencias(true) }}
                 onFocus={() => busqueda && setMostrarSugerencias(true)}
                 placeholder="Buscar por nombre o SKU..."
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-zinc-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 transition font-medium"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-zinc-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 transition text-sm font-medium"
               />
             </div>
             <button
               onClick={() => setShowScanner(true)}
-              className="flex items-center justify-center w-12 shrink-0 bg-zinc-900 text-white rounded-xl shadow-sm hover:bg-zinc-800 transition"
+              className="flex items-center justify-center w-11 shrink-0 bg-zinc-900 text-white rounded-xl shadow-sm hover:bg-zinc-800 transition"
               title="Abrir Cámara"
             >
               <ScanLine className="w-5 h-5" />
@@ -346,62 +514,48 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
         <div className="flex-1 overflow-y-auto p-2">
           {mostrarSugerencias && busqueda ? (
             <div className="space-y-1">
-              {sugerencias.length > 0 ? (
-                sugerencias.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => agregarAlCarrito(p)}
-                    className="w-full flex items-center gap-3 p-3 text-left hover:bg-white rounded-xl transition group"
-                  >
-                    <div className="w-10 h-10 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-zinc-900 group-hover:text-white transition">
-                      <Package className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-sm text-zinc-900 truncate">{p.nombre}</h4>
-                      <p className="text-xs text-zinc-500">Stk: {p.stock} · {formatPEN(p.precio_base)}</p>
-                    </div>
-                  </button>
-                ))
-              ) : (
-                <p className="text-center text-sm text-zinc-500 py-8">No hay resultados para "{busqueda}"</p>
+              {sugerencias.length > 0 ? sugerencias.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => agregarAlCarrito(p)}
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-white rounded-xl transition group border border-transparent hover:border-zinc-200 hover:shadow-sm"
+                >
+                  <div className="w-9 h-9 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-zinc-900 group-hover:text-white transition">
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-sm text-zinc-900 truncate">{p.nombre}</h4>
+                    <p className="text-xs text-zinc-500">Stk: {p.stock} · {formatPEN(p.precio_base)}</p>
+                  </div>
+                </button>
+              )) : (
+                <p className="text-center text-sm text-zinc-500 py-8">No hay resultados</p>
               )}
             </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-zinc-400 p-8 text-center">
-              <Package className="w-12 h-12 mb-3 opacity-20" />
+              <Package className="w-10 h-10 mb-3 opacity-20" />
               <p className="text-sm font-medium">Buscador Rápido</p>
-              <p className="text-xs mt-1">Busca productos si no tienen código o no puedes escanearlos</p>
+              <p className="text-xs mt-1">Busca si no puedes escanear</p>
             </div>
           )}
         </div>
       </div>
 
+      {/* Scanner Modal */}
       {showScanner && (
         <ScannerModal
           onClose={() => setShowScanner(false)}
-          onScan={(codigo) => {
-            handleScanCode(codigo)
-            setShowScanner(false)
-          }}
+          onScan={codigo => { handleScanCode(codigo); setShowScanner(false) }}
         />
       )}
-      
-      {showCustomerModal && (
-        <CustomerSelectorModal 
-          ferreteriaId={ferreteriaId}
-          onClose={() => setShowCustomerModal(false)}
-          onSelect={(c) => {
-            setClienteActivo(c)
-            setShowCustomerModal(false)
-          }}
-        />
-      )}
-      
+
+      {/* Overlay de procesando */}
       {cobrando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4 bg-white p-8 rounded-2xl shadow-2xl border border-zinc-100">
             <Loader2 className="w-8 h-8 text-zinc-900 animate-spin" />
-            <p className="font-bold text-zinc-800">Procesando pago...</p>
+            <p className="font-bold text-zinc-800">{esProgramado ? 'Guardando pedido...' : 'Procesando pago...'}</p>
           </div>
         </div>
       )}
