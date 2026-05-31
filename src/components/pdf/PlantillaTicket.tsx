@@ -148,9 +148,15 @@ export interface TicketData {
 export default function PlantillaTicket({ data }: { data: TicketData }) {
   const isFactura = data.comprobante.tipo === 'factura'
   const isNotaCredito = data.comprobante.tipo === 'nota_credito'
+  const isNotaVenta = data.comprobante.tipo === 'nota_venta' || !data.comprobante.tipo
+  
   const title = isNotaCredito 
     ? 'NOTA DE CRÉDITO ELECTRÓNICA' 
-    : isFactura ? 'FACTURA ELECTRÓNICA' : 'BOLETA ELECTRÓNICA'
+    : isFactura 
+      ? 'FACTURA ELECTRÓNICA' 
+      : isNotaVenta 
+        ? 'NOTA DE VENTA'
+        : 'BOLETA ELECTRÓNICA'
 
   return (
     <Document>

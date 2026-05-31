@@ -114,6 +114,7 @@ async function procesarItemsInformales(
   ferreteriaId: string,
   pedidoId: string,
   itemsInformales: any[],
+  todosLosItems: any[], // Agregado para que el ticket interno tenga el total completo
   clienteNombre: string,
   clienteDoc: string,
   emitidoPor: string
@@ -130,7 +131,11 @@ async function procesarItemsInformales(
   if (!corrDataNV) return undefined
 
   const { numero, numero_completo } = corrDataNV
-  const subtotalNV = itemsInformales.reduce((sum: number, i: any) => sum + i.subtotal, 0)
+  
+  // La nota de venta (ticket interno) mostrará TODOS los productos del pedido
+  // para que el cajero/almacén sepa todo lo que el cliente lleva,
+  // y el total cuadre con lo que el cliente pagó en caja.
+  const subtotalNV = todosLosItems.reduce((sum: number, i: any) => sum + i.subtotal, 0)
 
   const { data: nv } = await supabase.from('comprobantes').insert({
     ferreteria_id: ferreteriaId,
@@ -149,7 +154,7 @@ async function procesarItemsInformales(
     cliente_doc: clienteDoc || '',
     enviado_a_sunat: false,
     emitido_por: emitidoPor,
-    datos_json: { items: itemsInformales }
+    datos_json: { items: todosLosItems }
   }).select('id').single()
 
   return nv?.id
@@ -201,8 +206,8 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
   const itemsInformales = todosLosItems.filter(i => i.productos?.facturable === false)
 
   const comprobanteSecundarioId = await procesarItemsInformales(
-    supabase, opts.ferreteriaId, opts.pedidoId, itemsInformales, 
-    opts.clienteNombre, opts.clienteDni, opts.emitidoPor
+    supabase, opts.ferreteriaId, opts.pedidoId, itemsInformales, todosLosItems,
+    opts.clienteNombre || '', opts.clienteDni || '', opts.emitidoPor
   )
 
   if (itemsFormales.length === 0) {
@@ -496,8 +501,8 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
   const itemsInformales = todosLosItems.filter(i => i.productos?.facturable === false)
 
   const comprobanteSecundarioId = await procesarItemsInformales(
-    supabase, opts.ferreteriaId, opts.pedidoId, itemsInformales, 
-    opts.clienteNombre, opts.clienteRuc, opts.emitidoPor
+    supabase, opts.ferreteriaId, opts.pedidoId, itemsInformales, todosLosItems,
+    opts.clienteNombre || '', opts.clienteRuc || '', opts.emitidoPor
   )
 
   if (itemsFormales.length === 0) {
