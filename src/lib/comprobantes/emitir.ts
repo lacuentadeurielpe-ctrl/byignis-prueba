@@ -35,6 +35,7 @@ export interface ResultadoEmision {
   xmlUrl?:        string
   error?:         string
   tokenInvalido?: boolean
+  comprobanteSecundarioId?: string
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -107,6 +108,53 @@ function redondear2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+// ── Helper para Nota de Venta (Split Billing) ────────────────────────────────
+async function procesarItemsInformales(
+  supabase: any,
+  ferreteriaId: string,
+  pedidoId: string,
+  itemsInformales: any[],
+  clienteNombre: string,
+  clienteDoc: string,
+  emitidoPor: string
+) {
+  if (itemsInformales.length === 0) return undefined
+
+  const { data: corrDataNV } = await supabase
+    .rpc('generar_numero_comprobante', {
+      p_ferreteria_id: ferreteriaId,
+      p_tipo:          'nota_venta',
+      p_serie:         'NV01'
+    })
+  
+  if (!corrDataNV) return undefined
+
+  const { numero, numero_completo } = corrDataNV
+  const subtotalNV = itemsInformales.reduce((sum: number, i: any) => sum + i.subtotal, 0)
+
+  const { data: nv } = await supabase.from('comprobantes').insert({
+    ferreteria_id: ferreteriaId,
+    pedido_id: pedidoId,
+    tipo: 'nota_venta',
+    serie: 'NV01',
+    numero,
+    numero_completo,
+    estado: 'emitido',
+    moneda: 'PEN',
+    subtotal: subtotalNV,
+    igv: 0,
+    total: subtotalNV,
+    nubefact_tipo_doc: null,
+    cliente_nombre: clienteNombre || 'CLIENTE VARIOS',
+    cliente_doc: clienteDoc || '',
+    enviado_a_sunat: false,
+    emitido_por: emitidoPor,
+    datos_json: { items: itemsInformales }
+  }).select('id').single()
+
+  return nv?.id
+}
+
 // ── Función principal ─────────────────────────────────────────────────────────
 
 export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmision> {
@@ -134,7 +182,7 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
   // ── 2. Cargar pedido con items — FERRETERÍA AISLADA ──────────────────────
   const { data: pedido, error: errPedido } = await supabase
     .from('pedidos')
-    .select('id, total, nombre_cliente, items_pedido(*)')
+    .select('id, total, nombre_cliente, items_pedido(*, productos(facturable))')
     .eq('id', opts.pedidoId)
     .eq('ferreteria_id', opts.ferreteriaId)   // AISLADO
     .single()
@@ -143,19 +191,30 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     return { ok: false, error: 'Pedido no encontrado o no pertenece a esta ferretería' }
   }
 
-  const items = (pedido.items_pedido ?? []) as {
-    nombre_producto: string
-    cantidad: number
-    precio_unitario: number
-    subtotal: number
-    unidad: string
-    producto_id: string | null
-  }[]
+  const todosLosItems = (pedido.items_pedido ?? []) as any[]
 
-  if (items.length === 0) {
+  if (todosLosItems.length === 0) {
     return { ok: false, error: 'El pedido no tiene items' }
   }
 
+  const itemsFormales = todosLosItems.filter(i => i.productos?.facturable !== false)
+  const itemsInformales = todosLosItems.filter(i => i.productos?.facturable === false)
+
+  const comprobanteSecundarioId = await procesarItemsInformales(
+    supabase, opts.ferreteriaId, opts.pedidoId, itemsInformales, 
+    opts.clienteNombre, opts.clienteDni, opts.emitidoPor
+  )
+
+  if (itemsFormales.length === 0) {
+    return {
+      ok: true,
+      comprobanteId: comprobanteSecundarioId, // Es el principal en este caso
+      numeroCompleto: 'Nota de Venta',
+      comprobanteSecundarioId: undefined, // No hay secundario
+    }
+  }
+
+  const items = itemsFormales
   // ── 3. Verificar si ya existe boleta emitida — si es así, la devolvemos ────
   //    Nunca llamamos a Nubefact dos veces para el mismo pedido.
   const { data: yaEmitida } = await supabase
@@ -175,6 +234,7 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
       numeroCompleto: yaEmitida.numero_completo,
       pdfUrl:         yaEmitida.pdf_url   ?? undefined,
       xmlUrl:         yaEmitida.xml_url   ?? undefined,
+      comprobanteSecundarioId,
     }
   }
 
@@ -416,7 +476,7 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
   // ── 2. Cargar pedido con items — FERRETERÍA AISLADA ──────────────────────
   const { data: pedido, error: errPedido } = await supabase
     .from('pedidos')
-    .select('id, total, nombre_cliente, items_pedido(*)')
+    .select('id, total, nombre_cliente, items_pedido(*, productos(facturable))')
     .eq('id', opts.pedidoId)
     .eq('ferreteria_id', opts.ferreteriaId)   // AISLADO
     .single()
@@ -425,19 +485,30 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
     return { ok: false, error: 'Pedido no encontrado o no pertenece a esta ferretería' }
   }
 
-  const items = (pedido.items_pedido ?? []) as {
-    nombre_producto: string
-    cantidad: number
-    precio_unitario: number
-    subtotal: number
-    unidad: string
-    producto_id: string | null
-  }[]
+  const todosLosItems = (pedido.items_pedido ?? []) as any[]
 
-  if (items.length === 0) {
+  if (todosLosItems.length === 0) {
     return { ok: false, error: 'El pedido no tiene items' }
   }
 
+  const itemsFormales = todosLosItems.filter(i => i.productos?.facturable !== false)
+  const itemsInformales = todosLosItems.filter(i => i.productos?.facturable === false)
+
+  const comprobanteSecundarioId = await procesarItemsInformales(
+    supabase, opts.ferreteriaId, opts.pedidoId, itemsInformales, 
+    opts.clienteNombre, opts.clienteRuc, opts.emitidoPor
+  )
+
+  if (itemsFormales.length === 0) {
+    return {
+      ok: true,
+      comprobanteId: comprobanteSecundarioId, // Es el principal en este caso
+      numeroCompleto: 'Nota de Venta',
+      comprobanteSecundarioId: undefined, // No hay secundario
+    }
+  }
+
+  const items = itemsFormales
   // ── 3. Verificar si ya existe factura emitida — si es así, la devolvemos ──
   const { data: yaEmitida } = await supabase
     .from('comprobantes')
@@ -638,6 +709,7 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
     numeroCompleto,
     pdfUrl:         resultado.data!.enlace_del_pdf,
     xmlUrl:         resultado.data!.enlace_del_xml,
+    comprobanteSecundarioId,
   }
 }
 

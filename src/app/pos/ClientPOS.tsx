@@ -231,8 +231,11 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
           })
         })
         if (emitRes.ok) {
-          const { pdfUrl } = await emitRes.json()
-          if (pdfUrl) window.open(pdfUrl, '_blank')
+          const body = await emitRes.json()
+          if (body.pdfUrl) window.open(body.pdfUrl, '_blank')
+          if (body.pdfUrlSecundario) {
+             setTimeout(() => window.open(body.pdfUrlSecundario, '_blank'), 100)
+          }
         } else {
           toast.error('Venta registrada, pero falló el comprobante electrónico')
         }

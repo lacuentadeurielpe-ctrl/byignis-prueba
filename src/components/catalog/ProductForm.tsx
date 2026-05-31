@@ -69,6 +69,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
     afecto_igv: producto?.afecto_igv ?? true,
     venta_sin_stock: producto?.venta_sin_stock ?? false,
     activo: producto?.activo ?? true,
+    facturable: producto?.facturable ?? true,
     proveedor: producto?.proveedor ?? '',
     marca: producto?.marca ?? '',
   })
@@ -196,6 +197,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
       afecto_igv: form.afecto_igv,
       venta_sin_stock: form.venta_sin_stock,
       activo: form.activo,
+      facturable: form.facturable,
       proveedor: form.proveedor.trim() || null,
       marca: form.marca.trim() || null,
       reglas_descuento: reglas.map(({ id: _, ...r }) => r),
@@ -597,6 +599,31 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
                 />
               </div>
             )}
+          </div>
+
+          {/* Comprado con factura / Admite SUNAT */}
+          <div className="rounded-xl border border-zinc-100 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-zinc-800">Comprado con Factura (Admite SUNAT)</p>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Si apagas esto, este producto NO se podrá facturar electrónicamente (se emitirá Nota de Venta interna).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, facturable: !p.facturable }))}
+                className={cn(
+                  'relative inline-flex h-6 w-11 items-center rounded-full transition',
+                  form.facturable ? 'bg-blue-600' : 'bg-red-500'
+                )}
+              >
+                <span className={cn(
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition',
+                  form.facturable ? 'translate-x-6' : 'translate-x-1'
+                )} />
+              </button>
+            </div>
           </div>
 
           {/* Estado activo */}

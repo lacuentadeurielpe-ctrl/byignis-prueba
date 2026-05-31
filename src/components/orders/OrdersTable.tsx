@@ -173,8 +173,11 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
     return init
   })
 
-  function handleBoletaEmitida(pedidoId: string, resultado: { numeroCompleto: string; pdfUrl?: string }) {
+  function handleBoletaEmitida(pedidoId: string, resultado: { numeroCompleto: string; pdfUrl?: string; pdfUrlSecundario?: string }) {
     setBoletasEmitidas((prev) => ({ ...prev, [pedidoId]: resultado }))
+    if (resultado.pdfUrlSecundario) {
+      setTimeout(() => window.open(resultado.pdfUrlSecundario, '_blank'), 100)
+    }
     setModalBoleta(null)
   }
 
@@ -190,8 +193,11 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
     return init
   })
 
-  function handleFacturaEmitida(pedidoId: string, resultado: { comprobanteId: string; numeroCompleto: string; pdfUrl?: string }) {
+  function handleFacturaEmitida(pedidoId: string, resultado: { comprobanteId: string; numeroCompleto: string; pdfUrl?: string; pdfUrlSecundario?: string }) {
     setFacturasEmitidas((prev) => ({ ...prev, [pedidoId]: resultado }))
+    if (resultado.pdfUrlSecundario) {
+      setTimeout(() => window.open(resultado.pdfUrlSecundario, '_blank'), 100)
+    }
     setModalFactura(null)
   }
 

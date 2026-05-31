@@ -184,6 +184,7 @@ export interface Producto {
   afecto_igv: boolean            // F1: si aplica IGV al producto
   venta_sin_stock: boolean       // permite vender aunque stock = 0
   codigo_barras: string | null   // código escaneable
+  facturable: boolean            // admite envío a SUNAT (comprado con factura)
   activo: boolean
   proveedor?: string | null
   marca?: string | null

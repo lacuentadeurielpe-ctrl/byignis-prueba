@@ -76,6 +76,7 @@ export async function POST(request: Request) {
       numeroCompleto: resultado.numeroCompleto,
       pdfUrl:         `/api/comprobantes/${resultado.comprobanteId}/pdf`,
       xmlUrl:         resultado.xmlUrl,
+      pdfUrlSecundario: resultado.comprobanteSecundarioId ? `/api/comprobantes/${resultado.comprobanteSecundarioId}/pdf` : undefined,
     })
   }
 
@@ -107,5 +108,6 @@ export async function POST(request: Request) {
     numeroCompleto: resultado.numeroCompleto,
     pdfUrl:         `/api/comprobantes/${resultado.comprobanteId}/pdf`,
     xmlUrl:         resultado.xmlUrl,
+    pdfUrlSecundario: resultado.comprobanteSecundarioId ? `/api/comprobantes/${resultado.comprobanteSecundarioId}/pdf` : undefined,
   })
 }
