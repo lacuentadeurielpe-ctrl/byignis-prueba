@@ -177,7 +177,6 @@ export async function generarYEnviarComprobante({
       numero_completo:    numeroComprobante,
       numero_comprobante: numeroComprobante,
       estado:             'emitido',
-      moneda:             'PEN',
       subtotal:           pedido.total,
       igv:                0,
       total:              pedido.total,

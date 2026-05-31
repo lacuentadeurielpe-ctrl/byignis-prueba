@@ -145,16 +145,12 @@ async function procesarItemsInformales(
     numero,
     numero_completo,
     estado: 'emitido',
-    moneda: 'PEN',
     subtotal: subtotalNV,
     igv: 0,
     total: subtotalNV,
-    nubefact_tipo_doc: null,
     cliente_nombre: clienteNombre || 'CLIENTE VARIOS',
-    cliente_doc: clienteDoc || '',
-    enviado_a_sunat: false,
-    emitido_por: emitidoPor,
-    datos_json: { items: todosLosItems }
+    cliente_ruc_dni: clienteDoc || '',
+    emitido_por: emitidoPor
   }).select('id').single()
 
   return nv?.id
