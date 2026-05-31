@@ -180,11 +180,60 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
     setBuscandoRuc(false)
   }
 
+  // Enviar un pedido programado (sin cobro inmediato)
+  async function guardarProgramado() {
+    if (items.length === 0) return
+    if (!fechaProgramada) {
+      toast.error('Selecciona la fecha y hora de entrega')
+      return
+    }
+
+    const d = new Date(`${fechaProgramada}:00-05:00`)
+    if (isNaN(d.getTime())) {
+      toast.error('Fecha inválida')
+      return
+    }
+
+    const nombreFinal = nombreCliente.trim() || 'Cliente Mostrador'
+    const telefonoFinal = telefonoCliente.trim() || '000000000'
+
+    setCobrando(true)
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre_cliente: nombreFinal,
+          telefono_cliente: telefonoFinal,
+          modalidad: 'recojo',
+          items,
+          fecha_entrega_programada: d.toISOString(),
+        })
+      })
+
+      if (!res.ok) {
+        const body = await res.json()
+        throw new Error(body.error ?? 'Error al programar pedido')
+      }
+
+      toast.success('Pedido programado correctamente')
+      setItems([])
+      setNombreCliente('')
+      setTelefonoCliente('')
+      setDniRuc('')
+      setTipoComprobante('nota_venta')
+      setEsProgramado(false)
+      setFechaProgramada('')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al programar')
+    } finally {
+      setCobrando(false)
+    }
+  }
+
   async function procesarVenta(metodo: 'efectivo' | 'yape' | 'tarjeta') {
     if (items.length === 0) return
 
-    // Validación de cliente: teléfono solo requerido si NO es nota de venta anónima
-    const esAnonimo = !telefonoCliente.trim() && !nombreCliente.trim()
     const nombreFinal = nombreCliente.trim() || 'Cliente Mostrador'
     const telefonoFinal = telefonoCliente.trim() || '000000000'
 
@@ -203,15 +252,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
 
     setCobrando(true)
     try {
-      // Convertir fecha Lima → ISO UTC
-      let fechaUtc: string | undefined
-      if (esProgramado && fechaProgramada) {
-        const d = new Date(`${fechaProgramada}:00-05:00`)
-        if (isNaN(d.getTime())) { toast.error('Fecha inválida'); return }
-        fechaUtc = d.toISOString()
-      }
-
-      // 1. Crear el pedido — la API siempre lo crea como 'pendiente' o 'programado'
+      // 1. Crear el pedido (nace como 'pendiente')
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -220,7 +261,6 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
           telefono_cliente: telefonoFinal,
           modalidad: 'recojo',
           items,
-          fecha_entrega_programada: fechaUtc,
         })
       })
 
@@ -231,61 +271,47 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
 
       const { id: pedidoId } = await res.json()
 
-      // 2. Si es venta inmediata: PATCH para marcar como entregado + pagado
-      if (!esProgramado) {
-        await fetch(`/api/orders/${pedidoId}`, {
-          method: 'PATCH',
+      // 2. PATCH para marcar como entregado + pagado
+      await fetch(`/api/orders/${pedidoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          estado: 'entregado',
+          estado_pago: 'pagado',
+          metodo_pago: metodo,
+        })
+      })
+
+      // 3. Comprobante
+      if (tipoComprobante === 'nota_venta') {
+        await fetch(`/api/orders/${pedidoId}/comprobante`, { method: 'POST' })
+      } else {
+        const rucLimpio = dniRuc.replace(/\D/g, '')
+        const emitRes = await fetch('/api/comprobantes/emitir', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            estado: 'entregado',
-            estado_pago: 'pagado',
-            metodo_pago: metodo,
+            pedido_id: pedidoId,
+            tipo: tipoComprobante,
+            cliente_nombre: nombreFinal,
+            cliente_dni: tipoComprobante === 'boleta' ? rucLimpio : undefined,
+            cliente_ruc: tipoComprobante === 'factura' ? rucLimpio : undefined,
           })
         })
-      }
-
-      // 3. Comprobante según tipo (solo en ventas inmediatas)
-      if (!esProgramado) {
-        if (tipoComprobante === 'nota_venta') {
-          // Nota de venta interna — mismo generador que sección Ventas
-          await fetch(`/api/orders/${pedidoId}/comprobante`, { method: 'POST' })
+        if (emitRes.ok) {
+          const { pdfUrl } = await emitRes.json()
+          if (pdfUrl) window.open(pdfUrl, '_blank')
         } else {
-          // Boleta o Factura electrónica vía Nubefact
-          const rucLimpio = dniRuc.replace(/\D/g, '')
-          const emitRes = await fetch('/api/comprobantes/emitir', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              pedido_id: pedidoId,
-              tipo: tipoComprobante,
-              cliente_nombre: nombreFinal,
-              cliente_dni: tipoComprobante === 'boleta' ? rucLimpio : undefined,
-              cliente_ruc: tipoComprobante === 'factura' ? rucLimpio : undefined,
-            })
-          })
-          if (emitRes.ok) {
-            const { pdfUrl } = await emitRes.json()
-            if (pdfUrl) window.open(pdfUrl, '_blank')
-          } else {
-            toast.error('Venta registrada, pero falló el comprobante electrónico')
-          }
+          toast.error('Venta registrada, pero falló el comprobante electrónico')
         }
       }
 
-      if (esProgramado) {
-        toast.success('Pedido programado correctamente')
-      } else {
-        toast.success('¡Venta registrada!')
-      }
-
-      // Limpiar todo para el siguiente cliente
+      toast.success('¡Venta registrada!')
       setItems([])
       setNombreCliente('')
       setTelefonoCliente('')
       setDniRuc('')
       setTipoComprobante('nota_venta')
-      setEsProgramado(false)
-      setFechaProgramada('')
 
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al cobrar')
@@ -295,6 +321,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
   }
 
   const sugerencias = busqueda.trim().length >= 1
+
     ? productos.filter(p => matchesFuzzy(p.nombre, busqueda) || p.codigo_barras === busqueda).slice(0, 8)
     : []
 
@@ -459,7 +486,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
 
             {esProgramado ? (
               <button
-                onClick={() => procesarVenta('efectivo')}
+                onClick={() => guardarProgramado()}
                 disabled={items.length === 0 || cobrando || !fechaProgramada}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold transition disabled:opacity-40"
               >
