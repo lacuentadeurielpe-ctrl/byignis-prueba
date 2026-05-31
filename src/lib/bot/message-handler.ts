@@ -1069,7 +1069,7 @@ export async function handleIncomingMessage({
         .select('id, numero_pedido, estado, estado_pago, nombre_cliente, created_at')
         .eq('ferreteria_id', ferreteria.id)  // FERRETERÍA AISLADA
         .eq('cliente_id', conversacion.cliente_id)
-        .in('estado', ['pendiente', 'confirmado', 'en_preparacion', 'enviado', 'entregado'])
+        .in('estado', ['pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado'])
         .order('created_at', { ascending: false })
         .limit(5)
 
@@ -1244,6 +1244,7 @@ export async function handleIncomingMessage({
             pendiente: '⏳ Pendiente de confirmación',
             confirmado: '✅ Confirmado',
             en_preparacion: '📦 En preparación',
+            listo_para_recojo: '🛍️ Listo para recojo',
             enviado: '🚚 En camino',
             entregado: '✅ Entregado',
             cancelado: '❌ Cancelado',

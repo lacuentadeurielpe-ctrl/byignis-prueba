@@ -6,7 +6,7 @@ import { generarYEnviarComprobante } from '@/lib/pdf/generar-comprobante'
 import { getYCloudApiKey } from '@/lib/tenant'
 import { logAccion } from '@/lib/audit'
 
-const ESTADOS_VALIDOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'enviado', 'entregado', 'cancelado']
+const ESTADOS_VALIDOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado', 'cancelado']
 
 // Mensajes WhatsApp al cliente según el nuevo estado
 function mensajeEstado(numeroPedido: string, estado: string, nombreFerreteria: string): string | null {
@@ -15,6 +15,8 @@ function mensajeEstado(numeroPedido: string, estado: string, nombreFerreteria: s
       return `✅ *${nombreFerreteria}*\n\nSu pedido *${numeroPedido}* ha sido *confirmado*. Estamos preparando su pedido. ¡Gracias por su preferencia! 🙏`
     case 'en_preparacion':
       return `📦 *${nombreFerreteria}*\n\nSu pedido *${numeroPedido}* está siendo preparado. Le avisaremos cuando esté listo.`
+    case 'listo_para_recojo':
+      return `🛍️ *${nombreFerreteria}*\n\nSu pedido *${numeroPedido}* está *listo para recojo*. ¡Lo esperamos en tienda!`
     case 'enviado':
       return `🚚 *${nombreFerreteria}*\n\nSu pedido *${numeroPedido}* está *en camino*. Pronto llegará a su dirección.`
     case 'entregado':
@@ -103,7 +105,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // ── Gestión de stock ───────────────────────────────────────────────────────
   const estadoAnterior = pedidoActual?.estado
-  const estadosConfirmados = ['confirmado', 'en_preparacion', 'enviado', 'entregado']
+  const estadosConfirmados = ['confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado']
 
   if (estadoAnterior === 'pendiente' && estadosConfirmados.includes(body.estado)) {
     // Descontar stock al salir de pendiente hacia cualquier estado confirmado
@@ -208,4 +210,55 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
   return NextResponse.json(data)
+}
+
+// DELETE /api/orders/[id]
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSessionInfo()
+  if (!session || session.rol !== 'dueno') return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const supabase = await createClient()
+  const { id } = await params
+
+  // Obtener estado actual del pedido para decidir si restaurar stock
+  const { data: pedidoActual, error: errFetch } = await supabase
+    .from('pedidos')
+    .select('estado, numero_pedido')
+    .eq('id', id)
+    .eq('ferreteria_id', session.ferreteriaId)
+    .single()
+
+  if (errFetch || !pedidoActual) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
+
+  const estado = pedidoActual.estado
+  const estadosConfirmados = ['confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado']
+
+  // Si el pedido descontó stock y NO ha sido cancelado, debemos restaurarlo
+  if (estadosConfirmados.includes(estado)) {
+    await supabase.rpc('restaurar_stock_pedido', { p_pedido_id: id })
+      .then(({ error: e }) => {
+        if (e) console.error('[Stock] Error restaurando stock al eliminar:', e.message)
+        else console.log(`[Stock] Stock restaurado al eliminar pedido ${id}`)
+      })
+  }
+
+  // Eliminar el pedido (la base de datos elimina los items en cascada)
+  const { error: errDelete } = await supabase
+    .from('pedidos')
+    .delete()
+    .eq('id', id)
+    .eq('ferreteria_id', session.ferreteriaId)
+
+  if (errDelete) return NextResponse.json({ error: errDelete.message }, { status: 500 })
+
+  await logAccion({
+    ferreteriaId: session.ferreteriaId,
+    usuarioId: session.userId,
+    accion: 'eliminar_pedido',
+    entidad: 'pedido',
+    entidadId: id,
+    detalle: { numero_pedido: pedidoActual.numero_pedido, estado_previo: estado },
+  })
+
+  return NextResponse.json({ success: true })
 }

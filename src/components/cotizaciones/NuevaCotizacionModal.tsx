@@ -25,20 +25,32 @@ interface ItemCarrito {
 interface NuevaCotizacionModalProps {
   productos: Producto[]
   onClose: () => void
+  cotizacionEdit?: any
 }
 
-export default function NuevaCotizacionModal({ productos, onClose }: NuevaCotizacionModalProps) {
+export default function NuevaCotizacionModal({ productos, onClose, cotizacionEdit }: NuevaCotizacionModalProps) {
   const router = useRouter()
-  const [items, setItems] = useState<ItemCarrito[]>([])
+  const [items, setItems] = useState<ItemCarrito[]>(() => {
+    if (cotizacionEdit) {
+      return cotizacionEdit.items_cotizacion.map((i: any) => ({
+        producto_id: i.producto_id ?? null,
+        nombre_producto: i.nombre_producto,
+        unidad: i.unidad,
+        cantidad: i.cantidad,
+        precio_unitario: i.precio_unitario,
+      }))
+    }
+    return []
+  })
   const [busqueda, setBusqueda] = useState('')
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false)
   const [itemManual, setItemManual] = useState({ nombre: '', unidad: 'und', cantidad: 1, precio: 0 })
   const [modoManual, setModoManual] = useState(false)
   const busquedaRef = useRef<HTMLInputElement>(null)
 
-  const [nombreCliente, setNombreCliente] = useState('')
-  const [telefonoCliente, setTelefonoCliente] = useState('')
-  const [notas, setNotas] = useState('')
+  const [nombreCliente, setNombreCliente] = useState(cotizacionEdit?.clientes?.nombre ?? '')
+  const [telefonoCliente, setTelefonoCliente] = useState(cotizacionEdit?.clientes?.telefono ?? '')
+  const [notas, setNotas] = useState(cotizacionEdit?.notas_dueno ?? '')
 
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -100,8 +112,11 @@ export default function NuevaCotizacionModal({ productos, onClose }: NuevaCotiza
     setError(null)
 
     try {
-      const res = await fetch('/api/cotizaciones', {
-        method: 'POST',
+      const url = cotizacionEdit ? `/api/cotizaciones/${cotizacionEdit.id}` : '/api/cotizaciones'
+      const method = cotizacionEdit ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nombre_cliente: nombreCliente.trim(),
@@ -113,7 +128,7 @@ export default function NuevaCotizacionModal({ productos, onClose }: NuevaCotiza
 
       if (!res.ok) {
         const body = await res.json()
-        throw new Error(body.error ?? 'Error al crear la cotización')
+        throw new Error(body.error ?? 'Error al guardar la cotización')
       }
 
       router.refresh()
@@ -141,8 +156,12 @@ export default function NuevaCotizacionModal({ productos, onClose }: NuevaCotiza
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
-            <h2 className="text-base font-bold text-gray-900 font-sans">Nueva cotización manual</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Genera una cotización rápida sin afectar stock en inventario</p>
+            <h2 className="text-base font-bold text-gray-900 font-sans">
+              {cotizacionEdit ? 'Editar cotización' : 'Nueva cotización manual'}
+            </h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {cotizacionEdit ? 'Modifica los datos de la cotización' : 'Genera una cotización rápida sin afectar stock en inventario'}
+            </p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
             <X className="w-5 h-5" />
@@ -365,7 +384,7 @@ export default function NuevaCotizacionModal({ productos, onClose }: NuevaCotiza
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <Check className="w-4 h-4" />
             }
-            {guardando ? 'Guardando…' : 'Crear cotización'}
+            {guardando ? 'Guardando…' : (cotizacionEdit ? 'Guardar cambios' : 'Crear cotización')}
           </button>
         </div>
 

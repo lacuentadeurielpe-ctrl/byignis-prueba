@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn, formatPEN, formatFecha, truncar, matchesFuzzy } from '@/lib/utils'
-import { ChevronDown, FileText, Check, X, Loader2, Pencil, Plus, Trash2, Search } from 'lucide-react'
+import { ChevronDown, FileText, Check, X, Loader2, Pencil, Plus, Trash2, Search, Package } from 'lucide-react'
 import NuevaCotizacionModal from './NuevaCotizacionModal'
 interface Producto {
   id: string
@@ -85,7 +85,9 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroFecha, setFiltroFecha] = useState('')
   const [modalNueva, setModalNueva] = useState(false)
+  const [cotizacionEdit, setCotizacionEdit] = useState<Cotizacion | null>(null)
   const [eliminando, setEliminando] = useState<string | null>(null)
+  const [convirtiendo, setConvirtiendo] = useState<string | null>(null)
 
   // Estado de edición de precios por item: { itemId: precio_editado }
   const [preciosEditados, setPreciosEditados] = useState<Record<string, string>>({})
@@ -105,6 +107,24 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
 
     return matchBusqueda && matchEstado && matchFecha
   })
+
+  async function convertirCotizacion(id: string) {
+    if (!confirm('¿Seguro que quieres convertir esta cotización en un pedido?')) return
+    setConvirtiendo(id)
+    try {
+      const res = await fetch(`/api/cotizaciones/${id}/convertir`, { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error)
+      }
+      alert('Cotización convertida exitosamente a Pedido. Revisa la pestaña de Pedidos.')
+      router.refresh()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al convertir')
+    } finally {
+      setConvirtiendo(null)
+    }
+  }
 
   async function eliminarCotizacion(id: string) {
     if (!confirm('¿Seguro que quieres eliminar esta cotización?')) return
@@ -208,10 +228,11 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
           <p className="text-sm text-zinc-500 font-sans">No hay cotizaciones aún</p>
           <p className="text-xs text-zinc-400 mt-1">Aparecerán aquí cuando el bot o tú registren cotizaciones</p>
         </div>
-        {modalNueva && (
+        {(modalNueva || cotizacionEdit) && (
           <NuevaCotizacionModal
             productos={productos}
-            onClose={() => { setModalNueva(false); router.refresh() }}
+            cotizacionEdit={cotizacionEdit}
+            onClose={() => { setModalNueva(false); setCotizacionEdit(null); router.refresh() }}
           />
         )}
       </div>
@@ -504,6 +525,21 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
                   {/* Botones de acción general (Ver PDF / Eliminar) */}
                   <div className="border-t border-zinc-200 pt-3 flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => convertirCotizacion(cot.id)}
+                        disabled={convirtiendo === cot.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 transition font-sans disabled:opacity-50"
+                      >
+                        {convirtiendo === cot.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5 text-indigo-500" />}
+                        Convertir a Pedido
+                      </button>
+                      <button
+                        onClick={() => setCotizacionEdit(cot)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-semibold rounded-lg border border-zinc-200 transition font-sans"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-zinc-500" />
+                        Editar
+                      </button>
                       <a
                         href={`/api/cotizaciones/${cot.id}/pdf`}
                         target="_blank"
@@ -530,10 +566,11 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
         })}
           </div>
         )}
-      {modalNueva && (
+      {(modalNueva || cotizacionEdit) && (
         <NuevaCotizacionModal
           productos={productos}
-          onClose={() => { setModalNueva(false); router.refresh() }}
+          cotizacionEdit={cotizacionEdit}
+          onClose={() => { setModalNueva(false); setCotizacionEdit(null); router.refresh() }}
         />
       )}
     </div>

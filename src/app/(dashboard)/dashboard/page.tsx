@@ -69,22 +69,23 @@ function tiempoRelativo(iso: string): string {
 }
 
 // Estados que cuentan como "activos" (no incluye entregado ni cancelado)
-const ESTADOS_EN_CURSO = ['pendiente', 'confirmado', 'en_preparacion', 'enviado']
+const ESTADOS_EN_CURSO = ['pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado']
 
 const ESTADOS_PIPELINE = [
   { key: 'pendiente',      label: 'Pendiente',  icon: Clock,        bg: 'bg-amber-50',   dot: 'bg-amber-400',   text: 'text-amber-700'  },
   { key: 'confirmado',     label: 'Confirmado', icon: CheckCircle2, bg: 'bg-sky-50',     dot: 'bg-sky-400',     text: 'text-sky-700'    },
   { key: 'en_preparacion', label: 'Preparando', icon: Package,      bg: 'bg-violet-50',  dot: 'bg-violet-400',  text: 'text-violet-700' },
+  { key: 'listo_para_recojo',label: 'Listo Recojo',icon: Package,   bg: 'bg-teal-50',    dot: 'bg-teal-400',    text: 'text-teal-700'   },
   { key: 'enviado',        label: 'En camino',  icon: Truck,        bg: 'bg-blue-50',    dot: 'bg-blue-400',    text: 'text-blue-700'   },
   { key: 'entregado',      label: 'Entregado',  icon: CheckCircle2, bg: 'bg-emerald-50', dot: 'bg-emerald-400', text: 'text-emerald-700'},
 ]
 
 function colorFeed(estado: string): string {
-  const map: Record<string, string> = { entregado: 'bg-emerald-400', enviado: 'bg-blue-400', en_preparacion: 'bg-violet-400', confirmado: 'bg-sky-400', pendiente: 'bg-amber-400', cancelado: 'bg-red-400' }
+  const map: Record<string, string> = { entregado: 'bg-emerald-400', enviado: 'bg-blue-400', listo_para_recojo: 'bg-teal-400', en_preparacion: 'bg-violet-400', confirmado: 'bg-sky-400', pendiente: 'bg-amber-400', cancelado: 'bg-red-400' }
   return map[estado] ?? 'bg-zinc-300'
 }
 function textFeed(estado: string): string {
-  const map: Record<string, string> = { entregado: 'Pedido entregado', enviado: 'Pedido en camino', en_preparacion: 'En preparación', confirmado: 'Pedido confirmado', pendiente: 'Pedido recibido', cancelado: 'Pedido cancelado' }
+  const map: Record<string, string> = { entregado: 'Pedido entregado', enviado: 'Pedido en camino', listo_para_recojo: 'Listo para recojo', en_preparacion: 'En preparación', confirmado: 'Pedido confirmado', pendiente: 'Pedido recibido', cancelado: 'Pedido cancelado' }
   return map[estado] ?? labelEstadoPedido(estado)
 }
 

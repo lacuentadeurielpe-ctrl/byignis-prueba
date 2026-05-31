@@ -10,8 +10,8 @@ export default async function ReabastecerPage() {
 
   const supabase = await createClient()
 
-  // Cargar productos y categorías en paralelo filtrados por la ferretería del tenant actual
-  const [{ data: productos }, { data: categorias }] = await Promise.all([
+  // Cargar productos, categorías, proveedores y órdenes de compra en paralelo con aislamiento de tenant
+  const [{ data: productos }, { data: categorias }, { data: proveedores }, { data: ordenes }] = await Promise.all([
     supabase
       .from('productos')
       .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*)')
@@ -22,6 +22,16 @@ export default async function ReabastecerPage() {
       .select('*')
       .eq('ferreteria_id', session.ferreteriaId)
       .order('nombre'),
+    supabase
+      .from('proveedores')
+      .select('*')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .order('nombre'),
+    supabase
+      .from('ordenes_compra')
+      .select('*, items:items_orden_compra(*), proveedores(*)')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .order('created_at', { ascending: false }),
   ])
 
   return (
@@ -41,6 +51,8 @@ export default async function ReabastecerPage() {
       <SupplierOrdersManager
         productos={productos ?? []}
         categorias={categorias ?? []}
+        proveedoresIniciales={proveedores ?? []}
+        ordenesIniciales={ordenes ?? []}
       />
     </div>
   )

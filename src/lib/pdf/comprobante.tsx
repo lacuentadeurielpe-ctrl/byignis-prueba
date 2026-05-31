@@ -1,4 +1,4 @@
-// Componente React PDF para comprobante de pago interno
+// Componente React PDF para comprobantes y órdenes de compra
 // Usa @react-pdf/renderer — corre solo server-side
 
 import React from 'react'
@@ -9,7 +9,6 @@ import {
   View,
   Image,
   StyleSheet,
-  Font,
 } from '@react-pdf/renderer'
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
@@ -18,7 +17,7 @@ export interface ItemComprobante {
   nombre_producto: string
   unidad: string
   cantidad: number
-  precio_unitario: number
+  precio_unitario: number // actúa como costo_unitario en órdenes de compra
   subtotal: number
 }
 
@@ -32,16 +31,21 @@ export interface DatosComprobante {
   mensaje_pie: string | null
 
   // Comprobante
-  numero_comprobante: string    // CP-000001
+  numero_comprobante: string    // CP-000001 o OC-000001
   fecha_emision: string         // ISO string
-  esProforma?: boolean          // true = documento pendiente de confirmación
+  esProforma?: boolean          // true = documento pendiente de confirmación / proforma
+  esOrdenCompra?: boolean       // true = orden de compra a proveedor
 
-  // Pedido
-  numero_pedido: string
-  nombre_cliente: string
-  modalidad: 'delivery' | 'recojo'
-  direccion_entrega: string | null
-  formas_pago: string[]
+  // Pedido / Orden
+  numero_pedido?: string
+  nombre_cliente?: string       // o nombre del proveedor si es orden de compra
+  modalidad?: 'delivery' | 'recojo'
+  direccion_entrega?: string | null
+  formas_pago?: string[]
+
+  // Proveedor específico (para orden de compra)
+  proveedor_contacto?: string | null
+  proveedor_telefono?: string | null
 
   // Items
   items: ItemComprobante[]
@@ -71,228 +75,274 @@ function iniciales(nombre: string): string {
     .join('')
 }
 
-// ── Estilos ───────────────────────────────────────────────────────────────────
+// ── Estilos (Diseño Premium) ──────────────────────────────────────────────────
 
 function crearEstilos(color: string) {
+  // Un color más oscuro para usarlo en textos sobre el color principal
   return StyleSheet.create({
     page: {
       fontFamily: 'Helvetica',
-      fontSize: 9,
-      color: '#1f2937',
+      fontSize: 10,
+      color: '#334155', // slate-700
       backgroundColor: '#ffffff',
-      paddingTop: 32,
-      paddingBottom: 40,
-      paddingHorizontal: 36,
+      paddingTop: 45,
+      paddingBottom: 45,
+      paddingHorizontal: 50,
     },
-
-    // ── Cabecera ──
-    header: {
+    // Header
+    headerContainer: {
       flexDirection: 'row',
+      justifyContent: 'space-between',
       alignItems: 'flex-start',
-      marginBottom: 16,
-      paddingBottom: 16,
-      borderBottomWidth: 2,
-      borderBottomColor: color,
+      marginBottom: 35,
     },
-    logoBox: {
-      width: 56,
-      height: 56,
-      backgroundColor: color,
-      borderRadius: 6,
+    logoSection: {
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 14,
-      flexShrink: 0,
-    },
-    logoImg: {
-      width: 56,
-      height: 56,
-      borderRadius: 6,
-      objectFit: 'cover',
-    },
-    logoIniciales: {
-      color: '#ffffff',
-      fontSize: 18,
-      fontFamily: 'Helvetica-Bold',
-    },
-    headerInfo: {
       flex: 1,
     },
-    nombreFerreteria: {
+    logoImage: {
+      width: 60,
+      height: 60,
+      borderRadius: 8,
+      marginRight: 16,
+      objectFit: 'cover',
+    },
+    logoTextFallback: {
+      width: 60,
+      height: 60,
+      borderRadius: 8,
+      backgroundColor: '#f8fafc', // slate-50
+      marginRight: 16,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: '#e2e8f0', // slate-200
+    },
+    logoText: {
+      color: color,
+      fontSize: 22,
+      fontFamily: 'Helvetica-Bold',
+    },
+    companyInfo: {
+      justifyContent: 'center',
+      flex: 1,
+      paddingRight: 20,
+    },
+    companyName: {
+      fontSize: 18,
+      fontFamily: 'Helvetica-Bold',
+      color: '#0f172a', // slate-900
+      marginBottom: 6,
+      letterSpacing: -0.5,
+    },
+    companyDetails: {
+      fontSize: 9,
+      color: '#64748b', // slate-500
+      lineHeight: 1.4,
+    },
+    documentInfoBox: {
+      alignItems: 'flex-end',
+    },
+    documentType: {
       fontSize: 16,
       fontFamily: 'Helvetica-Bold',
       color: color,
-      marginBottom: 3,
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+      marginBottom: 6,
     },
-    headerMeta: {
-      fontSize: 8,
-      color: '#6b7280',
-      marginBottom: 1,
+    documentNumber: {
+      fontSize: 14,
+      fontFamily: 'Helvetica-Bold',
+      color: '#475569', // slate-600
+      marginBottom: 8,
     },
-
-    // ── Banda COMPROBANTE DE PAGO ──
-    bandaTitulo: {
-      backgroundColor: color,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
+    documentDate: {
+      fontSize: 9,
+      color: '#94a3b8', // slate-400
+    },
+    
+    // Parties Section (Cliente / Proveedor)
+    partiesContainer: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 14,
-      borderRadius: 4,
+      marginBottom: 35,
     },
-    bandaTituloTexto: {
-      color: '#ffffff',
+    partyBox: {
+      width: '100%',
+      backgroundColor: '#f8fafc',
+      padding: 14,
+      borderRadius: 6,
+      borderLeftWidth: 4,
+      borderLeftColor: color,
+    },
+    partyBoxHalf: {
+      width: '48%',
+      backgroundColor: '#f8fafc',
+      padding: 14,
+      borderRadius: 6,
+      borderLeftWidth: 4,
+      borderLeftColor: color,
+    },
+    partyTitle: {
+      fontSize: 8,
+      fontFamily: 'Helvetica-Bold',
+      color: '#94a3b8',
+      textTransform: 'uppercase',
+      letterSpacing: 1,
+      marginBottom: 8,
+    },
+    partyName: {
       fontSize: 12,
       fontFamily: 'Helvetica-Bold',
-      letterSpacing: 1,
+      color: '#0f172a',
+      marginBottom: 8,
     },
-    bandaNumero: {
-      color: '#ffffff',
-      fontSize: 10,
-      fontFamily: 'Helvetica-Bold',
-    },
-    bandaFecha: {
-      color: 'rgba(255,255,255,0.85)',
-      fontSize: 8,
-      textAlign: 'right',
-      marginTop: 2,
-    },
-
-    // ── Sección ──
-    seccion: {
-      marginBottom: 12,
-    },
-    seccionTitulo: {
-      fontSize: 7,
-      fontFamily: 'Helvetica-Bold',
-      color: color,
-      textTransform: 'uppercase',
-      letterSpacing: 0.8,
-      marginBottom: 5,
-      borderBottomWidth: 1,
-      borderBottomColor: '#e5e7eb',
-      paddingBottom: 3,
-    },
-    filaInfo: {
+    partyDetailRow: {
       flexDirection: 'row',
-      marginBottom: 2,
+      marginBottom: 5,
     },
-    infoLabel: {
-      width: 100,
-      fontSize: 8,
-      color: '#6b7280',
+    partyDetailLabel: {
+      fontSize: 9,
       fontFamily: 'Helvetica-Bold',
+      color: '#64748b',
+      width: 75,
     },
-    infoValor: {
+    partyDetailValue: {
+      fontSize: 9,
+      color: '#334155',
       flex: 1,
-      fontSize: 8,
-      color: '#1f2937',
+      lineHeight: 1.3,
     },
 
-    // ── Tabla de items ──
-    tabla: {
-      marginBottom: 10,
+    // Table
+    table: {
+      marginBottom: 25,
     },
-    tablaHeader: {
+    tableHeader: {
       flexDirection: 'row',
       backgroundColor: color,
-      paddingVertical: 5,
-      paddingHorizontal: 6,
-      borderRadius: 3,
-      marginBottom: 1,
+      borderRadius: 4,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginBottom: 4,
     },
-    tablaFila: {
+    tableRow: {
       flexDirection: 'row',
-      paddingVertical: 5,
-      paddingHorizontal: 6,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
       borderBottomWidth: 1,
-      borderBottomColor: '#f3f4f6',
+      borderBottomColor: '#f1f5f9',
     },
-    tablaFilaAlterna: {
-      backgroundColor: '#f9fafb',
+    tableRowAlt: {
+      backgroundColor: '#fcfcfd',
     },
-    thCant:    { width: 36,  color: '#ffffff', fontSize: 7, fontFamily: 'Helvetica-Bold', textAlign: 'center' },
-    thDesc:    { flex: 1,    color: '#ffffff', fontSize: 7, fontFamily: 'Helvetica-Bold' },
-    thUnidad:  { width: 50,  color: '#ffffff', fontSize: 7, fontFamily: 'Helvetica-Bold', textAlign: 'center' },
-    thPrecio:  { width: 56,  color: '#ffffff', fontSize: 7, fontFamily: 'Helvetica-Bold', textAlign: 'right' },
-    thSubtot:  { width: 60,  color: '#ffffff', fontSize: 7, fontFamily: 'Helvetica-Bold', textAlign: 'right' },
-    tdCant:    { width: 36,  fontSize: 8, textAlign: 'center', color: '#374151' },
-    tdDesc:    { flex: 1,    fontSize: 8, color: '#1f2937' },
-    tdUnidad:  { width: 50,  fontSize: 8, textAlign: 'center', color: '#6b7280' },
-    tdPrecio:  { width: 56,  fontSize: 8, textAlign: 'right', color: '#374151' },
-    tdSubtot:  { width: 60,  fontSize: 8, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: '#1f2937' },
+    thBase: { color: '#ffffff', fontSize: 8.5, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.5 },
+    tdBase: { fontSize: 9, color: '#334155' },
+    
+    colCant: { width: '10%', textAlign: 'center' },
+    colDesc: { flex: 1, textAlign: 'left', paddingRight: 10 },
+    colUnid: { width: '12%', textAlign: 'center' },
+    colPrecio: { width: '18%', textAlign: 'right' },
+    colSubtot: { width: '18%', textAlign: 'right' },
+    
+    tdDescVal: { fontFamily: 'Helvetica-Bold', color: '#0f172a', fontSize: 9 },
+    tdSubtotVal: { fontFamily: 'Helvetica-Bold', color: '#0f172a' },
 
-    // ── Totales ──
-    totalesBox: {
-      alignItems: 'flex-end',
-      marginBottom: 14,
-    },
-    totalFilaBase: {
+    // Totals
+    totalsContainer: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      marginBottom: 2,
+      marginBottom: 40,
+    },
+    totalsBox: {
+      width: '50%',
+    },
+    totalRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: 6,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f1f5f9',
+    },
+    totalRowLast: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: 12,
+      marginTop: 6,
+      backgroundColor: '#f8fafc',
+      borderRadius: 6,
+      paddingHorizontal: 14,
+      alignItems: 'center',
     },
     totalLabel: {
-      fontSize: 8,
-      color: '#6b7280',
-      width: 100,
-      textAlign: 'right',
-      marginRight: 8,
+      fontSize: 10,
+      color: '#64748b',
     },
-    totalValor: {
-      fontSize: 8,
-      color: '#374151',
-      width: 70,
-      textAlign: 'right',
-    },
-    totalFinalBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: color,
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 4,
-      marginTop: 4,
-      minWidth: 220,
+    totalValue: {
+      fontSize: 10,
+      color: '#334155',
+      fontFamily: 'Helvetica-Bold',
     },
     totalFinalLabel: {
-      color: '#ffffff',
       fontSize: 11,
       fontFamily: 'Helvetica-Bold',
-      marginRight: 24,
+      color: '#0f172a',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
-    totalFinalValor: {
-      color: '#ffffff',
-      fontSize: 13,
+    totalFinalValue: {
+      fontSize: 16,
       fontFamily: 'Helvetica-Bold',
+      color: color,
     },
 
-    // ── Pie ──
-    pie: {
+    // Footer
+    footer: {
       marginTop: 'auto',
-      paddingTop: 14,
       borderTopWidth: 1,
-      borderTopColor: '#e5e7eb',
-      alignItems: 'center',
+      borderTopColor: '#e2e8f0',
+      paddingTop: 20,
     },
-    pieGracias: {
-      fontSize: 11,
+    footerInfo: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 20,
+    },
+    footerNotesBox: {
+      width: '60%',
+    },
+    footerNotesTitle: {
+      fontSize: 8,
+      fontFamily: 'Helvetica-Bold',
+      color: '#94a3b8',
+      textTransform: 'uppercase',
+      marginBottom: 6,
+      letterSpacing: 1,
+    },
+    footerNotesText: {
+      fontSize: 8.5,
+      color: '#475569',
+      lineHeight: 1.5,
+    },
+    footerThanks: {
+      width: '35%',
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+    },
+    footerThanksText: {
+      fontSize: 12,
       fontFamily: 'Helvetica-Bold',
       color: color,
       marginBottom: 4,
+      textAlign: 'right',
     },
-    pieMensaje: {
-      fontSize: 8,
-      color: '#374151',
+    footerDisclaimer: {
+      fontSize: 7,
+      color: '#94a3b8',
       textAlign: 'center',
-      marginBottom: 8,
-    },
-    pieDisclaimer: {
-      fontSize: 6.5,
-      color: '#9ca3af',
-      textAlign: 'center',
-      maxWidth: 380,
+      lineHeight: 1.4,
     },
   })
 }
@@ -305,137 +355,191 @@ export function ComprobantePDF({ datos }: { datos: DatosComprobante }) {
   const subtotalItems = datos.items.reduce((s, i) => s + i.subtotal, 0)
   const hayDescuento = Math.abs(subtotalItems - datos.total) > 0.005
 
-  const formasPagoTexto = datos.formas_pago.length > 0
+  const formasPagoTexto = datos.formas_pago && datos.formas_pago.length > 0
     ? datos.formas_pago.join(', ')
     : 'A convenir'
 
+  // Determinar etiquetas de acuerdo al tipo de documento
+  const esCompra = datos.esOrdenCompra === true
+  let docTitulo = 'COMPROBANTE INTERNO'
+  if (esCompra) {
+    docTitulo = datos.esProforma ? 'PROFORMA DE COMPRA' : 'ORDEN DE COMPRA'
+  } else if (datos.esProforma) {
+    docTitulo = 'COTIZACIÓN / PROFORMA'
+  }
+
   return (
     <Document
-      title={`Comprobante ${datos.numero_comprobante} — ${datos.nombre_ferreteria}`}
+      title={`${docTitulo} ${datos.numero_comprobante} — ${datos.nombre_ferreteria}`}
       author={datos.nombre_ferreteria}
     >
       <Page size="A4" style={S.page}>
 
         {/* ── CABECERA ── */}
-        <View style={S.header}>
-          <View style={S.logoBox}>
+        <View style={S.headerContainer}>
+          <View style={S.logoSection}>
             {datos.logo_url ? (
-              <Image src={datos.logo_url} style={S.logoImg} />
+              <Image src={datos.logo_url} style={S.logoImage} />
             ) : (
-              <Text style={S.logoIniciales}>{iniciales(datos.nombre_ferreteria)}</Text>
+              <View style={S.logoTextFallback}>
+                <Text style={S.logoText}>{iniciales(datos.nombre_ferreteria)}</Text>
+              </View>
             )}
+            <View style={S.companyInfo}>
+              <Text style={S.companyName}>{datos.nombre_ferreteria}</Text>
+              {datos.direccion_ferreteria && (
+                <Text style={S.companyDetails}>{datos.direccion_ferreteria}</Text>
+              )}
+              <Text style={S.companyDetails}>WhatsApp: {datos.telefono_ferreteria}</Text>
+            </View>
           </View>
-          <View style={S.headerInfo}>
-            <Text style={S.nombreFerreteria}>{datos.nombre_ferreteria}</Text>
-            {datos.direccion_ferreteria && (
-              <Text style={S.headerMeta}>Dir.: {datos.direccion_ferreteria}</Text>
-            )}
-            <Text style={S.headerMeta}>WhatsApp: {datos.telefono_ferreteria}</Text>
+
+          <View style={S.documentInfoBox}>
+            <Text style={S.documentType}>{docTitulo}</Text>
+            <Text style={S.documentNumber}>Nº {datos.numero_comprobante}</Text>
+            <Text style={S.documentDate}>Emitido el {formatFechaHora(datos.fecha_emision)}</Text>
           </View>
         </View>
 
-        {/* ── BANDA: TÍTULO ── */}
-        <View style={S.bandaTitulo}>
-          <Text style={S.bandaTituloTexto}>
-            {datos.esProforma ? 'PROFORMA / COTIZACION' : 'COMPROBANTE DE PAGO'}
-          </Text>
-          <View>
-            <Text style={S.bandaNumero}>N° {datos.numero_comprobante}</Text>
-            <Text style={S.bandaFecha}>{formatFechaHora(datos.fecha_emision)}</Text>
+        {/* ── PARTES (CLIENTE/PROVEEDOR) ── */}
+        <View style={S.partiesContainer}>
+          {/* Box Principal (Cliente o Proveedor) */}
+          <View style={!esCompra && !datos.numero_pedido && datos.modalidad !== 'delivery' ? S.partyBox : S.partyBoxHalf}>
+            <Text style={S.partyTitle}>{esCompra ? 'Proveedor' : 'Cliente'}</Text>
+            <Text style={S.partyName}>{datos.nombre_cliente ?? '—'}</Text>
+            
+            {esCompra && datos.proveedor_contacto && (
+              <View style={S.partyDetailRow}>
+                <Text style={S.partyDetailLabel}>Contacto:</Text>
+                <Text style={S.partyDetailValue}>{datos.proveedor_contacto}</Text>
+              </View>
+            )}
+            {esCompra && datos.proveedor_telefono && (
+              <View style={S.partyDetailRow}>
+                <Text style={S.partyDetailLabel}>Teléfono:</Text>
+                <Text style={S.partyDetailValue}>{datos.proveedor_telefono}</Text>
+              </View>
+            )}
+            {!esCompra && datos.numero_pedido && (
+              <View style={S.partyDetailRow}>
+                <Text style={S.partyDetailLabel}>Ref. Pedido:</Text>
+                <Text style={S.partyDetailValue}>{datos.numero_pedido}</Text>
+              </View>
+            )}
           </View>
-        </View>
 
-        {/* ── DATOS DEL CLIENTE ── */}
-        <View style={S.seccion}>
-          <Text style={S.seccionTitulo}>Datos del cliente</Text>
-          <View style={S.filaInfo}>
-            <Text style={S.infoLabel}>Cliente:</Text>
-            <Text style={S.infoValor}>{datos.nombre_cliente}</Text>
-          </View>
-          <View style={S.filaInfo}>
-            <Text style={S.infoLabel}>Pedido N°:</Text>
-            <Text style={S.infoValor}>{datos.numero_pedido}</Text>
-          </View>
-          <View style={S.filaInfo}>
-            <Text style={S.infoLabel}>Modalidad:</Text>
-            <Text style={S.infoValor}>
-              {datos.modalidad === 'delivery' ? 'Delivery' : 'Recojo en tienda'}
-            </Text>
-          </View>
-          {datos.modalidad === 'delivery' && datos.direccion_entrega && (
-            <View style={S.filaInfo}>
-              <Text style={S.infoLabel}>Dirección entrega:</Text>
-              <Text style={S.infoValor}>{datos.direccion_entrega}</Text>
+          {/* Box Secundario (Direcciones / Entregas) */}
+          {(!(!esCompra && !datos.numero_pedido && datos.modalidad !== 'delivery')) && (
+            <View style={S.partyBoxHalf}>
+              <Text style={S.partyTitle}>{esCompra ? 'Lugar de Entrega' : 'Condiciones de Entrega'}</Text>
+              
+              {esCompra ? (
+                <>
+                  <Text style={S.partyName}>Almacén de Tienda</Text>
+                  <View style={S.partyDetailRow}>
+                    <Text style={S.partyDetailLabel}>Dirección:</Text>
+                    <Text style={S.partyDetailValue}>
+                      {datos.direccion_ferreteria || 'Misma dirección de la empresa'}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={S.partyName}>
+                    {datos.modalidad === 'delivery' ? 'Envío a domicilio' : 'Recojo en tienda'}
+                  </Text>
+                  {datos.modalidad === 'delivery' && datos.direccion_entrega && (
+                    <View style={S.partyDetailRow}>
+                      <Text style={S.partyDetailLabel}>Dirección:</Text>
+                      <Text style={S.partyDetailValue}>{datos.direccion_entrega}</Text>
+                    </View>
+                  )}
+                </>
+              )}
             </View>
           )}
         </View>
 
         {/* ── TABLA DE PRODUCTOS ── */}
-        <View style={S.seccion}>
-          <Text style={S.seccionTitulo}>Detalle del pedido</Text>
-          <View style={S.tabla}>
-            {/* Header */}
-            <View style={S.tablaHeader}>
-              <Text style={S.thCant}>Cant.</Text>
-              <Text style={S.thDesc}>Descripción</Text>
-              <Text style={S.thUnidad}>Unidad</Text>
-              <Text style={S.thPrecio}>P. Unit.</Text>
-              <Text style={S.thSubtot}>Subtotal</Text>
-            </View>
-            {/* Filas */}
-            {datos.items.map((item, idx) => (
-              <View
-                key={idx}
-                style={[S.tablaFila, idx % 2 === 1 ? S.tablaFilaAlterna : {}]}
-              >
-                <Text style={S.tdCant}>{item.cantidad}</Text>
-                <Text style={S.tdDesc}>{item.nombre_producto}</Text>
-                <Text style={S.tdUnidad}>{item.unidad}</Text>
-                <Text style={S.tdPrecio}>{formatPEN(item.precio_unitario)}</Text>
-                <Text style={S.tdSubtot}>{formatPEN(item.subtotal)}</Text>
-              </View>
-            ))}
+        <View style={S.table}>
+          {/* Header */}
+          <View style={S.tableHeader}>
+            <Text style={[S.thBase, S.colCant]}>Cant.</Text>
+            <Text style={[S.thBase, S.colDesc]}>Descripción</Text>
+            <Text style={[S.thBase, S.colUnid]}>Medida</Text>
+            <Text style={[S.thBase, S.colPrecio]}>{esCompra ? 'Costo U.' : 'Precio U.'}</Text>
+            <Text style={[S.thBase, S.colSubtot]}>Subtotal</Text>
           </View>
+          {/* Filas */}
+          {datos.items.map((item, idx) => (
+            <View
+              key={idx}
+              style={[S.tableRow, idx % 2 === 1 ? S.tableRowAlt : {}]}
+            >
+              <Text style={[S.tdBase, S.colCant]}>{item.cantidad}</Text>
+              <Text style={[S.tdBase, S.colDesc, S.tdDescVal]}>{item.nombre_producto}</Text>
+              <Text style={[S.tdBase, S.colUnid]}>{item.unidad}</Text>
+              <Text style={[S.tdBase, S.colPrecio]}>{formatPEN(item.precio_unitario)}</Text>
+              <Text style={[S.tdBase, S.colSubtot, S.tdSubtotVal]}>{formatPEN(item.subtotal)}</Text>
+            </View>
+          ))}
         </View>
 
         {/* ── TOTALES ── */}
-        <View style={S.totalesBox}>
-          {hayDescuento && (
-            <>
-              <View style={S.totalFilaBase}>
-                <Text style={S.totalLabel}>Subtotal:</Text>
-                <Text style={S.totalValor}>{formatPEN(subtotalItems)}</Text>
-              </View>
-              <View style={S.totalFilaBase}>
-                <Text style={S.totalLabel}>Descuento:</Text>
-                <Text style={{ ...S.totalValor, color: '#16a34a' }}>
-                  − {formatPEN(subtotalItems - datos.total)}
-                </Text>
-              </View>
-            </>
-          )}
-          <View style={S.totalFilaBase}>
-            <Text style={S.totalLabel}>Forma de pago:</Text>
-            <Text style={S.totalValor}>{formasPagoTexto}</Text>
-          </View>
-          <View style={S.totalFinalBox}>
-            <Text style={S.totalFinalLabel}>TOTAL</Text>
-            <Text style={S.totalFinalValor}>{formatPEN(datos.total)}</Text>
+        <View style={S.totalsContainer}>
+          <View style={S.totalsBox}>
+            {hayDescuento && (
+              <>
+                <View style={S.totalRow}>
+                  <Text style={S.totalLabel}>Subtotal bruto</Text>
+                  <Text style={S.totalValue}>{formatPEN(subtotalItems)}</Text>
+                </View>
+                <View style={S.totalRow}>
+                  <Text style={S.totalLabel}>Descuento aplicado</Text>
+                  <Text style={{ ...S.totalValue, color: '#10b981' }}>
+                    − {formatPEN(subtotalItems - datos.total)}
+                  </Text>
+                </View>
+              </>
+            )}
+            <View style={S.totalRowLast}>
+              <Text style={S.totalFinalLabel}>
+                {esCompra ? 'TOTAL ORDEN' : 'TOTAL A PAGAR'}
+              </Text>
+              <Text style={S.totalFinalValue}>{formatPEN(datos.total)}</Text>
+            </View>
           </View>
         </View>
 
-        {/* ── PIE ── */}
-        <View style={S.pie}>
-          <Text style={S.pieGracias}>
-            {datos.esProforma ? '¡Gracias por su preferencia!' : '¡Gracias por su compra!'}
-          </Text>
-          {datos.mensaje_pie && (
-            <Text style={S.pieMensaje}>{datos.mensaje_pie}</Text>
-          )}
-          <Text style={S.pieDisclaimer}>
-            {datos.esProforma
-              ? `Este documento es una proforma/cotización emitida por ${datos.nombre_ferreteria}. Tiene carácter puramente informativo y no constituye un comprobante de pago ni tiene validez tributaria ante la SUNAT.`
-              : `Este documento es un comprobante interno de pago emitido por ${datos.nombre_ferreteria}. No tiene validez tributaria ante la SUNAT ni reemplaza una boleta o factura electrónica.`}
+        {/* ── PIE DE PÁGINA ── */}
+        <View style={S.footer}>
+          <View style={S.footerInfo}>
+            <View style={S.footerNotesBox}>
+              <Text style={S.footerNotesTitle}>
+                {esCompra ? 'Condiciones Adicionales' : 'Métodos de Pago / Notas'}
+              </Text>
+              <Text style={S.footerNotesText}>
+                {esCompra 
+                  ? 'Por favor, confirmar la recepción de esta orden y el tiempo estimado de entrega. En caso de variaciones de stock o precio, notificar previo al despacho.'
+                  : `Formas de pago aceptadas: ${formasPagoTexto}. ${datos.mensaje_pie || ''}`
+                }
+              </Text>
+            </View>
+            <View style={S.footerThanks}>
+              <Text style={S.footerThanksText}>
+                {esCompra
+                  ? 'Esperamos su despacho'
+                  : (datos.esProforma ? '¡Gracias por su interés!' : '¡Gracias por su preferencia!')}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={S.footerDisclaimer}>
+            {esCompra
+              ? `Este documento es una orden de compra emitida de manera interna por ${datos.nombre_ferreteria} y dirigida al proveedor para fines de abastecimiento. No constituye un comprobante de venta electrónica ni tiene validez tributaria ante la SUNAT.`
+              : (datos.esProforma
+                  ? `Este documento es una cotización emitida de manera virtual por ${datos.nombre_ferreteria}. Tiene un propósito estrictamente informativo sobre precios y disponibilidad de stock, y no constituye un comprobante de pago de carácter tributario.`
+                  : `Este documento es un comprobante de control interno emitido por ${datos.nombre_ferreteria}. No posee validez tributaria ante la SUNAT ni reemplaza a una boleta o factura de venta electrónica.`)}
           </Text>
         </View>
 

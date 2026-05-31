@@ -1052,7 +1052,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       .select('id, numero_pedido, estado, estado_pago, nombre_cliente, created_at')
       .eq('ferreteria_id', ctx.ferreteriaId)
       .eq('cliente_id', ctx.clienteId)
-      .in('estado', ['pendiente', 'confirmado', 'en_preparacion', 'enviado', 'entregado'])
+      .in('estado', ['pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado'])
       .order('created_at', { ascending: false })
       .limit(5)
 

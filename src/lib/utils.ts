@@ -47,6 +47,7 @@ export function labelEstadoPedido(estado: string): string {
     pendiente:      'Pendiente',
     confirmado:     'Confirmado',
     en_preparacion: 'En preparación',
+    listo_para_recojo: 'Listo para recojo',
     enviado:        'En camino',   // "En camino" — más claro que "Enviado"
     entregado:      'Entregado',
     cancelado:      'Cancelado',
@@ -61,6 +62,7 @@ export function colorEstadoPedido(estado: string): string {
     pendiente:      'bg-yellow-100 text-yellow-800',
     confirmado:     'bg-blue-100 text-blue-800',
     en_preparacion: 'bg-orange-100 text-orange-800',
+    listo_para_recojo: 'bg-teal-100 text-teal-800',
     enviado:        'bg-purple-100 text-purple-800',
     entregado:      'bg-green-100 text-green-800',
     cancelado:      'bg-red-100 text-red-800',

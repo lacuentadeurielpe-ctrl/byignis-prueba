@@ -35,6 +35,7 @@ export type EstadoPedido =
   | 'pendiente'
   | 'confirmado'
   | 'en_preparacion'
+  | 'listo_para_recojo'
   | 'enviado'
   | 'entregado'
   | 'cancelado'
@@ -613,3 +614,38 @@ export interface FerreteriaSaaS extends Ferreteria {
   planes?: Plan
   suscripciones?: Suscripcion
 }
+
+export interface Proveedor {
+  id: string
+  ferreteria_id: string
+  nombre: string
+  telefono: string | null
+  contacto: string | null
+  created_at: string
+}
+
+export interface OrdenCompra {
+  id: string
+  ferreteria_id: string
+  proveedor_id: string | null
+  proveedor_nombre: string
+  estado: 'pendiente' | 'recibido' | 'cancelado'
+  total: number
+  created_at: string
+  updated_at: string
+  // joins
+  items?: ItemOrdenCompra[]
+  proveedores?: Proveedor
+}
+
+export interface ItemOrdenCompra {
+  id: string
+  orden_compra_id: string
+  producto_id: string | null
+  nombre: string
+  marca: string | null
+  cantidad: number
+  precio_compra: number
+  unidad: string
+}
+

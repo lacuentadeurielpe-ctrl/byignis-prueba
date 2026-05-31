@@ -178,7 +178,7 @@ export async function POST(request: Request) {
                 .select('id', { count: 'exact', head: true })
                 .eq('ferreteria_id', ferreteriaIdEta)
                 .eq('modalidad', 'delivery')
-                .in('estado', ['confirmado', 'en_preparacion', 'enviado'])
+                .in('estado', ['confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado'])
                 .neq('id', pedidoIdEta)
 
               const eta = await calcularETA({

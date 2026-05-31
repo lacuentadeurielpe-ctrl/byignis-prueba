@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn, formatPEN, formatFecha, formatFechaHoraLima, labelEstadoPedido, colorEstadoPedido, labelEstadoPago, colorEstadoPago, matchesFuzzy } from '@/lib/utils'
-import { ChevronDown, Package, Loader2, Search, X, FileText, Send, ExternalLink, Plus, Bell, Download, CreditCard, CheckCircle2, Mic, Clock } from 'lucide-react'
+import { ChevronDown, Package, Loader2, Search, X, FileText, Send, ExternalLink, Plus, Bell, Download, CreditCard, CheckCircle2, Mic, Clock, Trash2 } from 'lucide-react'
 import NuevoPedidoModal from './NuevoPedidoModal'
 import PedidoVozModal from './PedidoVozModal'
 import ModalEmitirBoleta from '@/components/comprobantes/ModalEmitirBoleta'
@@ -95,7 +95,7 @@ interface Zona {
   tiempo_estimado_min: number
 }
 
-const ESTADOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'enviado', 'entregado', 'cancelado']
+const ESTADOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado', 'cancelado']
 
 const RANGOS_FECHA = [
   { label: 'Todos', value: '' },
@@ -142,6 +142,7 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
   const [expandido, setExpandido] = useState<string | null>(null)
   const [asignando, setAsignando] = useState<string | null>(null)
   const [actualizando, setActualizando] = useState<string | null>(null)
+  const [eliminando, setEliminando] = useState<string | null>(null)
   const [pagando, setPagando] = useState<string | null>(null)
   const [modalNuevo, setModalNuevo] = useState(false)
   const [modalVoz, setModalVoz]     = useState(false)
@@ -257,6 +258,25 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
       setTimeout(() => patchComprobante(pedidoId, { enviado: false }), 3000)
     } catch (e) {
       patchComprobante(pedidoId, { reenviando: false, error: e instanceof Error ? e.message : 'Error' })
+    }
+  }
+
+  async function eliminarPedido(pedidoId: string) {
+    if (!confirm('¿Estás seguro de que quieres eliminar este pedido? Se restaurará el stock si corresponde.')) return
+    setEliminando(pedidoId)
+    try {
+      const res = await fetch(`/api/orders/${pedidoId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error ?? 'Error al eliminar el pedido')
+      }
+      setPedidos((prev) => prev.filter((p) => p.id !== pedidoId))
+      setExpandido(null)
+      router.refresh()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al eliminar el pedido')
+    } finally {
+      setEliminando(null)
     }
   }
 
@@ -715,22 +735,49 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                     </span>
                   )}
 
-                  <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <div className="shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     {actualizando === pedido.id ? (
                       <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
                     ) : (
-                      <select
-                        value={pedido.estado}
-                        onChange={(e) => cambiarEstado(pedido.id, e.target.value)}
-                        className={cn(
-                          'text-xs font-semibold px-2.5 py-1 rounded-full border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-300',
-                          colorEstadoPedido(pedido.estado)
-                        )}
-                      >
-                        {ESTADOS.map((e) => (
-                          <option key={e} value={e}>{labelEstadoPedido(e)}</option>
-                        ))}
-                      </select>
+                      <>
+                        {(() => {
+                          let nextState = ''
+                          let label = ''
+                          if (pedido.estado === 'pendiente') { nextState = 'confirmado'; label = 'Confirmar' }
+                          else if (pedido.estado === 'confirmado') { nextState = 'en_preparacion'; label = 'Preparar' }
+                          else if (pedido.estado === 'en_preparacion') {
+                            if (pedido.modalidad === 'recojo') { nextState = 'listo_para_recojo'; label = 'Listo Recojo' }
+                            else { nextState = 'enviado'; label = 'Enviar' }
+                          }
+                          else if (pedido.estado === 'enviado' || pedido.estado === 'listo_para_recojo') { nextState = 'entregado'; label = 'Entregar' }
+
+                          if (nextState) {
+                            return (
+                              <button
+                                onClick={() => cambiarEstado(pedido.id, nextState)}
+                                className={cn('text-xs font-bold px-3 py-1.5 rounded-full shadow-sm hover:scale-105 transition', colorEstadoPedido(nextState))}
+                              >
+                                {label} →
+                              </button>
+                            )
+                          }
+                          return null
+                        })()}
+                        {/* Selector tradicional pequeño/secundario */}
+                        <select
+                          value={pedido.estado}
+                          onChange={(e) => cambiarEstado(pedido.id, e.target.value)}
+                          className={cn(
+                            'text-[10px] font-semibold px-2 py-1.5 rounded-full border border-zinc-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-300 bg-white text-zinc-600',
+                            !['entregado', 'cancelado'].includes(pedido.estado) ? 'opacity-60 hover:opacity-100' : ''
+                          )}
+                          title="Cambiar estado manualmente"
+                        >
+                          {ESTADOS.map((e) => (
+                            <option key={e} value={e}>{labelEstadoPedido(e)}</option>
+                          ))}
+                        </select>
+                      </>
                     )}
                   </div>
                 </div>
@@ -947,8 +994,15 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               : <FileText className="w-3.5 h-3.5" />
                             }
-                            {cp.cargando ? 'Generando…' : 'Ver comprobante'}
+                            {cp.cargando ? 'Generando…' : 'PDF (A4)'}
                             {!cp.cargando && <ExternalLink className="w-3 h-3 opacity-60" />}
+                          </button>
+
+                          <button
+                            onClick={() => window.open(`/orders/print/${pedido.id}`, '_blank', 'width=400,height=600')}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-900 text-white text-xs font-medium rounded-lg transition shadow-sm"
+                          >
+                            🖨️ Ticket 80mm
                           </button>
 
                           <button
@@ -1027,6 +1081,20 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                         </div>
                       )
                     })()}
+
+                    {/* Botón de eliminar (solo para dueño) */}
+                    {esDueno && (
+                      <div className="border-t border-zinc-200 mt-3 pt-3 flex justify-end">
+                        <button
+                          onClick={() => eliminarPedido(pedido.id)}
+                          disabled={eliminando === pedido.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg border border-red-200 transition disabled:opacity-50"
+                        >
+                          {eliminando === pedido.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                          Eliminar Pedido
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
