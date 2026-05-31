@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 import { matchesFuzzy, formatPEN } from '@/lib/utils'
 import {
   ArrowLeft, ScanLine, Search, Package, Trash2,
@@ -11,59 +11,28 @@ import ScannerModal from '@/components/ui/ScannerModal'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-
-interface Producto {
-  id: string
-  nombre: string
-  unidad: string
-  precio_base: number
-  precio_compra: number
-  stock: number
-  codigo_barras?: string | null
-}
-
-interface ItemCarrito {
-  producto_id: string
-  nombre_producto: string
-  unidad: string
-  cantidad: number
-  precio_unitario: number
-  costo_unitario: number
-}
+import { usePOSStore, ProductoPOS } from '@/stores/usePOSStore'
 
 interface ClientPOSProps {
-  productos: Producto[]
+  productos: ProductoPOS[]
   nombreFerreteria: string
   ferreteriaId: string
 }
 
-type TipoComprobante = 'nota_venta' | 'boleta' | 'factura'
-
 export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }: ClientPOSProps) {
-  const [items, setItems] = useState<ItemCarrito[]>([])
-  const [busqueda, setBusqueda] = useState('')
-  const [mostrarSugerencias, setMostrarSugerencias] = useState(false)
-  const [showScanner, setShowScanner] = useState(false)
-  const [cobrando, setCobrando] = useState(false)
-
-  // ── Datos del cliente ──
-  const [nombreCliente, setNombreCliente] = useState('')
-  const [telefonoCliente, setTelefonoCliente] = useState('')
-  const [dniRuc, setDniRuc] = useState('')
-  const [buscandoRuc, setBuscandoRuc] = useState(false)
-
-  // ── Comprobante ──
-  const [tipoComprobante, setTipoComprobante] = useState<TipoComprobante>('nota_venta')
-
-  // ── Programar pedido ──
-  const [esProgramado, setEsProgramado] = useState(false)
-  const [fechaProgramada, setFechaProgramada] = useState('')
+  const {
+    items, agregarItem, actualizarCantidad, eliminarItem, vaciarCarrito, total,
+    busqueda, setBusqueda, mostrarSugerencias, setMostrarSugerencias,
+    showScanner, setShowScanner, cobrando, setCobrando,
+    nombreCliente, setNombreCliente, telefonoCliente, setTelefonoCliente,
+    dniRuc, setDniRuc, buscandoRuc, setBuscandoRuc,
+    tipoComprobante, setTipoComprobante, esProgramado, setEsProgramado,
+    fechaProgramada, setFechaProgramada, resetearDespuesDeVenta
+  } = usePOSStore()
 
   const busquedaRef = useRef<HTMLInputElement>(null)
   const scanBuffer = useRef('')
   const lastKeyTime = useRef(0)
-
-  const total = items.reduce((acc, i) => acc + i.cantidad * i.precio_unitario, 0)
 
   // Fecha mínima = ahora + 30min redondeado a 15min
   const minFechaProgramada = (() => {
@@ -101,12 +70,12 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [productos, items, cobrando, esProgramado])
+  }, [productos, items, cobrando, esProgramado, tipoComprobante, dniRuc, nombreCliente, telefonoCliente])
 
   function handleScanCode(codigo: string) {
     const p = productos.find(x => x.codigo_barras === codigo)
     if (p) {
-      agregarAlCarrito(p)
+      agregarItem(p)
       reproducirBeep()
     } else {
       toast.error(`Código desconocido: ${codigo}`)
@@ -124,37 +93,6 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
       gain.gain.setValueAtTime(0.1, ctx.currentTime)
       osc.start(); osc.stop(ctx.currentTime + 0.1)
     } catch {}
-  }
-
-  function agregarAlCarrito(p: Producto) {
-    setItems(prev => {
-      const existe = prev.findIndex(i => i.producto_id === p.id)
-      if (existe >= 0) {
-        const nuevos = [...prev]
-        nuevos[existe].cantidad += 1
-        return nuevos
-      }
-      return [...prev, {
-        producto_id: p.id,
-        nombre_producto: p.nombre,
-        unidad: p.unidad,
-        cantidad: 1,
-        precio_unitario: p.precio_base,
-        costo_unitario: p.precio_compra
-      }]
-    })
-    setBusqueda('')
-    setMostrarSugerencias(false)
-  }
-
-  function actualizarCantidad(idx: number, delta: number) {
-    setItems(prev => {
-      const nuevos = [...prev]
-      const next = nuevos[idx].cantidad + delta
-      if (next <= 0) return nuevos.filter((_, i) => i !== idx)
-      nuevos[idx].cantidad = next
-      return nuevos
-    })
   }
 
   // ── Consulta SUNAT por RUC / DNI ──
@@ -217,13 +155,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
       }
 
       toast.success('Pedido programado correctamente')
-      setItems([])
-      setNombreCliente('')
-      setTelefonoCliente('')
-      setDniRuc('')
-      setTipoComprobante('nota_venta')
-      setEsProgramado(false)
-      setFechaProgramada('')
+      resetearDespuesDeVenta()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al programar')
     } finally {
@@ -307,12 +239,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
       }
 
       toast.success('¡Venta registrada!')
-      setItems([])
-      setNombreCliente('')
-      setTelefonoCliente('')
-      setDniRuc('')
-      setTipoComprobante('nota_venta')
-
+      resetearDespuesDeVenta()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al cobrar')
     } finally {
@@ -321,7 +248,6 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
   }
 
   const sugerencias = busqueda.trim().length >= 1
-
     ? productos.filter(p => matchesFuzzy(p.nombre, busqueda) || p.codigo_barras === busqueda).slice(0, 8)
     : []
 
@@ -340,7 +266,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
             <p className="text-[11px] text-zinc-400 truncate">{nombreFerreteria}</p>
           </div>
           <button
-            onClick={() => setItems([])}
+            onClick={() => vaciarCarrito()}
             disabled={items.length === 0}
             className="text-xs text-red-500 font-medium px-3 py-1.5 hover:bg-red-50 rounded-lg disabled:opacity-30 transition"
           >
@@ -371,7 +297,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
                 <div className="w-16 text-right font-bold text-zinc-900 tabular-nums text-sm shrink-0">
                   {formatPEN(item.cantidad * item.precio_unitario)}
                 </div>
-                <button onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))} className="text-zinc-300 hover:text-red-400 transition shrink-0">
+                <button onClick={() => eliminarItem(idx)} className="text-zinc-300 hover:text-red-400 transition shrink-0">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -452,7 +378,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
           <div className="px-4 py-3 border-b border-zinc-50">
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <div
-                onClick={() => setEsProgramado(v => !v)}
+                onClick={() => setEsProgramado(!esProgramado)}
                 className={cn(
                   'w-9 h-5 rounded-full transition relative shrink-0',
                   esProgramado ? 'bg-zinc-900' : 'bg-zinc-200'
@@ -556,7 +482,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
               {sugerencias.length > 0 ? sugerencias.map(p => (
                 <button
                   key={p.id}
-                  onClick={() => agregarAlCarrito(p)}
+                  onClick={() => agregarItem(p)}
                   className="w-full flex items-center gap-3 p-3 text-left hover:bg-white rounded-xl transition group border border-transparent hover:border-zinc-200 hover:shadow-sm"
                 >
                   <div className="w-9 h-9 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-zinc-900 group-hover:text-white transition">
