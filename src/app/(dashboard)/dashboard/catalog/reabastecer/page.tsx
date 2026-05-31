@@ -51,8 +51,6 @@ export default async function ReabastecerPage() {
       <SupplierOrdersManager
         productos={productos ?? []}
         categorias={categorias ?? []}
-        proveedoresIniciales={proveedores ?? []}
-        ordenesIniciales={ordenes ?? []}
       />
     </div>
   )

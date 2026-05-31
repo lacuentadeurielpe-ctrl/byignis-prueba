@@ -680,28 +680,5 @@ export interface Proveedor {
   created_at: string
 }
 
-export interface OrdenCompra {
-  id: string
-  ferreteria_id: string
-  proveedor_id: string | null
-  proveedor_nombre: string
-  estado: 'pendiente' | 'recibido' | 'cancelado'
-  total: number
-  created_at: string
-  updated_at: string
-  // joins
-  items?: ItemOrdenCompra[]
-  proveedores?: Proveedor
-}
 
-export interface ItemOrdenCompra {
-  id: string
-  orden_compra_id: string
-  producto_id: string | null
-  nombre: string
-  marca: string | null
-  cantidad: number
-  precio_compra: number
-  unidad: string
-}
 

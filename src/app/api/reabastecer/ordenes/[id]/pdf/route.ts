@@ -54,6 +54,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     esOrdenCompra:        true,
     numero_pedido:        ocNum,
     nombre_cliente:       orden.proveedor_nombre,
+    modalidad:            'recojo' as const,
+    direccion_entrega:    '',
     formas_pago:          [],
     proveedor_contacto:   orden.proveedores?.contacto || null,
     proveedor_telefono:   orden.proveedores?.telefono || null,
@@ -72,7 +74,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     pdfBuffer = await renderToBuffer(
-      React.createElement(ComprobantePDF, { datos }) as any
+      React.createElement(ComprobantePDF, { datos: datos as any }) as any
     )
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

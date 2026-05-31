@@ -31,14 +31,13 @@ export default async function PrintTicketPage({ params }: { params: Promise<{ id
       {/* Botón flotante para imprimir, oculto en print */}
       <div className="print:hidden flex justify-center mb-4 pt-4">
         <button 
-          onClick="window.print()" 
+          id="btn-imprimir"
           className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg font-sans text-sm font-semibold hover:bg-zinc-800 transition shadow-lg"
         >
           <Printer className="w-4 h-4" /> Imprimir Ticket
         </button>
         <script dangerouslySetInnerHTML={{ __html: `
-          // Reemplazar onclick string
-          document.querySelector('button').onclick = function() { window.print() }
+          document.getElementById('btn-imprimir').onclick = function() { window.print() }
         `}} />
       </div>
 
