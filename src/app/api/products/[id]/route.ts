@@ -31,6 +31,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = await request.json()
   const { reglas_descuento, unidades_producto: unidadesInput, ...productoData } = body
 
+  // Autogeneración de código de barras si se envía vacío
+  if (productoData.codigo_barras !== undefined) {
+    if (!productoData.codigo_barras || !productoData.codigo_barras.trim()) {
+      const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+      let randomStr = ''
+      for (let i = 0; i < 6; i++) randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+      productoData.codigo_barras = `FER-${randomStr}`
+    } else {
+      productoData.codigo_barras = productoData.codigo_barras.trim()
+    }
+  }
+
   // Actualizar campos del producto — verifica pertenencia via ferreteria_id
   const { error: errProducto } = await supabase
     .from('productos')

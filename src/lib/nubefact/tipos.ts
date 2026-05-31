@@ -9,6 +9,8 @@
 export const NUBEFACT_TIPO = {
   FACTURA: 1,
   BOLETA:  2,
+  NOTA_DE_CREDITO: 3,
+  NOTA_DE_DEBITO: 4,
 } as const
 
 export const NUBEFACT_TIPO_DOC_CLIENTE = {
@@ -87,11 +89,11 @@ export interface NubefactPayload {
   total_incluido_percepcion:    ''
   detraccion:                   false
   observaciones:                string
-  documento_que_se_modifica_tipo:   ''
-  documento_que_se_modifica_serie:  ''
-  documento_que_se_modifica_numero: ''
-  tipo_de_nota_de_credito:      ''
-  tipo_de_nota_de_debito:       ''
+  documento_que_se_modifica_tipo:   number | ''
+  documento_que_se_modifica_serie:  string | ''
+  documento_que_se_modifica_numero: string | number | ''
+  tipo_de_nota_de_credito:          string | number | ''
+  tipo_de_nota_de_debito:           string | number | ''
   enviar_automaticamente_a_la_sunat:  true
   enviar_automaticamente_al_cliente:  false
   codigo_unico:                 string   // UUID interno para deduplicación
@@ -102,6 +104,22 @@ export interface NubefactPayload {
   tabla_personalizada_codigo:   ''
   formato_de_pdf:               ''
   items:                        NubefactItem[]
+}
+
+export interface NubefactAnulacionPayload {
+  operacion: 'generar_anulacion'
+  tipo_de_comprobante: number
+  serie: string
+  numero: number
+  motivo: string
+  codigo_unico?: string
+}
+
+export interface NubefactConsultarPayload {
+  operacion: 'consultar_comprobante'
+  tipo_de_comprobante: number
+  serie: string
+  numero: number
 }
 
 // ── Respuesta de Nubefact ─────────────────────────────────────────────────────

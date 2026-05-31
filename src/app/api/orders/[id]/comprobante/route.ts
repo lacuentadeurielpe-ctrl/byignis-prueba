@@ -14,11 +14,16 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const { id: pedidoId } = await params
 
   const admin = createAdminClient()
-  const { data: comprobante, error } = await admin
+  const { data: comprobantesList, error } = await admin
     .from('comprobantes')
     .select('*')
     .eq('pedido_id', pedidoId)
-    .single()
+    .order('created_at', { ascending: false })
+
+  let comprobante = comprobantesList?.find(c => c.tipo === 'nota_venta') 
+  if (!comprobante && comprobantesList && comprobantesList.length > 0) {
+    comprobante = comprobantesList[0]
+  }
 
   if (error || !comprobante) {
     return NextResponse.json({ error: 'Sin comprobante' }, { status: 404 })

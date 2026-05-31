@@ -1,4 +1,4 @@
-// Componente React PDF para comprobantes y órdenes de compra
+// Componente React PDF para comprobante de pago interno
 // Usa @react-pdf/renderer — corre solo server-side
 
 import React from 'react'
@@ -17,7 +17,7 @@ export interface ItemComprobante {
   nombre_producto: string
   unidad: string
   cantidad: number
-  precio_unitario: number // actúa como costo_unitario en órdenes de compra
+  precio_unitario: number
   subtotal: number
 }
 
@@ -29,23 +29,19 @@ export interface DatosComprobante {
   logo_url: string | null
   color: string          // hex — default '#1e40af'
   mensaje_pie: string | null
+  ruc_ferreteria?: string // Opcional, para simular la caja de RUC
 
   // Comprobante
-  numero_comprobante: string    // CP-000001 o OC-000001
+  numero_comprobante: string    // CP-000001
   fecha_emision: string         // ISO string
-  esProforma?: boolean          // true = documento pendiente de confirmación / proforma
-  esOrdenCompra?: boolean       // true = orden de compra a proveedor
+  esProforma?: boolean          // true = documento pendiente de confirmación
 
-  // Pedido / Orden
-  numero_pedido?: string
-  nombre_cliente?: string       // o nombre del proveedor si es orden de compra
-  modalidad?: 'delivery' | 'recojo'
-  direccion_entrega?: string | null
-  formas_pago?: string[]
-
-  // Proveedor específico (para orden de compra)
-  proveedor_contacto?: string | null
-  proveedor_telefono?: string | null
+  // Pedido
+  numero_pedido: string
+  nombre_cliente: string
+  modalidad: 'delivery' | 'recojo'
+  direccion_entrega: string | null
+  formas_pago: string[]
 
   // Items
   items: ItemComprobante[]
@@ -58,13 +54,10 @@ function formatPEN(n: number): string {
   return `S/ ${n.toFixed(2)}`
 }
 
-function formatFechaHora(iso: string): string {
+function formatFecha(iso: string): string {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
-  return (
-    `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ` +
-    `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  )
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
 }
 
 function iniciales(nombre: string): string {
@@ -75,274 +68,228 @@ function iniciales(nombre: string): string {
     .join('')
 }
 
-// ── Estilos (Diseño Premium) ──────────────────────────────────────────────────
+// ── Estilos (Estilo SUNAT / Nubefact A4) ──────────────────────────────────────
 
 function crearEstilos(color: string) {
-  // Un color más oscuro para usarlo en textos sobre el color principal
   return StyleSheet.create({
     page: {
       fontFamily: 'Helvetica',
-      fontSize: 10,
-      color: '#334155', // slate-700
+      fontSize: 8,
+      color: '#000000',
       backgroundColor: '#ffffff',
-      paddingTop: 45,
-      paddingBottom: 45,
-      paddingHorizontal: 50,
+      paddingTop: 40,
+      paddingBottom: 40,
+      paddingHorizontal: 40,
     },
-    // Header
-    headerContainer: {
+
+    // ── Cabecera: 2 Columnas ──
+    headerRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
-      marginBottom: 35,
+      marginBottom: 20,
     },
-    logoSection: {
-      flexDirection: 'row',
-      alignItems: 'center',
+    headerLeft: {
       flex: 1,
+      paddingRight: 20,
+      flexDirection: 'row',
     },
-    logoImage: {
-      width: 60,
-      height: 60,
-      borderRadius: 8,
-      marginRight: 16,
-      objectFit: 'cover',
-    },
-    logoTextFallback: {
-      width: 60,
-      height: 60,
-      borderRadius: 8,
-      backgroundColor: '#f8fafc', // slate-50
-      marginRight: 16,
-      justifyContent: 'center',
+    logoBox: {
+      width: 70,
+      height: 70,
+      backgroundColor: '#f3f4f6',
+      borderRadius: 4,
       alignItems: 'center',
-      borderWidth: 1,
-      borderColor: '#e2e8f0', // slate-200
+      justifyContent: 'center',
+      marginRight: 15,
+      flexShrink: 0,
     },
-    logoText: {
-      color: color,
-      fontSize: 22,
+    logoImg: {
+      width: 70,
+      height: 70,
+      borderRadius: 4,
+      objectFit: 'contain',
+    },
+    logoIniciales: {
+      color: '#9ca3af',
+      fontSize: 20,
       fontFamily: 'Helvetica-Bold',
     },
-    companyInfo: {
+    empresaInfo: {
+      flex: 1,
       justifyContent: 'center',
+    },
+    empresaNombre: {
+      fontSize: 14,
+      fontFamily: 'Helvetica-Bold',
+      marginBottom: 4,
+      color: '#000000',
+      textTransform: 'uppercase',
+    },
+    empresaTexto: {
+      fontSize: 8,
+      color: '#333333',
+      marginBottom: 2,
+    },
+
+    // ── Caja RUC Derecha (Estilo SUNAT) ──
+    cajaRuc: {
+      width: 180,
+      borderWidth: 1.5,
+      borderColor: color, // Usa el color principal de la ferretería
+      borderRadius: 8,
+      alignItems: 'center',
+      paddingVertical: 12,
+    },
+    cajaRucTexto: {
+      fontSize: 12,
+      fontFamily: 'Helvetica-Bold',
+      marginBottom: 4,
+    },
+    cajaRucTitulo: {
+      fontSize: 11,
+      fontFamily: 'Helvetica-Bold',
+      color: '#ffffff',
+      backgroundColor: color,
+      width: '100%',
+      textAlign: 'center',
+      paddingVertical: 6,
+      marginBottom: 4,
+    },
+    cajaRucNumero: {
+      fontSize: 12,
+      fontFamily: 'Helvetica-Bold',
+    },
+
+    // ── Datos del Cliente (Recuadro) ──
+    clienteBox: {
+      borderWidth: 1,
+      borderColor: '#000000',
+      borderRadius: 4,
+      padding: 8,
+      marginBottom: 15,
+    },
+    clienteRow: {
+      flexDirection: 'row',
+      marginBottom: 4,
+    },
+    clienteLabel: {
+      width: 70,
+      fontFamily: 'Helvetica-Bold',
+      fontSize: 8,
+    },
+    clienteValor: {
+      flex: 1,
+      fontSize: 8,
+    },
+    clienteLabelCorto: {
+      width: 80,
+      fontFamily: 'Helvetica-Bold',
+      fontSize: 8,
+    },
+
+    // ── Tabla de Ítems ──
+    tabla: {
+      width: '100%',
+      borderWidth: 1,
+      borderColor: '#000000',
+      borderBottomWidth: 0,
+      borderRightWidth: 0,
+    },
+    tablaRow: {
+      flexDirection: 'row',
+    },
+    tablaHeader: {
+      backgroundColor: '#f0f0f0',
+      fontFamily: 'Helvetica-Bold',
+      textAlign: 'center',
+      fontSize: 8,
+      paddingVertical: 4,
+      borderBottomWidth: 1,
+      borderColor: '#000000',
+    },
+    tablaCell: {
+      fontSize: 8,
+      paddingVertical: 4,
+      paddingHorizontal: 4,
+      borderBottomWidth: 1,
+      borderRightWidth: 1,
+      borderColor: '#000000',
+    },
+    // Anchos de columnas
+    colCant: { width: '10%', textAlign: 'center' },
+    colUnid: { width: '10%', textAlign: 'center' },
+    colDesc: { width: '50%' },
+    colPUnit: { width: '15%', textAlign: 'right' },
+    colTotal: { width: '15%', textAlign: 'right' },
+
+    // ── Resumen / Totales ──
+    resumenRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 15,
+    },
+    resumenIzquierda: {
       flex: 1,
       paddingRight: 20,
     },
-    companyName: {
-      fontSize: 18,
-      fontFamily: 'Helvetica-Bold',
-      color: '#0f172a', // slate-900
-      marginBottom: 6,
-      letterSpacing: -0.5,
+    resumenDerecha: {
+      width: 180,
     },
-    companyDetails: {
-      fontSize: 9,
-      color: '#64748b', // slate-500
-      lineHeight: 1.4,
-    },
-    documentInfoBox: {
-      alignItems: 'flex-end',
-    },
-    documentType: {
-      fontSize: 16,
-      fontFamily: 'Helvetica-Bold',
-      color: color,
-      letterSpacing: 1.5,
-      textTransform: 'uppercase',
-      marginBottom: 6,
-    },
-    documentNumber: {
-      fontSize: 14,
-      fontFamily: 'Helvetica-Bold',
-      color: '#475569', // slate-600
-      marginBottom: 8,
-    },
-    documentDate: {
-      fontSize: 9,
-      color: '#94a3b8', // slate-400
-    },
-    
-    // Parties Section (Cliente / Proveedor)
-    partiesContainer: {
+    totalFila: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 35,
-    },
-    partyBox: {
-      width: '100%',
-      backgroundColor: '#f8fafc',
-      padding: 14,
-      borderRadius: 6,
-      borderLeftWidth: 4,
-      borderLeftColor: color,
-    },
-    partyBoxHalf: {
-      width: '48%',
-      backgroundColor: '#f8fafc',
-      padding: 14,
-      borderRadius: 6,
-      borderLeftWidth: 4,
-      borderLeftColor: color,
-    },
-    partyTitle: {
-      fontSize: 8,
-      fontFamily: 'Helvetica-Bold',
-      color: '#94a3b8',
-      textTransform: 'uppercase',
-      letterSpacing: 1,
-      marginBottom: 8,
-    },
-    partyName: {
-      fontSize: 12,
-      fontFamily: 'Helvetica-Bold',
-      color: '#0f172a',
-      marginBottom: 8,
-    },
-    partyDetailRow: {
-      flexDirection: 'row',
-      marginBottom: 5,
-    },
-    partyDetailLabel: {
-      fontSize: 9,
-      fontFamily: 'Helvetica-Bold',
-      color: '#64748b',
-      width: 75,
-    },
-    partyDetailValue: {
-      fontSize: 9,
-      color: '#334155',
-      flex: 1,
-      lineHeight: 1.3,
-    },
-
-    // Table
-    table: {
-      marginBottom: 25,
-    },
-    tableHeader: {
-      flexDirection: 'row',
-      backgroundColor: color,
-      borderRadius: 4,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      marginBottom: 4,
-    },
-    tableRow: {
-      flexDirection: 'row',
-      paddingVertical: 10,
-      paddingHorizontal: 12,
       borderBottomWidth: 1,
-      borderBottomColor: '#f1f5f9',
-    },
-    tableRowAlt: {
-      backgroundColor: '#fcfcfd',
-    },
-    thBase: { color: '#ffffff', fontSize: 8.5, fontFamily: 'Helvetica-Bold', textTransform: 'uppercase', letterSpacing: 0.5 },
-    tdBase: { fontSize: 9, color: '#334155' },
-    
-    colCant: { width: '10%', textAlign: 'center' },
-    colDesc: { flex: 1, textAlign: 'left', paddingRight: 10 },
-    colUnid: { width: '12%', textAlign: 'center' },
-    colPrecio: { width: '18%', textAlign: 'right' },
-    colSubtot: { width: '18%', textAlign: 'right' },
-    
-    tdDescVal: { fontFamily: 'Helvetica-Bold', color: '#0f172a', fontSize: 9 },
-    tdSubtotVal: { fontFamily: 'Helvetica-Bold', color: '#0f172a' },
-
-    // Totals
-    totalsContainer: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      marginBottom: 40,
-    },
-    totalsBox: {
-      width: '50%',
-    },
-    totalRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      paddingVertical: 6,
-      borderBottomWidth: 1,
-      borderBottomColor: '#f1f5f9',
-    },
-    totalRowLast: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      paddingVertical: 12,
-      marginTop: 6,
-      backgroundColor: '#f8fafc',
-      borderRadius: 6,
-      paddingHorizontal: 14,
-      alignItems: 'center',
+      borderBottomColor: '#e5e7eb',
+      paddingVertical: 4,
     },
     totalLabel: {
-      fontSize: 10,
-      color: '#64748b',
-    },
-    totalValue: {
-      fontSize: 10,
-      color: '#334155',
+      flex: 1,
       fontFamily: 'Helvetica-Bold',
-    },
-    totalFinalLabel: {
-      fontSize: 11,
-      fontFamily: 'Helvetica-Bold',
-      color: '#0f172a',
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    totalFinalValue: {
-      fontSize: 16,
-      fontFamily: 'Helvetica-Bold',
-      color: color,
-    },
-
-    // Footer
-    footer: {
-      marginTop: 'auto',
-      borderTopWidth: 1,
-      borderTopColor: '#e2e8f0',
-      paddingTop: 20,
-    },
-    footerInfo: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 20,
-    },
-    footerNotesBox: {
-      width: '60%',
-    },
-    footerNotesTitle: {
       fontSize: 8,
-      fontFamily: 'Helvetica-Bold',
-      color: '#94a3b8',
-      textTransform: 'uppercase',
-      marginBottom: 6,
-      letterSpacing: 1,
+      textAlign: 'right',
+      paddingRight: 10,
     },
-    footerNotesText: {
-      fontSize: 8.5,
-      color: '#475569',
-      lineHeight: 1.5,
-    },
-    footerThanks: {
-      width: '35%',
-      alignItems: 'flex-end',
-      justifyContent: 'center',
-    },
-    footerThanksText: {
-      fontSize: 12,
-      fontFamily: 'Helvetica-Bold',
-      color: color,
-      marginBottom: 4,
+    totalValor: {
+      width: 70,
+      fontSize: 8,
       textAlign: 'right',
     },
-    footerDisclaimer: {
+    totalFinalFila: {
+      flexDirection: 'row',
+      paddingVertical: 5,
+      marginTop: 2,
+    },
+    totalFinalLabel: {
+      flex: 1,
+      fontFamily: 'Helvetica-Bold',
+      fontSize: 10,
+      textAlign: 'right',
+      paddingRight: 10,
+    },
+    totalFinalValor: {
+      width: 70,
+      fontFamily: 'Helvetica-Bold',
+      fontSize: 10,
+      textAlign: 'right',
+    },
+
+    // ── Pie ──
+    pie: {
+      marginTop: 'auto',
+      borderTopWidth: 1,
+      borderTopColor: '#000000',
+      paddingTop: 10,
+      alignItems: 'center',
+    },
+    pieMensaje: {
+      fontSize: 9,
+      fontFamily: 'Helvetica-Bold',
+      marginBottom: 4,
+    },
+    pieDisclaimer: {
       fontSize: 7,
-      color: '#94a3b8',
+      color: '#666666',
       textAlign: 'center',
-      lineHeight: 1.4,
     },
   })
 }
@@ -355,191 +302,152 @@ export function ComprobantePDF({ datos }: { datos: DatosComprobante }) {
   const subtotalItems = datos.items.reduce((s, i) => s + i.subtotal, 0)
   const hayDescuento = Math.abs(subtotalItems - datos.total) > 0.005
 
-  const formasPagoTexto = datos.formas_pago && datos.formas_pago.length > 0
+  const formasPagoTexto = datos.formas_pago.length > 0
     ? datos.formas_pago.join(', ')
-    : 'A convenir'
+    : 'Efectivo / A convenir'
 
-  // Determinar etiquetas de acuerdo al tipo de documento
-  const esCompra = datos.esOrdenCompra === true
-  let docTitulo = 'COMPROBANTE INTERNO'
-  if (esCompra) {
-    docTitulo = datos.esProforma ? 'PROFORMA DE COMPRA' : 'ORDEN DE COMPRA'
-  } else if (datos.esProforma) {
-    docTitulo = 'COTIZACIÓN / PROFORMA'
-  }
+  // El RUC de la ferretería usualmente viene en la DB, pero si no está usamos ceros.
+  // Como no pasamos el RUC actualmente en datos, ponemos un placeholder genérico.
+  const rucFerreteria = datos.ruc_ferreteria || '00000000000'
 
   return (
     <Document
-      title={`${docTitulo} ${datos.numero_comprobante} — ${datos.nombre_ferreteria}`}
+      title={`Comprobante ${datos.numero_comprobante} — ${datos.nombre_ferreteria}`}
       author={datos.nombre_ferreteria}
     >
       <Page size="A4" style={S.page}>
-
+        
         {/* ── CABECERA ── */}
-        <View style={S.headerContainer}>
-          <View style={S.logoSection}>
-            {datos.logo_url ? (
-              <Image src={datos.logo_url} style={S.logoImage} />
-            ) : (
-              <View style={S.logoTextFallback}>
-                <Text style={S.logoText}>{iniciales(datos.nombre_ferreteria)}</Text>
-              </View>
-            )}
-            <View style={S.companyInfo}>
-              <Text style={S.companyName}>{datos.nombre_ferreteria}</Text>
-              {datos.direccion_ferreteria && (
-                <Text style={S.companyDetails}>{datos.direccion_ferreteria}</Text>
+        <View style={S.headerRow}>
+          <View style={S.headerLeft}>
+            <View style={S.logoBox}>
+              {datos.logo_url ? (
+                <Image src={datos.logo_url} style={S.logoImg} />
+              ) : (
+                <Text style={S.logoIniciales}>{iniciales(datos.nombre_ferreteria)}</Text>
               )}
-              <Text style={S.companyDetails}>WhatsApp: {datos.telefono_ferreteria}</Text>
+            </View>
+            <View style={S.empresaInfo}>
+              <Text style={S.empresaNombre}>{datos.nombre_ferreteria}</Text>
+              {datos.direccion_ferreteria && (
+                <Text style={S.empresaTexto}>{datos.direccion_ferreteria}</Text>
+              )}
+              <Text style={S.empresaTexto}>Telf: {datos.telefono_ferreteria}</Text>
             </View>
           </View>
 
-          <View style={S.documentInfoBox}>
-            <Text style={S.documentType}>{docTitulo}</Text>
-            <Text style={S.documentNumber}>Nº {datos.numero_comprobante}</Text>
-            <Text style={S.documentDate}>Emitido el {formatFechaHora(datos.fecha_emision)}</Text>
+          <View style={S.cajaRuc}>
+            <Text style={S.cajaRucTexto}>R.U.C. N° {rucFerreteria}</Text>
+            <Text style={S.cajaRucTitulo}>
+              {datos.esProforma ? 'COTIZACIÓN' : 'NOTA DE VENTA'}
+            </Text>
+            <Text style={S.cajaRucNumero}>N° {datos.numero_comprobante}</Text>
           </View>
         </View>
 
-        {/* ── PARTES (CLIENTE/PROVEEDOR) ── */}
-        <View style={S.partiesContainer}>
-          {/* Box Principal (Cliente o Proveedor) */}
-          <View style={!esCompra && !datos.numero_pedido && datos.modalidad !== 'delivery' ? S.partyBox : S.partyBoxHalf}>
-            <Text style={S.partyTitle}>{esCompra ? 'Proveedor' : 'Cliente'}</Text>
-            <Text style={S.partyName}>{datos.nombre_cliente ?? '—'}</Text>
-            
-            {esCompra && datos.proveedor_contacto && (
-              <View style={S.partyDetailRow}>
-                <Text style={S.partyDetailLabel}>Contacto:</Text>
-                <Text style={S.partyDetailValue}>{datos.proveedor_contacto}</Text>
-              </View>
-            )}
-            {esCompra && datos.proveedor_telefono && (
-              <View style={S.partyDetailRow}>
-                <Text style={S.partyDetailLabel}>Teléfono:</Text>
-                <Text style={S.partyDetailValue}>{datos.proveedor_telefono}</Text>
-              </View>
-            )}
-            {!esCompra && datos.numero_pedido && (
-              <View style={S.partyDetailRow}>
-                <Text style={S.partyDetailLabel}>Ref. Pedido:</Text>
-                <Text style={S.partyDetailValue}>{datos.numero_pedido}</Text>
-              </View>
-            )}
+        {/* ── DATOS DEL CLIENTE ── */}
+        <View style={S.clienteBox}>
+          <View style={S.clienteRow}>
+            <Text style={S.clienteLabel}>SEÑOR(ES):</Text>
+            <Text style={S.clienteValor}>{datos.nombre_cliente}</Text>
           </View>
-
-          {/* Box Secundario (Direcciones / Entregas) */}
-          {(!(!esCompra && !datos.numero_pedido && datos.modalidad !== 'delivery')) && (
-            <View style={S.partyBoxHalf}>
-              <Text style={S.partyTitle}>{esCompra ? 'Lugar de Entrega' : 'Condiciones de Entrega'}</Text>
-              
-              {esCompra ? (
-                <>
-                  <Text style={S.partyName}>Almacén de Tienda</Text>
-                  <View style={S.partyDetailRow}>
-                    <Text style={S.partyDetailLabel}>Dirección:</Text>
-                    <Text style={S.partyDetailValue}>
-                      {datos.direccion_ferreteria || 'Misma dirección de la empresa'}
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={S.partyName}>
-                    {datos.modalidad === 'delivery' ? 'Envío a domicilio' : 'Recojo en tienda'}
-                  </Text>
-                  {datos.modalidad === 'delivery' && datos.direccion_entrega && (
-                    <View style={S.partyDetailRow}>
-                      <Text style={S.partyDetailLabel}>Dirección:</Text>
-                      <Text style={S.partyDetailValue}>{datos.direccion_entrega}</Text>
-                    </View>
-                  )}
-                </>
-              )}
+          <View style={{ flexDirection: 'row' }}>
+            <View style={{ flex: 1, flexDirection: 'row' }}>
+              <Text style={S.clienteLabel}>MODALIDAD:</Text>
+              <Text style={S.clienteValor}>
+                {datos.modalidad === 'delivery' ? 'Delivery' : 'Recojo en tienda'}
+              </Text>
+            </View>
+            <View style={{ flex: 1, flexDirection: 'row' }}>
+              <Text style={S.clienteLabelCorto}>FECHA EMISIÓN:</Text>
+              <Text style={S.clienteValor}>{formatFecha(datos.fecha_emision)}</Text>
+            </View>
+          </View>
+          {datos.modalidad === 'delivery' && datos.direccion_entrega && (
+            <View style={[S.clienteRow, { marginTop: 4 }]}>
+              <Text style={S.clienteLabel}>DIRECCIÓN:</Text>
+              <Text style={S.clienteValor}>{datos.direccion_entrega}</Text>
             </View>
           )}
+          <View style={[S.clienteRow, { marginTop: 4 }]}>
+            <View style={{ flex: 1, flexDirection: 'row' }}>
+              <Text style={S.clienteLabel}>FORMA PAGO:</Text>
+              <Text style={S.clienteValor}>{formasPagoTexto}</Text>
+            </View>
+            <View style={{ flex: 1, flexDirection: 'row' }}>
+              <Text style={S.clienteLabelCorto}>N° PEDIDO:</Text>
+              <Text style={S.clienteValor}>{datos.numero_pedido}</Text>
+            </View>
+          </View>
         </View>
 
         {/* ── TABLA DE PRODUCTOS ── */}
-        <View style={S.table}>
+        <View style={S.tabla}>
           {/* Header */}
-          <View style={S.tableHeader}>
-            <Text style={[S.thBase, S.colCant]}>Cant.</Text>
-            <Text style={[S.thBase, S.colDesc]}>Descripción</Text>
-            <Text style={[S.thBase, S.colUnid]}>Medida</Text>
-            <Text style={[S.thBase, S.colPrecio]}>{esCompra ? 'Costo U.' : 'Precio U.'}</Text>
-            <Text style={[S.thBase, S.colSubtot]}>Subtotal</Text>
+          <View style={[S.tablaRow, S.tablaHeader]}>
+            <Text style={[S.tablaCell, S.colCant, { borderBottomWidth: 0 }]}>CANT.</Text>
+            <Text style={[S.tablaCell, S.colUnid, { borderBottomWidth: 0 }]}>U.M.</Text>
+            <Text style={[S.tablaCell, S.colDesc, { borderBottomWidth: 0 }]}>DESCRIPCIÓN</Text>
+            <Text style={[S.tablaCell, S.colPUnit, { borderBottomWidth: 0 }]}>V/U</Text>
+            <Text style={[S.tablaCell, S.colTotal, { borderBottomWidth: 0, borderRightWidth: 0 }]}>TOTAL</Text>
           </View>
+          
           {/* Filas */}
-          {datos.items.map((item, idx) => (
-            <View
-              key={idx}
-              style={[S.tableRow, idx % 2 === 1 ? S.tableRowAlt : {}]}
-            >
-              <Text style={[S.tdBase, S.colCant]}>{item.cantidad}</Text>
-              <Text style={[S.tdBase, S.colDesc, S.tdDescVal]}>{item.nombre_producto}</Text>
-              <Text style={[S.tdBase, S.colUnid]}>{item.unidad}</Text>
-              <Text style={[S.tdBase, S.colPrecio]}>{formatPEN(item.precio_unitario)}</Text>
-              <Text style={[S.tdBase, S.colSubtot, S.tdSubtotVal]}>{formatPEN(item.subtotal)}</Text>
-            </View>
-          ))}
+          {datos.items.map((item, idx) => {
+            const isLast = idx === datos.items.length - 1
+            const bBottom = isLast ? 0 : 1
+            return (
+              <View key={idx} style={S.tablaRow}>
+                <Text style={[S.tablaCell, S.colCant, { borderBottomWidth: bBottom }]}>{item.cantidad}</Text>
+                <Text style={[S.tablaCell, S.colUnid, { borderBottomWidth: bBottom }]}>{item.unidad}</Text>
+                <Text style={[S.tablaCell, S.colDesc, { borderBottomWidth: bBottom }]}>{item.nombre_producto}</Text>
+                <Text style={[S.tablaCell, S.colPUnit, { borderBottomWidth: bBottom }]}>{formatPEN(item.precio_unitario)}</Text>
+                <Text style={[S.tablaCell, S.colTotal, { borderBottomWidth: bBottom, borderRightWidth: 0 }]}>{formatPEN(item.subtotal)}</Text>
+              </View>
+            )
+          })}
         </View>
 
         {/* ── TOTALES ── */}
-        <View style={S.totalsContainer}>
-          <View style={S.totalsBox}>
+        <View style={S.resumenRow}>
+          <View style={S.resumenIzquierda}>
+            {/* Espacio para observaciones, texto en letras, etc. típico de Nubefact */}
+          </View>
+          <View style={S.resumenDerecha}>
             {hayDescuento && (
               <>
-                <View style={S.totalRow}>
-                  <Text style={S.totalLabel}>Subtotal bruto</Text>
-                  <Text style={S.totalValue}>{formatPEN(subtotalItems)}</Text>
+                <View style={S.totalFila}>
+                  <Text style={S.totalLabel}>Subtotal</Text>
+                  <Text style={S.totalValor}>{formatPEN(subtotalItems)}</Text>
                 </View>
-                <View style={S.totalRow}>
-                  <Text style={S.totalLabel}>Descuento aplicado</Text>
-                  <Text style={{ ...S.totalValue, color: '#10b981' }}>
-                    − {formatPEN(subtotalItems - datos.total)}
-                  </Text>
+                <View style={S.totalFila}>
+                  <Text style={S.totalLabel}>Descuento</Text>
+                  <Text style={S.totalValor}>− {formatPEN(subtotalItems - datos.total)}</Text>
                 </View>
               </>
             )}
-            <View style={S.totalRowLast}>
-              <Text style={S.totalFinalLabel}>
-                {esCompra ? 'TOTAL ORDEN' : 'TOTAL A PAGAR'}
-              </Text>
-              <Text style={S.totalFinalValue}>{formatPEN(datos.total)}</Text>
+            <View style={S.totalFinalFila}>
+              <Text style={S.totalFinalLabel}>TOTAL A PAGAR</Text>
+              <Text style={S.totalFinalValor}>{formatPEN(datos.total)}</Text>
             </View>
           </View>
         </View>
 
-        {/* ── PIE DE PÁGINA ── */}
-        <View style={S.footer}>
-          <View style={S.footerInfo}>
-            <View style={S.footerNotesBox}>
-              <Text style={S.footerNotesTitle}>
-                {esCompra ? 'Condiciones Adicionales' : 'Métodos de Pago / Notas'}
-              </Text>
-              <Text style={S.footerNotesText}>
-                {esCompra 
-                  ? 'Por favor, confirmar la recepción de esta orden y el tiempo estimado de entrega. En caso de variaciones de stock o precio, notificar previo al despacho.'
-                  : `Formas de pago aceptadas: ${formasPagoTexto}. ${datos.mensaje_pie || ''}`
-                }
-              </Text>
-            </View>
-            <View style={S.footerThanks}>
-              <Text style={S.footerThanksText}>
-                {esCompra
-                  ? 'Esperamos su despacho'
-                  : (datos.esProforma ? '¡Gracias por su interés!' : '¡Gracias por su preferencia!')}
-              </Text>
-            </View>
-          </View>
-
-          <Text style={S.footerDisclaimer}>
-            {esCompra
-              ? `Este documento es una orden de compra emitida de manera interna por ${datos.nombre_ferreteria} y dirigida al proveedor para fines de abastecimiento. No constituye un comprobante de venta electrónica ni tiene validez tributaria ante la SUNAT.`
-              : (datos.esProforma
-                  ? `Este documento es una cotización emitida de manera virtual por ${datos.nombre_ferreteria}. Tiene un propósito estrictamente informativo sobre precios y disponibilidad de stock, y no constituye un comprobante de pago de carácter tributario.`
-                  : `Este documento es un comprobante de control interno emitido por ${datos.nombre_ferreteria}. No posee validez tributaria ante la SUNAT ni reemplaza a una boleta o factura de venta electrónica.`)}
+        {/* ── PIE ── */}
+        <View style={S.pie}>
+          <Text style={S.pieMensaje}>
+            {datos.esProforma ? '¡Gracias por su preferencia!' : '¡Gracias por su compra!'}
+          </Text>
+          {datos.mensaje_pie && (
+            <Text style={[S.pieDisclaimer, { marginBottom: 4 }]}>{datos.mensaje_pie}</Text>
+          )}
+          <Text style={S.pieDisclaimer}>
+            {datos.esProforma
+              ? `Este documento es una PROFORMA generada por ${datos.nombre_ferreteria}. Carece de validez tributaria.`
+              : `Este documento es un comprobante de control interno de ${datos.nombre_ferreteria}. No tiene validez tributaria.`}
+          </Text>
+          <Text style={[S.pieDisclaimer, { marginTop: 4, fontSize: 6 }]}>
+            Representación impresa del Comprobante Interno
           </Text>
         </View>
 

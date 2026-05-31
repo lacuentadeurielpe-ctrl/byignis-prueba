@@ -5,6 +5,7 @@ import { enviarMensaje } from '@/lib/whatsapp/ycloud'
 import { generarYEnviarComprobante } from '@/lib/pdf/generar-comprobante'
 import { getYCloudApiKey } from '@/lib/tenant'
 import { logAccion } from '@/lib/audit'
+import { normalizarTelefono } from '@/lib/utils'
 
 const ESTADOS_VALIDOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado', 'cancelado']
 
@@ -23,6 +24,8 @@ function mensajeEstado(numeroPedido: string, estado: string, nombreFerreteria: s
       return `🎉 *${nombreFerreteria}*\n\nSu pedido *${numeroPedido}* ha sido *entregado*. Esperamos que todo sea de su agrado. ¡Hasta la próxima!`
     case 'cancelado':
       return `❌ *${nombreFerreteria}*\n\nLamentamos informarle que su pedido *${numeroPedido}* ha sido *cancelado*. Para más información contáctenos por este mismo chat.`
+    case 'devuelto':
+      return `🔄 *${nombreFerreteria}*\n\nSu pedido *${numeroPedido}* ha sido marcado como *devuelto*.`
     default:
       return null
   }
@@ -91,7 +94,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     await logAccion({
       ferreteriaId:  session.ferreteriaId,
       usuarioId:     session.userId,
-      accion:        body.estado === 'cancelado' ? 'cancelar_pedido' : 'cambiar_estado_pedido',
+      accion:        (body.estado === 'cancelado' || body.estado === 'devuelto') ? 'cancelar_pedido' : 'cambiar_estado_pedido',
       entidad:       'pedido',
       entidadId:     id,
       detalle: {
@@ -124,106 +127,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       })
   }
 
-  // Enviar notificación WhatsApp al cliente si el estado lo amerita
-  if (body.estado) {
-    const msg = mensajeEstado(data.numero_pedido, body.estado, ferreteria.nombre)
-    const telefono = (data.clientes as any)?.telefono ?? data.telefono_cliente
-
-    if (msg && telefono) {
-      try {
-        const apiKey = await getYCloudApiKey(ferreteria.id)
-        if (apiKey) {
-          await enviarMensaje({
-            from: ferreteria.telefono_whatsapp.replace(/^\+/, ''),
-            to: telefono,
-            texto: msg,
-            apiKey,
-          })
-        }
-      } catch (e) {
-        console.error('[API] Error enviando notificación de estado:', e)
-        // No fallar — el estado ya se actualizó
-      }
-    }
-  }
-
-  // Modo libre: notificar a todos los repartidores activos con teléfono al confirmar
-  if (body.estado === 'confirmado' && data.modalidad === 'delivery' && (ferreteria as any).modo_asignacion_delivery === 'libre') {
-    const { data: repartidores } = await supabase
-      .from('repartidores')
-      .select('id, nombre, telefono, token')
-      .eq('ferreteria_id', ferreteria.id)
-      .eq('activo', true)
-      .not('telefono', 'is', null)
-
-    if (repartidores?.length) {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-        ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-      const zona = (data as any).zonas_delivery?.nombre ?? null
-      const nombre = (data.clientes as any)?.nombre ?? data.nombre_cliente ?? 'Cliente'
-
-      // Fire-and-forget — no bloquear la respuesta
-      getYCloudApiKey(ferreteria.id).then((apiKey) => {
-        if (!apiKey) return
-        for (const rep of repartidores) {
-          const msg = `🚚 *Nuevo pedido disponible — ${ferreteria.nombre}*\n\nPedido: *${data.numero_pedido}*\nCliente: ${nombre}${zona ? `\nZona: ${zona}` : ''}\nTotal: S/ ${data.total.toFixed(2)}\n\n👉 Entra a tu app para aceptarlo:\n${baseUrl}/delivery/${rep.token}`
-          enviarMensaje({
-            from: ferreteria.telefono_whatsapp.replace(/^\+/, ''),
-            to: rep.telefono!,
-            texto: msg,
-            apiKey,
-          }).catch((e) => console.error(`[ModoLibre] Error notificando a ${rep.nombre}:`, e))
-        }
-      }).catch(() => {})
-    }
-  }
-
-  // Generar y enviar comprobante automáticamente al confirmar el pedido
-  if (body.estado === 'confirmado') {
-    getYCloudApiKey(ferreteria.id).then((ycloudApiKey) => {
-      generarYEnviarComprobante({
-        pedidoId: id,
-        ferreteriaId: ferreteria.id,
-        ycloudApiKey,
-      }).catch((err) => {
-        console.error('[Comprobante] Error generando automáticamente:', err)
-      })
-    }).catch(() => {})
-  }
-
-  return NextResponse.json(data)
-}
-
-// GET /api/orders/[id]
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSessionInfo()
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
-  const supabase = await createClient()
-  const { id } = await params
-  const { data, error } = await supabase
-    .from('pedidos')
-    .select('*, clientes(nombre, telefono), zonas_delivery(nombre), items_pedido(*)')
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 })
-  return NextResponse.json(data)
-}
-
-// DELETE /api/orders/[id]
-export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSessionInfo()
-  if (!session || session.rol !== 'dueno') return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
-  const supabase = await createClient()
-  const { id } = await params
-
-  // Obtener estado actual del pedido para decidir si restaurar stock
-  const { data: pedidoActual, error: errFetch } = await supabase
-    .from('pedidos')
-    .select('estado, numero_pedido')
     .eq('id', id)
     .eq('ferreteria_id', session.ferreteriaId)
     .single()

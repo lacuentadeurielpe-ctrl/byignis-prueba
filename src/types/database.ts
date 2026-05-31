@@ -7,7 +7,7 @@
 // ──────────────────────────────────────────────────────────────────
 export type TipoRuc = 'sin_ruc' | 'ruc10' | 'ruc20'
 export type RegimenTributario = 'rer' | 'rmt' | 'rus' | 'general'
-export type TipoComprobante = 'nota_venta' | 'boleta' | 'factura'
+export type TipoComprobante = 'nota_venta' | 'boleta' | 'factura' | 'nota_credito' | 'nota_debito'
 export type EstadoComprobante = 'emitido' | 'anulado' | 'error'
 export type TipoPersona = 'natural' | 'juridica'
 
@@ -39,6 +39,7 @@ export type EstadoPedido =
   | 'enviado'
   | 'entregado'
   | 'cancelado'
+  | 'devuelto'
 
 export type EstadoPago =
   | 'pendiente'
@@ -146,8 +147,10 @@ export interface Comprobante {
   cliente_ruc_dni: string | null
   nubefact_id: string | null         // F3
   nubefact_hash: string | null       // F3
+  nubefact_qr_cadena: string | null  // F3
   xml_url: string | null             // F3
   emitido_por: string | null         // 'bot' | 'dashboard'
+  comprobante_referencia_id: string | null // Referencia a boleta/factura original
   created_at: string
 }
 
@@ -181,6 +184,8 @@ export interface Producto {
   umbral_negociacion_cantidad: number | null
   afecto_igv: boolean            // F1: si aplica IGV al producto
   venta_sin_stock: boolean       // permite vender aunque stock = 0
+  codigo_barras: string | null   // código escaneable
+  facturable: boolean            // admite envío a SUNAT (comprado con factura)
   activo: boolean
   proveedor?: string | null
   marca?: string | null
@@ -245,13 +250,29 @@ export interface ConfiguracionBot {
   umbral_upsell_soles: number        // F5: monto mínimo S/ para activar upsell — default 0
 }
 
+export type TipoCliente = 'persona' | 'empresa' | 'anonimo'
+
 export interface Cliente {
   id: string
   ferreteria_id: string
-  telefono: string
+  telefono: string | null
   nombre: string | null
-  ruc_cliente: string | null     // F1: RUC del cliente (para facturas)
+  // Identificación fiscal
+  dni_ruc: string | null          // DNI (8 dígitos) o RUC (11 dígitos)
+  // Tipo de cliente
+  tipo: TipoCliente               // 'persona' | 'empresa' | 'anonimo'
+  // Perfil extendido
+  alias: string | null            // apodo interno del vendedor
+  email: string | null
+  telefono_secundario: string | null
+  direccion_habitual: string | null
+  tags: string[]                  // ['vip', 'mayorista', 'constructor', ...]
+  notas_internas: string | null
+  // Legado
+  ruc_cliente: string | null      // legacy — usar dni_ruc
   tipo_persona: TipoPersona | null
+  // Memoria del bot
+  perfil: Record<string, unknown>
   created_at: string
   updated_at: string
 }
@@ -601,6 +622,41 @@ export interface LibroContable {
   cerrado_at: string | null
   created_at: string
   updated_at: string
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ORDENES DE COMPRA (PROVEEDORES)
+// ══════════════════════════════════════════════════════════════════
+
+export type EstadoOrdenCompra = 'borrador' | 'enviado' | 'entregado' | 'cancelado'
+
+export interface OrdenCompra {
+  id: string
+  ferreteria_id: string
+  proveedor: string
+  numero_orden: string
+  estado: EstadoOrdenCompra
+  costo_total: number
+  notas: string | null
+  created_at: string
+  updated_at: string
+  // joins
+  items_orden_compra?: ItemOrdenCompra[]
+}
+
+export interface ItemOrdenCompra {
+  id: string
+  orden_compra_id: string
+  producto_id: string | null
+  nombre_producto: string
+  marca: string | null
+  unidad: string
+  cantidad: number
+  precio_unitario: number
+  subtotal: number
+  created_at: string
+  // joins
+  productos?: Producto
 }
 
 // Ferreteria extendida con campos SaaS

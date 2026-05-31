@@ -5,9 +5,12 @@ import { useRouter } from 'next/navigation'
 import { cn, formatPEN, formatFecha, formatFechaHoraLima, labelEstadoPedido, colorEstadoPedido, labelEstadoPago, colorEstadoPago, matchesFuzzy } from '@/lib/utils'
 import { ChevronDown, Package, Loader2, Search, X, FileText, Send, ExternalLink, Plus, Bell, Download, CreditCard, CheckCircle2, Mic, Clock, Trash2 } from 'lucide-react'
 import NuevoPedidoModal from './NuevoPedidoModal'
+import { toast } from 'sonner'
 import PedidoVozModal from './PedidoVozModal'
+import EditarPedidoModal from './EditarPedidoModal'
 import ModalEmitirBoleta from '@/components/comprobantes/ModalEmitirBoleta'
 import ModalEmitirFactura from '@/components/comprobantes/ModalEmitirFactura'
+import ModalNotaCredito from '@/components/comprobantes/ModalNotaCredito'
 import { createClient } from '@/lib/supabase/client'
 import type { Rol } from '@/lib/auth/roles'
 import { checkPermiso, type PermisoMap } from '@/lib/auth/permisos'
@@ -58,10 +61,11 @@ interface Pedido {
   eta_minutos: number | null
   direccion_entrega: string | null
   fecha_entrega_programada: string | null
-  clientes: { nombre: string | null; telefono: string } | null
+  clientes: { nombre: string | null; telefono: string | null; dni_ruc: string | null } | null
   zonas_delivery: { nombre: string } | null
   items_pedido: ItemPedido[]
   entregas: EntregaResumen[] | null
+  comprobantes?: { id: string; tipo: string; numero_completo: string; estado: string; pdf_url: string | null }[]
 }
 
 // ── Helpers de pago ───────────────────────────────────────────────────────────
@@ -161,22 +165,48 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
   // Modal emitir boleta electrónica (F3)
   const [modalBoleta, setModalBoleta] = useState<PedidoDB | null>(null)
   // Boletas ya emitidas en esta sesión: pedidoId → { numeroCompleto, pdfUrl }
-  const [boletasEmitidas, setBoletasEmitidas] = useState<Record<string, { numeroCompleto: string; pdfUrl?: string }>>({})
+  const [boletasEmitidas, setBoletasEmitidas] = useState<Record<string, { numeroCompleto: string; pdfUrl?: string }>>(() => {
+    const init: Record<string, { numeroCompleto: string; pdfUrl?: string }> = {}
+    for (const p of pedidos) {
+      const b = p.comprobantes?.find(c => c.tipo === 'boleta' && c.estado === 'emitido')
+      if (b) init[p.id] = { numeroCompleto: b.numero_completo, pdfUrl: b.pdf_url ?? undefined }
+    }
+    return init
+  })
 
-  function handleBoletaEmitida(pedidoId: string, resultado: { numeroCompleto: string; pdfUrl?: string }) {
+  function handleBoletaEmitida(pedidoId: string, resultado: { numeroCompleto: string; pdfUrl?: string; pdfUrlSecundario?: string }) {
     setBoletasEmitidas((prev) => ({ ...prev, [pedidoId]: resultado }))
+    if (resultado.pdfUrlSecundario) {
+      setTimeout(() => window.open(resultado.pdfUrlSecundario, '_blank'), 100)
+    }
     setModalBoleta(null)
   }
 
   // Modal emitir factura electrónica (F4)
   const [modalFactura, setModalFactura] = useState<PedidoDB | null>(null)
   // Facturas ya emitidas en esta sesión: pedidoId → { numeroCompleto, pdfUrl }
-  const [facturasEmitidas, setFacturasEmitidas] = useState<Record<string, { numeroCompleto: string; pdfUrl?: string }>>({})
+  const [facturasEmitidas, setFacturasEmitidas] = useState<Record<string, { numeroCompleto: string; pdfUrl?: string }>>(() => {
+    const init: Record<string, { numeroCompleto: string; pdfUrl?: string }> = {}
+    for (const p of pedidos) {
+      const f = p.comprobantes?.find(c => c.tipo === 'factura' && c.estado === 'emitido')
+      if (f) init[p.id] = { numeroCompleto: f.numero_completo, pdfUrl: f.pdf_url ?? undefined }
+    }
+    return init
+  })
 
-  function handleFacturaEmitida(pedidoId: string, resultado: { numeroCompleto: string; pdfUrl?: string }) {
+  function handleFacturaEmitida(pedidoId: string, resultado: { comprobanteId: string; numeroCompleto: string; pdfUrl?: string; pdfUrlSecundario?: string }) {
     setFacturasEmitidas((prev) => ({ ...prev, [pedidoId]: resultado }))
+    if (resultado.pdfUrlSecundario) {
+      setTimeout(() => window.open(resultado.pdfUrlSecundario, '_blank'), 100)
+    }
     setModalFactura(null)
   }
+
+  // Modal Nota Crédito
+  const [modalNC, setModalNC] = useState<{ pedido: PedidoDB, comprobanteOriginal: { id: string, numeroCompleto: string, tipo: string } } | null>(null)
+
+  // Modal editar pedido
+  const [modalEditar, setModalEditar] = useState<typeof pedidos[0] | null>(null)
 
   // Realtime: notificar cuando llega un pedido nuevo
   useEffect(() => {
@@ -193,8 +223,11 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
     return () => { supabase.removeChannel(channel) }
   }, [ferreteriaId])
 
-  // Estado de comprobantes por pedido: { pedidoId: { url, cargando, reenviando, error } }
+  // Estado de comprobantes por pedido
   const [comprobantes, setComprobantes] = useState<Record<string, {
+    id?: string
+    numero_completo?: string
+    tipo?: string
     url: string | null
     cargando: boolean
     reenviando: boolean
@@ -228,14 +261,25 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
       const res = await fetch(`/api/orders/${pedidoId}/comprobante`)
       if (res.ok) {
         const data = await res.json()
-        patchComprobante(pedidoId, { url: data.pdf_url, cargando: false })
+        patchComprobante(pedidoId, { 
+          id: data.id, 
+          numero_completo: data.numero_completo || data.numero_comprobante, 
+          tipo: data.tipo, 
+          url: data.pdf_url || `/api/comprobantes/${data.id}/pdf`, 
+          cargando: false 
+        })
         window.open(viewerUrl(pedidoId), '_blank')
       } else if (res.status === 404) {
         // No existe — generarlo ahora
         const gen = await fetch(`/api/orders/${pedidoId}/comprobante`, { method: 'POST' })
         if (gen.ok) {
           const data = await gen.json()
-          patchComprobante(pedidoId, { url: data.pdf_url, cargando: false })
+          patchComprobante(pedidoId, { 
+            id: data.comprobanteId, 
+            numero_completo: data.numeroCompleto, 
+            url: data.pdfUrl, 
+            cargando: false 
+          })
           window.open(viewerUrl(pedidoId), '_blank')
         } else {
           throw new Error((await gen.json()).error ?? 'Error al generar')
@@ -331,8 +375,9 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
           : p))
       )
       router.refresh()
+      toast.success('Estado actualizado correctamente')
     } catch {
-      alert('Error al actualizar el estado')
+      toast.error('Error al actualizar el estado')
     } finally {
       setActualizando(null)
       setCancelDialog(null)
@@ -365,8 +410,9 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
             : p
         )
       )
+      toast.success('Pago actualizado')
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Error al actualizar el pago')
+      toast.error(e instanceof Error ? e.message : 'Error al actualizar el pago')
     } finally {
       setPagando(null)
     }
@@ -374,7 +420,10 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
 
   async function aprobarCredito() {
     if (!creditoDialog) return
-    if (!creditoDialog.fechaLimite) return alert('Selecciona la fecha límite del crédito')
+    if (!creditoDialog.fechaLimite) {
+      toast.error('Selecciona la fecha límite del crédito')
+      return
+    }
 
     setAprobandoCredito(true)
     try {
@@ -400,8 +449,9 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
         )
       )
       setCreditoDialog(null)
+      toast.success('Crédito aprobado')
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Error al aprobar crédito')
+      toast.error(e instanceof Error ? e.message : 'Error al aprobar crédito')
     } finally {
       setAprobandoCredito(false)
     }
@@ -420,8 +470,9 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
       setPedidos((prev) => prev.map((p) => p.id === pedidoId
         ? { ...p, repartidor_id: repartidorId === 'ninguno' ? null : repartidorId }
         : p))
+      toast.success('Repartidor asignado')
     } catch {
-      alert('Error al asignar repartidor')
+      toast.error('Error al asignar repartidor')
     } finally {
       setAsignando(null)
     }
@@ -979,6 +1030,19 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                       </p>
                     )}
 
+                    {/* ── Botón Editar pedido ──────────────────────────────── */}
+                    {pedido.estado_pago !== 'pagado' && !boletasEmitidas[pedido.id] && !facturasEmitidas[pedido.id] && pedido.estado !== 'cancelado' && (
+                      <div className="mb-3">
+                        <button
+                          onClick={() => setModalEditar(pedido)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium rounded-lg border border-amber-200 transition"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Editar pedido
+                        </button>
+                      </div>
+                    )}
+
                     {/* Botones de comprobante */}
                     {ESTADOS_CON_COMPROBANTE.has(pedido.estado) && (() => {
                       const cp = estadoComprobante(pedido.id)
@@ -997,6 +1061,70 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                             {cp.cargando ? 'Generando…' : 'PDF (A4)'}
                             {!cp.cargando && <ExternalLink className="w-3 h-3 opacity-60" />}
                           </button>
+
+                          {(cp.id || (boletaEmitida as any)?.comprobanteId) && (
+                            <>
+                              <button
+                                onClick={() => setModalNC({
+                                  pedido: pedido as unknown as PedidoDB,
+                                  comprobanteOriginal: {
+                                    id: (cp.id || (boletaEmitida as any)?.comprobanteId) as string,
+                                    numeroCompleto: (cp.numero_completo || boletaEmitida?.numeroCompleto) as string,
+                                    tipo: cp.tipo || 'boleta'
+                                  }
+                                })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-lg transition"
+                              >
+                                Devolución (NC)
+                              </button>
+
+                              <button
+                                onClick={async () => {
+                                  const motivo = prompt('Motivo de la anulación (Requerido por SUNAT):')
+                                  if (!motivo) return
+                                  try {
+                                    const req = await fetch(`/api/orders/${pedido.id}/comprobante/anular`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ motivo })
+                                    })
+                                    const res = await req.json()
+                                    if (res.ok) {
+                                      toast.success('Comprobante anulado correctamente.')
+                                      setTimeout(() => window.location.reload(), 1000)
+                                    } else {
+                                      toast.error('Error: ' + res.error)
+                                    }
+                                  } catch (e) {
+                                    toast.error('Error de conexión al anular')
+                                  }
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium rounded-lg transition"
+                              >
+                                Anular
+                              </button>
+
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const req = await fetch(`/api/orders/${pedido.id}/comprobante/consultar`, { method: 'POST' })
+                                    const res = await req.json()
+                                    if (res.ok) {
+                                      toast.info(res.mensaje + (res.datos?.aceptada_por_sunat ? ' (ACEPTADA)' : ' (RECHAZADA/PENDIENTE)'))
+                                      setTimeout(() => window.location.reload(), 2000)
+                                    } else {
+                                      toast.error('Error: ' + res.error)
+                                    }
+                                  } catch (e) {
+                                    toast.error('Error de conexión al consultar')
+                                  }
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition"
+                              >
+                                Consultar SUNAT
+                              </button>
+                            </>
+                          )}
 
                           <button
                             onClick={() => window.open(`/orders/print/${pedido.id}`, '_blank', 'width=400,height=600')}
@@ -1132,6 +1260,7 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
       {modalBoleta && (
         <ModalEmitirBoleta
           pedido={modalBoleta as PedidoDB}
+          clienteDniRuc={(modalBoleta as any).clientes?.dni_ruc ?? null}
           onClose={() => setModalBoleta(null)}
           onEmitida={(r) => handleBoletaEmitida(modalBoleta.id, r)}
         />
@@ -1141,8 +1270,20 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
       {modalFactura && (
         <ModalEmitirFactura
           pedido={modalFactura as PedidoDB}
+          clienteRuc={(modalFactura as any).clientes?.dni_ruc ?? null}
+          clienteRazonSocial={(modalFactura as any).clientes?.nombre ?? null}
           onClose={() => setModalFactura(null)}
           onEmitida={(r) => handleFacturaEmitida(modalFactura.id, r)}
+        />
+      )}
+
+      {/* Modal editar pedido */}
+      {modalEditar && (
+        <EditarPedidoModal
+          pedido={modalEditar}
+          productos={productos}
+          zonas={zonas}
+          onClose={() => setModalEditar(null)}
         />
       )}
     </div>

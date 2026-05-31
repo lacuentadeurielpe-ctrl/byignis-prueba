@@ -4,14 +4,19 @@ import { useState } from 'react'
 import type { Pedido } from '@/types/database'
 
 interface Props {
-  pedido:      Pedido
-  onClose:     () => void
-  onEmitida:   (resultado: { numeroCompleto: string; pdfUrl?: string }) => void
+  pedido:         Pedido
+  clienteDniRuc?: string | null   // pre-llenado desde ficha del cliente
+  onClose:        () => void
+  onEmitida:      (resultado: { comprobanteId: string; numeroCompleto: string; pdfUrl?: string; pdfUrlSecundario?: string }) => void
 }
 
-export default function ModalEmitirBoleta({ pedido, onClose, onEmitida }: Props) {
+export default function ModalEmitirBoleta({ pedido, clienteDniRuc, onClose, onEmitida }: Props) {
   const [nombre,   setNombre]   = useState(pedido.nombre_cliente ?? '')
-  const [dni,      setDni]      = useState('')
+  // Pre-llenar DNI si viene de la ficha del cliente (solo si es de 8 dígitos = DNI)
+  const dniInicial = clienteDniRuc && clienteDniRuc.replace(/\D/g, '').length === 8
+    ? clienteDniRuc.replace(/\D/g, '')
+    : ''
+  const [dni,      setDni]      = useState(dniInicial)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
 
@@ -46,7 +51,7 @@ export default function ModalEmitirBoleta({ pedido, onClose, onEmitida }: Props)
         }
       } else {
         // ok=true tanto para boleta recién emitida como para boleta ya guardada en BD
-        onEmitida({ numeroCompleto: d.numeroCompleto, pdfUrl: d.pdfUrl })
+        onEmitida({ comprobanteId: d.comprobanteId, numeroCompleto: d.numeroCompleto, pdfUrl: d.pdfUrl, pdfUrlSecundario: d.pdfUrlSecundario })
       }
     } catch {
       setError('Error de red al emitir la boleta')

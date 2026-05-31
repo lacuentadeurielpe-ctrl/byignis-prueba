@@ -5,14 +5,20 @@ import { Loader2 } from 'lucide-react'
 import type { Pedido } from '@/types/database'
 
 interface Props {
-  pedido:    Pedido
-  onClose:   () => void
-  onEmitida: (resultado: { numeroCompleto: string; pdfUrl?: string }) => void
+  pedido:               Pedido
+  clienteRuc?:          string | null   // pre-llenado desde ficha del cliente
+  clienteRazonSocial?:  string | null   // pre-llenado desde ficha del cliente
+  onClose:              () => void
+  onEmitida:            (resultado: { comprobanteId: string; numeroCompleto: string; pdfUrl?: string; pdfUrlSecundario?: string }) => void
 }
 
-export default function ModalEmitirFactura({ pedido, onClose, onEmitida }: Props) {
-  const [ruc,          setRuc]          = useState('')
-  const [razonSocial,  setRazonSocial]  = useState('')
+export default function ModalEmitirFactura({ pedido, clienteRuc, clienteRazonSocial, onClose, onEmitida }: Props) {
+  // Pre-llenar si el cliente tiene RUC en su ficha (11 dígitos = empresa)
+  const rucInicial = clienteRuc && clienteRuc.replace(/\D/g, '').length === 11
+    ? clienteRuc.replace(/\D/g, '')
+    : ''
+  const [ruc,          setRuc]          = useState(rucInicial)
+  const [razonSocial,  setRazonSocial]  = useState(clienteRazonSocial ?? '')
   const [verificando,  setVerificando]  = useState(false)
   const [rucError,     setRucError]     = useState<string | null>(null)
   const [loading,      setLoading]      = useState(false)
@@ -88,8 +94,10 @@ export default function ModalEmitirFactura({ pedido, onClose, onEmitida }: Props
         } else {
           setError(d.error ?? 'Error al emitir la factura')
         }
+      } else if (d.numeroCompleto && d.comprobanteId) {
+        onEmitida({ comprobanteId: d.comprobanteId, numeroCompleto: d.numeroCompleto, pdfUrl: d.pdfUrl, pdfUrlSecundario: d.pdfUrlSecundario })
       } else {
-        onEmitida({ numeroCompleto: d.numeroCompleto, pdfUrl: d.pdfUrl })
+        setError('Error al recibir la respuesta del servidor')
       }
     } catch {
       setError('Error de red al emitir la factura')

@@ -24,7 +24,7 @@ export type AccionAuditada =
   | 'set_pin_empleado'
   | 'crear_cotizacion'
   | 'actualizar_configuracion'
-  | 'eliminar_pedido'
+  | 'editar_pedido'
 
 interface LogAccionParams {
   ferreteriaId: string

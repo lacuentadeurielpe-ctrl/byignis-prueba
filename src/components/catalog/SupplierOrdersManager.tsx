@@ -5,19 +5,19 @@ import { useRouter } from 'next/navigation'
 import { 
   Search, Plus, ClipboardList, Trash2, Check, RefreshCw, 
   Send, Download, Tag, FileText, AlertTriangle, Building, 
-  Bookmark, Package, Sparkles, X, ChevronDown, CheckCircle,
-  Phone, User, Calendar, ShoppingBag, Eye, Trash, CheckSquare
+  Bookmark, Package, Sparkles, X, ChevronDown, CheckCircle, Save, Clock
 } from 'lucide-react'
-import { type Producto, type Categoria, type Proveedor, type OrdenCompra } from '@/types/database'
+import { type Producto, type Categoria, type OrdenCompra } from '@/types/database'
 import { formatPEN } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
-import ExcelJS from 'exceljs'
+import SupplierOrdersHistory from './SupplierOrdersHistory'
+import { toast } from 'sonner'
+import { fetcher } from '@/lib/api/client'
+import { useSWRConfig } from 'swr'
 
 interface SupplierOrdersManagerProps {
   productos: Producto[]
   categorias: Categoria[]
-  proveedoresIniciales: Proveedor[]
-  ordenesIniciales: OrdenCompra[]
 }
 
 interface ManualItem {
@@ -25,7 +25,6 @@ interface ManualItem {
   nombre: string
   marca: string
   proveedor: string
-  proveedorId?: string
   cantidad: number
   precio_compra: number
   unidad: string
@@ -33,79 +32,64 @@ interface ManualItem {
 
 export default function SupplierOrdersManager({ 
   productos: initialProductos, 
-  categorias,
-  proveedoresIniciales,
-  ordenesIniciales
+  categorias 
 }: SupplierOrdersManagerProps) {
   const router = useRouter()
-
-  // --- Tabs Principales ---
-  // 'lista' = Historial de proformas, 'nuevo' = Creador de proforma, 'proveedores' = Administrar proveedores
-  const [activeTab, setActiveTab] = useState<'lista' | 'nuevo' | 'proveedores'>('lista')
+  const { mutate } = useSWRConfig()
 
   // --- Estados locales ---
+  const [activeTab, setActiveTab] = useState<'crear' | 'historial'>('crear')
   const [productos, setProductos] = useState<Producto[]>(initialProductos)
-  const [proveedores, setProveedores] = useState<Proveedor[]>(proveedoresIniciales)
-  const [ordenes, setOrdenes] = useState<OrdenCompra[]>(ordenesIniciales)
   const [manualItems, setManualItems] = useState<ManualItem[]>([])
+
+  // --- Estados de edición de orden existente ---
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null)
+  const [editingOrderNumber, setEditingOrderNumber] = useState<string | null>(null)
+  const [editingOrderProveedor, setEditingOrderProveedor] = useState<string | null>(null)
   
   // Filtros
   const [busqueda, setBusqueda] = useState('')
   const [proveedorFiltro, setProveedorFiltro] = useState<string>('todos')
   const [mostrarTodos, setMostrarTodos] = useState(false) // false = solo stock bajo, true = todo el catálogo
   
-  // Selección en el creador
+  // Estados de edición y selección
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
   const [selectedManualIds, setSelectedManualIds] = useState<string[]>([])
+  
+  // Cantidades y costos customizados
   const [orderQuantities, setOrderQuantities] = useState<Record<string, number>>({})
   const [orderCosts, setOrderCosts] = useState<Record<string, number>>({})
-
-  // Estados de carga
+  
+  // Guardado inline
   const [savingId, setSavingId] = useState<string | null>(null)
-  const [loadingActionId, setLoadingActionId] = useState<string | null>(null)
-  const [creandoProveedor, setCreandoProveedor] = useState(false)
-  const [creandoOrden, setCreandoOrden] = useState(false)
-
-  // Selección de proveedor en la nueva orden
-  const [selectedProveedorId, setSelectedProveedorId] = useState<string>('')
-  const [customProveedorNombre, setCustomProveedorNombre] = useState<string>('')
-
-  // Edición de campos inline en el catálogo
+  const [isSavingOrder, setIsSavingOrder] = useState<string | null>(null)
   const [editProveedorId, setEditProveedorId] = useState<string | null>(null)
   const [editMarcaId, setEditMarcaId] = useState<string | null>(null)
-
-  // Formulario Proveedor
-  const [formProveedor, setFormProveedor] = useState({
-    nombre: '',
-    telefono: '',
-    contacto: ''
-  })
-
-  // Formulario Ítem Manual (Fuera de catálogo)
+  
+  // Formulario de ítem manual (fuera de catálogo)
   const [mostrarFormManual, setMostrarFormManual] = useState(false)
   const [formManual, setFormManual] = useState({
     nombre: '',
     marca: '',
+    proveedor: '',
     cantidad: 1,
     precio_compra: 0,
     unidad: 'unidad'
   })
 
-  // Toast notifications state & helper
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type })
-    setTimeout(() => {
-      setToast(curr => curr?.message === message ? null : curr)
-    }, 3500)
-  }
+  // Listar proveedores únicos existentes para filtros y autocompletado
+  const proveedoresUnicos = useMemo(() => {
+    const sets = new Set<string>()
+    productos.forEach(p => {
+      if (p.proveedor?.trim()) sets.add(p.proveedor.trim())
+    })
+    manualItems.forEach(m => {
+      if (m.proveedor?.trim()) sets.add(m.proveedor.trim())
+    })
+    return Array.from(sets).sort()
+  }, [productos, manualItems])
 
-  // --- Helpers ---
-  const getProveedorNombre = (id: string | null) => {
-    if (!id) return ''
-    return proveedores.find(p => p.id === id)?.nombre || ''
-  }
-
+  // Inicializar cantidad recomendada por defecto (mínimo - stock)
   const getCantidadRecomendada = (p: Producto) => {
     if (orderQuantities[p.id] !== undefined) return orderQuantities[p.id]
     if (p.stock_minimo !== null && p.stock < p.stock_minimo) {
@@ -114,12 +98,13 @@ export default function SupplierOrdersManager({
     return 1
   }
 
+  // Costo por defecto
   const getCostoDefecto = (p: Producto) => {
     if (orderCosts[p.id] !== undefined) return orderCosts[p.id]
     return p.precio_compra || 0
   }
 
-  // --- Filtrado del Catálogo para Nueva Orden ---
+  // Filtrado de productos del catálogo
   const productosFiltrados = useMemo(() => {
     return productos.filter(p => {
       // Búsqueda por término (nombre, descripción, marca, proveedor)
@@ -132,13 +117,10 @@ export default function SupplierOrdersManager({
 
       // Filtro de proveedor
       let matchProveedor = true
-      if (selectedProveedorId) {
-        const pNombre = getProveedorNombre(selectedProveedorId)
-        matchProveedor = p.proveedor?.trim().toLowerCase() === pNombre.toLowerCase()
-      } else if (proveedorFiltro === 'sin_proveedor') {
-        matchProveedor = !p.proveedor || p.proveedor.trim() === ''
+      if (proveedorFiltro === 'sin_provider' || proveedorFiltro === 'sin_proveedor') {
+        matchProveedor = !p.proveedor || p.proveedor.trim() === '' || p.proveedor.trim() === 'Sin proveedor asignado'
       } else if (proveedorFiltro !== 'todos') {
-        matchProveedor = p.proveedor?.trim().toLowerCase() === proveedorFiltro.toLowerCase()
+        matchProveedor = p.proveedor?.trim() === proveedorFiltro
       }
 
       // Filtro de stock bajo (alerta)
@@ -147,21 +129,131 @@ export default function SupplierOrdersManager({
 
       return matchTerm && matchProveedor && matchStock
     })
-  }, [productos, busqueda, proveedorFiltro, selectedProveedorId, mostrarTodos, proveedores])
+  }, [productos, busqueda, proveedorFiltro, mostrarTodos])
 
-  // --- Proveedor activo para nueva orden ---
-  const activeProveedorNombre = useMemo(() => {
-    if (selectedProveedorId) {
-      return getProveedorNombre(selectedProveedorId)
+  // --- Acciones de actualización inline ---
+  const handleSaveProductField = async (productId: string, field: 'proveedor' | 'marca', value: string) => {
+    setSavingId(productId)
+    try {
+      await fetcher(`/api/products/${productId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value.trim() || null })
+      })
+      setProductos(prev => prev.map(p => p.id === productId ? { ...p, [field]: value.trim() || null } : p))
+      toast.success('Producto actualizado')
+    } catch (e: any) {
+      toast.error(e.message || 'Error al actualizar')
+    } finally {
+      setSavingId(null)
+      setEditProveedorId(null)
+      setEditMarcaId(null)
     }
-    return customProveedorNombre.trim()
-  }, [selectedProveedorId, customProveedorNombre, proveedores])
+  }
 
-  // --- Totales de la nueva orden ---
-  const statsNuevaOrden = useMemo(() => {
+  // --- Manejo de productos manuales ---
+  const handleAddManualItem = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!formManual.nombre.trim()) return
+
+    const newItem: ManualItem = {
+      id: `manual_${Date.now()}`,
+      nombre: formManual.nombre.trim(),
+      marca: formManual.marca.trim(),
+      proveedor: formManual.proveedor.trim(),
+      cantidad: Number(formManual.cantidad) || 1,
+      precio_compra: Number(formManual.precio_compra) || 0,
+      unidad: formManual.unidad
+    }
+
+    setManualItems(prev => [...prev, newItem])
+    setSelectedManualIds(prev => [...prev, newItem.id]) // Auto-seleccionar para el pedido
+    
+    // Reset form
+    setFormManual({
+      nombre: '',
+      marca: '',
+      proveedor: '',
+      cantidad: 1,
+      precio_compra: 0,
+      unidad: 'unidad'
+    })
+    setMostrarFormManual(false)
+  }
+
+  const handleRemoveManualItem = (id: string) => {
+    setManualItems(prev => prev.filter(m => m.id !== id))
+    setSelectedManualIds(prev => prev.filter(mid => mid !== id))
+  }
+
+  // --- Toggle de selección ---
+  const handleToggleSelectProduct = (id: string) => {
+    setSelectedProductIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const handleToggleSelectManual = (id: string) => {
+    setSelectedManualIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const handleSelectAllFiltered = () => {
+    const filteredIds = productosFiltrados.map(p => p.id)
+    const allSelected = filteredIds.every(id => selectedProductIds.includes(id))
+    
+    if (allSelected) {
+      // Deseleccionar los filtrados
+      setSelectedProductIds(prev => prev.filter(id => !filteredIds.includes(id)))
+    } else {
+      // Seleccionar los filtrados sin duplicar
+      setSelectedProductIds(prev => Array.from(new Set([...prev, ...filteredIds])))
+    }
+  }
+
+  // --- Agrupación final por Proveedor ---
+  const orderGroups = useMemo(() => {
+    const groups: Record<string, { catalog: { product: Producto; cantidad: number; costo: number }[]; manual: ManualItem[] }> = {}
+
+    // Agregar productos de catálogo seleccionados
+    selectedProductIds.forEach(id => {
+      const prod = productos.find(p => p.id === id)
+      if (!prod) return
+      
+      const provName = prod.proveedor?.trim() || 'Sin proveedor asignado'
+      if (!groups[provName]) {
+        groups[provName] = { catalog: [], manual: [] }
+      }
+      
+      const cantidad = orderQuantities[prod.id] !== undefined ? orderQuantities[prod.id] : getCantidadRecomendada(prod)
+      const costo = orderCosts[prod.id] !== undefined ? orderCosts[prod.id] : getCostoDefecto(prod)
+      
+      groups[provName].catalog.push({ product: prod, cantidad, costo })
+    })
+
+    // Agregar productos manuales seleccionados
+    selectedManualIds.forEach(id => {
+      const item = manualItems.find(m => m.id === id)
+      if (!item) return
+      
+      const provName = item.proveedor?.trim() || 'Sin proveedor asignado'
+      if (!groups[provName]) {
+        groups[provName] = { catalog: [], manual: [] }
+      }
+      
+      groups[provName].manual.push(item)
+    })
+
+    return groups
+  }, [selectedProductIds, selectedManualIds, productos, manualItems, orderQuantities, orderCosts])
+
+  // Totales
+  const stats = useMemo(() => {
     let totalItems = 0
     let totalCosto = 0
 
+    // Catálogo
     selectedProductIds.forEach(id => {
       const prod = productos.find(p => p.id === id)
       if (!prod) return
@@ -171,6 +263,7 @@ export default function SupplierOrdersManager({
       totalCosto += cantidad * costo
     })
 
+    // Manuales
     selectedManualIds.forEach(id => {
       const item = manualItems.find(m => m.id === id)
       if (!item) return
@@ -181,599 +274,707 @@ export default function SupplierOrdersManager({
     return { totalItems, totalCosto }
   }, [selectedProductIds, selectedManualIds, productos, manualItems, orderQuantities, orderCosts])
 
-  // --- Selección e Interacción de Ítems ---
-  const handleToggleSelectManual = (id: string) => {
-    setSelectedManualIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
-  }
+  // --- Herramientas de salida ---
+  const copyWhatsAppMessage = (proveedor: string) => {
+    const group = orderGroups[proveedor]
+    if (!group) return
 
-  const handleToggleSelectProduct = (id: string) => {
-    setSelectedProductIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
-  }
-
-  const handleSelectAllFiltered = () => {
-    const allFilteredIds = productosFiltrados.map(p => p.id)
-    const allSelected = allFilteredIds.every(id => selectedProductIds.includes(id))
-    if (allSelected) {
-      setSelectedProductIds(prev => prev.filter(id => !allFilteredIds.includes(id)))
-    } else {
-      setSelectedProductIds(prev => Array.from(new Set([...prev, ...allFilteredIds])))
-    }
-  }
-
-  // --- Acciones de base de datos ---
-
-  // 1. Agregar Proveedor
-  const handleAddProveedor = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formProveedor.nombre.trim()) return
-    setCreandoProveedor(true)
-
-    try {
-      const res = await fetch('/api/reabastecer/proveedores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formProveedor)
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setProveedores(prev => [...prev, data].sort((a,b) => a.nombre.localeCompare(b.nombre)))
-        setFormProveedor({ nombre: '', telefono: '', contacto: '' })
-        showToast('Proveedor agregado con éxito.', 'success')
-      } else {
-        showToast(`Error: ${data.error}`, 'error')
-      }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setCreandoProveedor(false)
-    }
-  }
-
-  // 2. Guardar Proforma de Compra
-  const handleSaveOrden = async () => {
-    const provNombre = activeProveedorNombre
-    if (!provNombre) {
-      showToast('Debes seleccionar o escribir un proveedor para esta orden.', 'error')
-      return
-    }
-
-    const items: any[] = []
-    
-    // Items del catálogo
-    selectedProductIds.forEach(id => {
-      const prod = productos.find(p => p.id === id)
-      if (!prod) return
-      items.push({
-        producto_id: prod.id,
-        nombre: prod.nombre,
-        marca: prod.marca || null,
-        cantidad: orderQuantities[prod.id] !== undefined ? orderQuantities[prod.id] : getCantidadRecomendada(prod),
-        precio_compra: orderCosts[prod.id] !== undefined ? orderCosts[prod.id] : getCostoDefecto(prod),
-        unidad: prod.unidad
-      })
-    })
-
-    // Items manuales
-    selectedManualIds.forEach(id => {
-      const item = manualItems.find(m => m.id === id)
-      if (!item) return
-      items.push({
-        producto_id: null,
-        nombre: item.nombre,
-        marca: item.marca || null,
-        cantidad: item.cantidad,
-        precio_compra: item.precio_compra,
-        unidad: item.unidad
-      })
-    })
-
-    if (items.length === 0) {
-      showToast('Debes seleccionar al menos un producto.', 'error')
-      return
-    }
-
-    setCreandoOrden(true)
-    try {
-      const res = await fetch('/api/reabastecer/ordenes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          proveedor_id: selectedProveedorId || null,
-          proveedor_nombre: provNombre,
-          total: statsNuevaOrden.totalCosto,
-          items
-        })
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setOrdenes(prev => [data, ...prev])
-        // Limpiar selección
-        setSelectedProductIds([])
-        setSelectedManualIds([])
-        setOrderQuantities({})
-        setOrderCosts({})
-        setManualItems([])
-        setSelectedProveedorId('')
-        setCustomProveedorNombre('')
-        showToast('Proforma de compra guardada correctamente.', 'success')
-        setActiveTab('lista')
-      } else {
-        showToast(`Error al guardar: ${data.error}`, 'error')
-      }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setCreandoOrden(false)
-    }
-  }
-
-  // 3. Confirmar Entrega (Ingresar stock e inventario)
-  const handleRecibirOrden = async (ordenId: string) => {
-    if (!confirm('¿Confirmas que el pedido ya llegó y deseas sumar esta mercadería al inventario actual? Los productos que no existían se crearán automáticamente.')) return
-    setLoadingActionId(ordenId)
-
-    try {
-      const res = await fetch(`/api/reabastecer/ordenes/${ordenId}/recibir`, {
-        method: 'POST'
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setOrdenes(prev => prev.map(o => o.id === ordenId ? { ...o, estado: 'recibido' } : o))
-        
-        // Recargar productos desde el servidor para reflejar los nuevos stocks y productos
-        const resProd = await fetch('/api/products')
-        if (resProd.ok) {
-          const freshProds = await resProd.json()
-          setProductos(freshProds)
-        }
-        
-        showToast('¡Stock ingresado al inventario con éxito!', 'success')
-      } else {
-        showToast(`Error: ${data.error}`, 'error')
-      }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoadingActionId(null)
-    }
-  }
-
-  // 4. Cancelar Orden
-  const handleCancelarOrden = async (ordenId: string) => {
-    if (!confirm('¿Seguro que deseas cancelar esta orden de compra?')) return
-    setLoadingActionId(ordenId)
-
-    try {
-      const res = await fetch(`/api/reabastecer/ordenes/${ordenId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estado: 'cancelado' })
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setOrdenes(prev => prev.map(o => o.id === ordenId ? { ...o, estado: 'cancelado' } : o))
-        showToast('Orden cancelada.', 'info')
-      } else {
-        showToast(`Error: ${data.error}`, 'error')
-      }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoadingActionId(null)
-    }
-  }
-
-  // 5. Eliminar Orden
-  const handleEliminarOrden = async (ordenId: string) => {
-    if (!confirm('¿Seguro que quieres eliminar esta proforma de la base de datos? Esta acción es definitiva.')) return
-    setLoadingActionId(ordenId)
-
-    try {
-      const res = await fetch(`/api/reabastecer/ordenes/${ordenId}`, {
-        method: 'DELETE'
-      })
-      if (res.ok) {
-        setOrdenes(prev => prev.filter(o => o.id !== ordenId))
-        showToast('Proforma eliminada.', 'info')
-      } else {
-        const data = await res.json()
-        showToast(`Error: ${data.error}`, 'error')
-      }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoadingActionId(null)
-    }
-  }
-
-  // 6. Actualización inline de productos
-  const handleSaveProductField = async (productId: string, field: 'proveedor' | 'marca', value: string) => {
-    setSavingId(productId)
-    try {
-      const res = await fetch(`/api/products/${productId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [field]: value.trim() || null })
-      })
-      if (res.ok) {
-        setProductos(prev => prev.map(p => p.id === productId ? { ...p, [field]: value.trim() || null } : p))
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setSavingId(null)
-      setEditProveedorId(null)
-      setEditMarcaId(null)
-    }
-  }
-
-  // --- Agregar Ítem Manual ---
-  const handleAddManualItem = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!formManual.nombre.trim()) return
-
-    const newItem: ManualItem = {
-      id: `manual_${Date.now()}`,
-      nombre: formManual.nombre.trim(),
-      marca: formManual.marca.trim(),
-      proveedor: activeProveedorNombre,
-      proveedorId: selectedProveedorId || undefined,
-      cantidad: Number(formManual.cantidad) || 1,
-      precio_compra: Number(formManual.precio_compra) || 0,
-      unidad: formManual.unidad
-    }
-
-    setManualItems(prev => [...prev, newItem])
-    setSelectedManualIds(prev => [...prev, newItem.id]) // Seleccionar de inmediato
-    
-    setFormManual({
-      nombre: '',
-      marca: '',
-      cantidad: 1,
-      precio_compra: 0,
-      unidad: 'unidad'
-    })
-    setMostrarFormManual(false)
-  }
-
-  // --- Herramientas de Salida y Compartir ---
-  const getWhatsAppText = (orden: OrdenCompra) => {
-    let text = `📦 *Proforma de Compra - Abastecimiento*\n`
-    text += `*Proveedor:* ${orden.proveedor_nombre}\n`
-    text += `*Estado:* ${orden.estado.toUpperCase()}\n`
-    text += `*Fecha:* ${new Date(orden.created_at).toLocaleDateString()}\n`
+    let text = `📦 *Solicitud de Reabastecimiento*\n`
+    text += `*Proveedor:* ${proveedor}\n`
+    text += `*Fecha:* ${new Date().toLocaleDateString()}\n`
     text += `-------------------------------------------\n\n`
 
     let index = 1
-    orden.items?.forEach(item => {
+    group.catalog.forEach(item => {
+      const marcaStr = item.product.marca ? ` (${item.product.marca})` : ''
+      text += `${index++}. ${item.cantidad} ${item.product.unidad}(s) - *${item.product.nombre}*${marcaStr}\n`
+    })
+
+    group.manual.forEach(item => {
       const marcaStr = item.marca ? ` (${item.marca})` : ''
-      text += `${index++}. ${item.cantidad} ${item.unidad}(s) - *${item.nombre}*${marcaStr}\n`
+      text += `${index++}. ${item.cantidad} ${item.unidad}(s) - *${item.nombre}*${marcaStr} _[Nuevo]_\n`
     })
 
     text += `\n-------------------------------------------\n`
-    text += `*Total Estimado:* S/ ${orden.total.toFixed(2)}\n\n`
-    text += `Por favor confirmar precios y despacho.`
-    return text
-  }
+    text += `Por favor confirmar precios y disponibilidad de stock.`
 
-  const copyWhatsAppMessage = (orden: OrdenCompra) => {
-    const text = getWhatsAppText(orden)
     navigator.clipboard.writeText(text)
-    showToast(`Mensaje para "${orden.proveedor_nombre}" copiado al portapapeles.`, 'success')
+    toast.success(`Mensaje de WhatsApp para "${proveedor}" copiado al portapapeles.`)
   }
 
-  const exportExcel = async (orden: OrdenCompra) => {
+  const exportCsv = (proveedor: string) => {
+    const group = orderGroups[proveedor]
+    if (!group) return
+
+    let csvContent = "data:text/csv;charset=utf-8,"
+    csvContent += "Producto,Marca,Cantidad,Unidad,Costo Unitario,Subtotal,Tipo\n"
+
+    group.catalog.forEach(item => {
+      const sub = item.cantidad * item.costo
+      csvContent += `"${item.product.nombre}","${item.product.marca || ''}",${item.cantidad},"${item.product.unidad}",${item.costo},${sub},"Catalogo"\n`
+    })
+
+    group.manual.forEach(item => {
+      const sub = item.cantidad * item.precio_compra
+      csvContent += `"${item.nombre}","${item.marca || ''}",${item.cantidad},"${item.unidad}",${item.precio_compra},${sub},"Nuevo"\n`
+    })
+
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", `Pedido_${proveedor.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0,10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+  const handleStartEditOrder = (orden: OrdenCompra) => {
+    const targetProveedor = orden.proveedor || 'Sin proveedor asignado'
+    setEditingOrderId(orden.id)
+    setEditingOrderNumber(orden.numero_orden)
+    setEditingOrderProveedor(targetProveedor)
+
+    // Limpiar selección actual
+    setSelectedProductIds([])
+    setSelectedManualIds([])
+    setOrderQuantities({})
+    setOrderCosts({})
+    setManualItems([])
+
+    const catalogIds: string[] = []
+    const manualItemsList: ManualItem[] = []
+    const manualIds: string[] = []
+    const quantities: Record<string, number> = {}
+    const costs: Record<string, number> = {}
+
+    orden.items_orden_compra?.forEach(item => {
+      if (item.producto_id) {
+        catalogIds.push(item.producto_id)
+        quantities[item.producto_id] = item.cantidad
+        costs[item.producto_id] = item.precio_unitario
+      } else {
+        const mId = `manual_edit_${Date.now()}_${Math.random()}`
+        manualIds.push(mId)
+        manualItemsList.push({
+          id: mId,
+          nombre: item.nombre_producto,
+          marca: item.marca || '',
+          proveedor: targetProveedor,
+          cantidad: item.cantidad,
+          precio_compra: item.precio_unitario,
+          unidad: item.unidad
+        })
+      }
+    })
+
+    setSelectedProductIds(catalogIds)
+    setOrderQuantities(quantities)
+    setOrderCosts(costs)
+    setManualItems(manualItemsList)
+    setSelectedManualIds(manualIds)
+
+    if (!orden.proveedor || orden.proveedor === 'Sin proveedor asignado') {
+      setProveedorFiltro('sin_proveedor')
+    } else {
+      setProveedorFiltro(orden.proveedor)
+    }
+    setMostrarTodos(true)
+    setActiveTab('crear')
+  }
+
+  const handleCancelEdit = () => {
+    setEditingOrderId(null)
+    setEditingOrderNumber(null)
+    setEditingOrderProveedor(null)
+    setSelectedProductIds([])
+    setSelectedManualIds([])
+    setOrderQuantities({})
+    setOrderCosts({})
+    setManualItems([])
+    setProveedorFiltro('todos')
+  }
+
+  const handleSaveOrder = async (proveedor: string) => {
+    const group = orderGroups[proveedor]
+    if (!group) return
+
+    const items = [
+      ...group.catalog.map(c => ({
+        producto_id: c.product.id,
+        nombre_producto: c.product.nombre,
+        marca: c.product.marca,
+        unidad: c.product.unidad,
+        cantidad: c.cantidad,
+        precio_unitario: c.costo,
+        subtotal: c.cantidad * c.costo
+      })),
+      ...group.manual.map(m => ({
+        producto_id: null,
+        nombre_producto: m.nombre,
+        marca: m.marca,
+        unidad: m.unidad,
+        cantidad: m.cantidad,
+        precio_unitario: m.precio_compra,
+        subtotal: m.cantidad * m.precio_compra
+      }))
+    ]
+
+    const totalCostoGroup = items.reduce((s, i) => s + i.subtotal, 0)
+
+    setIsSavingOrder(proveedor)
     try {
-      const workbook = new ExcelJS.Workbook()
-      const worksheet = workbook.addWorksheet('Orden de Compra')
+      const isEditing = editingOrderId !== null && proveedor === editingOrderProveedor
+      const url = isEditing ? `/api/ordenes-compra/${editingOrderId}` : '/api/ordenes-compra'
+      const method = isEditing ? 'PATCH' : 'POST'
 
-      // Configurar anchos de columna
-      worksheet.getColumn(1).width = 42 // Producto
-      worksheet.getColumn(2).width = 18 // Marca
-      worksheet.getColumn(3).width = 12 // Cantidad
-      worksheet.getColumn(4).width = 12 // Unidad
-      worksheet.getColumn(5).width = 18 // Costo Unitario
-      worksheet.getColumn(6).width = 18 // Subtotal
-
-      // Título con estética premium
-      worksheet.addRow([])
-      const titleRow = worksheet.addRow(['PROFORMA DE COMPRA - REABASTECIMIENTO'])
-      titleRow.getCell(1).font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF1F2937' } }
-      worksheet.mergeCells(`A${titleRow.number}:F${titleRow.number}`)
-      worksheet.getRow(titleRow.number).height = 30
-
-      // Proveedor y Fecha
-      const provRow = worksheet.addRow([`Proveedor: ${orden.proveedor_nombre}`])
-      provRow.getCell(1).font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF4B5563' } }
-      worksheet.mergeCells(`A${provRow.number}:F${provRow.number}`)
-      worksheet.getRow(provRow.number).height = 18
-
-      const dateRow = worksheet.addRow([`Fecha de Emisión: ${new Date(orden.created_at).toLocaleDateString()}`])
-      dateRow.getCell(1).font = { name: 'Calibri', size: 9, italic: true, color: { argb: 'FF6B7280' } }
-      worksheet.mergeCells(`A${dateRow.number}:F${dateRow.number}`)
-      worksheet.getRow(dateRow.number).height = 18
-
-      worksheet.addRow([]) // Fila vacía de separación
-
-      // Encabezados de Tabla
-      const headerRow = worksheet.addRow(['Producto', 'Marca', 'Cantidad', 'Unidad', 'Costo Unitario', 'Subtotal'])
-      headerRow.height = 25
-      headerRow.eachCell((cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF1F2937' } // Charcoal
-        }
-        cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } }
-        cell.alignment = { vertical: 'middle', horizontal: 'center' }
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-          bottom: { style: 'medium', color: { argb: 'FF111827' } }
-        }
-      })
-
-      // Datos de los items
-      orden.items?.forEach((item, index) => {
-        const sub = item.cantidad * item.precio_compra
-        const row = worksheet.addRow([
-          item.nombre,
-          item.marca || '—',
-          item.cantidad,
-          item.unidad,
-          item.precio_compra,
-          sub
-        ])
-        row.height = 20
-
-        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }
-        row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' }
-        row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' }
-        row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' }
-        
-        row.getCell(5).numFmt = '"S/" #,##0.00'
-        row.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' }
-
-        row.getCell(6).numFmt = '"S/" #,##0.00'
-        row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' }
-
-        // Cebra y Bordes
-        const isEven = index % 2 === 1
-        row.eachCell((cell) => {
-          cell.font = { name: 'Calibri', size: 10 }
-          if (isEven) {
-            cell.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFF9FAFB' }
-            }
-          }
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-          }
+      const orden = await fetcher(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          proveedor,
+          costo_total: totalCostoGroup,
+          items
         })
       })
 
-      // Fila de Total
-      const totalRow = worksheet.addRow(['TOTAL ESTIMADO', '', '', '', '', orden.total])
-      worksheet.mergeCells(`A${totalRow.number}:E${totalRow.number}`)
-      totalRow.height = 25
-
-      totalRow.getCell(1).font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF1F2937' } }
-      totalRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' }
-
-      totalRow.getCell(6).font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1E40AF' } }
-      totalRow.getCell(6).numFmt = '"S/" #,##0.00'
-      totalRow.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' }
-      totalRow.getCell(6).border = {
-        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-        bottom: { style: 'double', color: { argb: 'FF1E40AF' } }
+      toast.success(isEditing ? 'Orden actualizada correctamente.' : 'Orden guardada correctamente.')
+      window.open(`/api/ordenes-compra/${orden.id}/pdf`, '_blank')
+      
+      // Invalidate SWR cache
+      mutate('/api/ordenes-compra')
+      
+      if (isEditing) {
+        handleCancelEdit()
+        setActiveTab('historial')
+      } else {
+        // Limpiar selección para este proveedor
+        const catIds = group.catalog.map(c => c.product.id)
+        const manIds = group.manual.map(m => m.id)
+        setSelectedProductIds(prev => prev.filter(id => !catIds.includes(id)))
+        setSelectedManualIds(prev => prev.filter(id => !manIds.includes(id)))
       }
-
-      // Escribir y descargar
-      const buffer = await workbook.xlsx.writeBuffer()
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      const link = document.createElement("a")
-      link.href = URL.createObjectURL(blob)
-      link.download = `Proforma_Compra_${orden.proveedor_nombre.replace(/\s+/g, '_')}_${orden.id.slice(0, 8)}.xlsx`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-    } catch (err) {
-      console.error('Error generando excel:', err)
-      showToast('Ocurrió un error al generar el archivo Excel.', 'error')
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e.message || 'Ocurrió un error al guardar la orden.')
+    } finally {
+      setIsSavingOrder(null)
     }
   }
 
   return (
     <div className="space-y-6">
-      
-      {/* Sub-navegación premium */}
-      <div className="flex border-b border-zinc-100 bg-white p-2.5 rounded-2xl border border-zinc-200/60 shadow-sm gap-2">
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-zinc-200 mb-6">
         <button
-          onClick={() => setActiveTab('lista')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition ${
-            activeTab === 'lista'
-              ? 'bg-zinc-950 text-white'
-              : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
+          onClick={() => setActiveTab('crear')}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === 'crear' 
+              ? 'border-violet-600 text-violet-700' 
+              : 'border-transparent text-zinc-500 hover:text-zinc-800'
           }`}
         >
-          <ClipboardList className="w-4 h-4" />
-          Proformas Guardadas
+          <div className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Crear Orden
+          </div>
         </button>
-
         <button
-          onClick={() => setActiveTab('nuevo')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition ${
-            activeTab === 'nuevo'
-              ? 'bg-zinc-950 text-white'
-              : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
+          onClick={() => setActiveTab('historial')}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${
+            activeTab === 'historial' 
+              ? 'border-violet-600 text-violet-700' 
+              : 'border-transparent text-zinc-500 hover:text-zinc-800'
           }`}
         >
-          <ShoppingBag className="w-4 h-4" />
-          Nueva Proforma
-        </button>
-
-        <button
-          onClick={() => setActiveTab('proveedores')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition ${
-            activeTab === 'proveedores'
-              ? 'bg-zinc-950 text-white'
-              : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
-          }`}
-        >
-          <Building className="w-4 h-4" />
-          Proveedores
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            Historial de Órdenes
+          </div>
         </button>
       </div>
 
-      {/* ========================================================================= */}
-      {/* PESTAÑA A: HISTORIAL DE PROFORMAS                                         */}
-      {/* ========================================================================= */}
-      {activeTab === 'lista' && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex items-center justify-between">
-              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Historial de Reposiciones y Proformas</h3>
-              <span className="text-xs text-zinc-400 font-semibold">{ordenes.length} órdenes registradas</span>
+      {editingOrderId && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-zinc-900">
+                Modo Edición Activo: {editingOrderNumber}
+              </p>
+              <p className="text-xs text-zinc-600">
+                Estás editando la orden para <strong>{editingOrderProveedor}</strong>. Puedes modificar cantidades, precios, agregar o quitar productos.
+              </p>
             </div>
+          </div>
+          <button
+            onClick={handleCancelEdit}
+            className="px-3.5 py-1.5 border border-amber-300 text-amber-800 hover:bg-amber-100/50 rounded-xl text-xs font-semibold transition"
+          >
+            Cancelar Edición
+          </button>
+        </div>
+      )}
 
-            {ordenes.length === 0 ? (
-              <div className="text-center py-20 text-zinc-400">
-                <ClipboardList className="w-12 h-12 mx-auto text-zinc-200 mb-3" />
-                <p className="text-sm font-bold text-zinc-600">No hay órdenes registradas aún</p>
-                <p className="text-xs text-zinc-400 mt-1">Haz clic en "Nueva Proforma" para armar tu primer pedido de abastecimiento.</p>
+      {activeTab === 'historial' ? (
+        <SupplierOrdersHistory onEditOrder={handleStartEditOrder} />
+      ) : (
+        <>
+          {/* Resumen de Pedido y Métricas */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-zinc-950 text-white rounded-2xl p-5 relative overflow-hidden">
+          <div className="absolute right-3 bottom-3 text-white/[0.03]">
+            <ClipboardList className="w-24 h-24" />
+          </div>
+          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Resumen del Pedido</p>
+          <p className="text-3xl font-extrabold tracking-tight mt-1">{stats.totalItems} <span className="text-sm font-normal text-zinc-400">ítems seleccionados</span></p>
+          <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-white/[0.08] text-xs text-zinc-400">
+            <Sparkles className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+            <span>Selecciona productos abajo para incluirlos en el pedido</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-zinc-100 p-5 flex flex-col justify-between">
+          <div>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Costo Estimado de Compra</p>
+            <p className="text-3xl font-extrabold text-zinc-900 tracking-tight mt-1 tabular-nums">
+              {formatPEN(stats.totalCosto)}
+            </p>
+          </div>
+          <p className="text-xs text-zinc-400 mt-2">Basado en el precio de compra a proveedores</p>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-zinc-100 p-5 flex flex-col justify-between">
+          <div>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Proveedores en el Pedido</p>
+            <p className="text-3xl font-extrabold text-zinc-900 tracking-tight mt-1">
+              {Object.keys(orderGroups).length}
+            </p>
+          </div>
+          <p className="text-xs text-zinc-400 mt-2">Diferentes órdenes de compra agrupadas</p>
+        </div>
+      </div>
+
+      {/* Controles de Filtro */}
+      <div className="flex items-center gap-3 flex-wrap bg-white p-4 rounded-2xl border border-zinc-100 shadow-sm">
+        {/* Búsqueda */}
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+          <input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por nombre, marca o proveedor..."
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:border-zinc-950 transition"
+          />
+        </div>
+
+        {/* Proveedor */}
+        <select
+          value={proveedorFiltro}
+          disabled={editingOrderId !== null}
+          onChange={(e) => setProveedorFiltro(e.target.value)}
+          className="px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition bg-white disabled:bg-zinc-50 disabled:text-zinc-500 disabled:cursor-not-allowed"
+        >
+          <option value="todos">Todos los proveedores</option>
+          <option value="sin_proveedor">Sin proveedor asignado</option>
+          {proveedoresUnicos.map(prov => (
+            <option key={prov} value={prov}>{prov}</option>
+          ))}
+        </select>
+
+        {/* Interruptor Mostrar Todos */}
+        <button
+          onClick={() => setMostrarTodos(!mostrarTodos)}
+          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl border text-sm font-semibold transition ${
+            mostrarTodos 
+              ? 'border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-800' 
+              : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+          }`}
+        >
+          {mostrarTodos ? 'Filtrar por Stock Bajo' : 'Ver Todo el Catálogo'}
+        </button>
+
+        {/* Botón Agregar Manual */}
+        <button
+          onClick={() => setMostrarFormManual(!mostrarFormManual)}
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold transition shadow-sm ml-auto"
+        >
+          <Plus className="w-4 h-4" />
+          Ítem Fuera de Catálogo
+        </button>
+      </div>
+
+      {/* Formulario Ítem Manual (Collapsible) */}
+      {mostrarFormManual && (
+        <form onSubmit={handleAddManualItem} className="bg-violet-50/50 border border-violet-100 rounded-2xl p-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between border-b border-violet-100 pb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-violet-600" />
+              <h3 className="text-sm font-bold text-violet-950">Solicitar Producto Fuera de Catálogo</h3>
+            </div>
+            <button type="button" onClick={() => setMostrarFormManual(false)} className="text-violet-500 hover:text-violet-700">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-violet-800 mb-1">Nombre del producto *</label>
+              <input
+                required
+                value={formManual.nombre}
+                onChange={(e) => setFormManual(p => ({ ...p, nombre: e.target.value }))}
+                placeholder="Ej: Arena Fina Especial"
+                className="w-full px-3 py-2 rounded-xl border border-violet-200 text-sm text-zinc-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-violet-800 mb-1">Marca</label>
+              <input
+                value={formManual.marca}
+                onChange={(e) => setFormManual(p => ({ ...p, marca: e.target.value }))}
+                placeholder="Ej: Arequipa"
+                className="w-full px-3 py-2 rounded-xl border border-violet-200 text-sm text-zinc-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-violet-800 mb-1">Proveedor sugerido</label>
+              <input
+                value={formManual.proveedor}
+                onChange={(e) => setFormManual(p => ({ ...p, proveedor: e.target.value }))}
+                placeholder="Ej: Aceros S.A."
+                className="w-full px-3 py-2 rounded-xl border border-violet-200 text-sm text-zinc-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-violet-800 mb-1">Cantidad</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={formManual.cantidad}
+                  onChange={(e) => setFormManual(p => ({ ...p, cantidad: parseInt(e.target.value) || 1 }))}
+                  className="w-full px-3 py-2 rounded-xl border border-violet-200 text-sm text-zinc-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-violet-800 mb-1">Unidad</label>
+                <input
+                  value={formManual.unidad}
+                  onChange={(e) => setFormManual(p => ({ ...p, unidad: e.target.value }))}
+                  placeholder="Ej: bolsa"
+                  className="w-full px-3 py-2 rounded-xl border border-violet-200 text-sm text-zinc-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-violet-800 mb-1">Costo Unitario (S/)</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={formManual.precio_compra}
+                onChange={(e) => setFormManual(p => ({ ...p, precio_compra: parseFloat(e.target.value) || 0 }))}
+                className="w-full px-3 py-2 rounded-xl border border-violet-200 text-sm text-zinc-950 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setMostrarFormManual(false)}
+              className="px-4 py-2 border border-violet-200 text-xs font-semibold text-violet-700 rounded-xl hover:bg-violet-100/50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-xs font-bold text-white rounded-xl shadow-sm"
+            >
+              Agregar a la lista
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Listas de ítems */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Columna Principal: Tabla de Selección (2/3 de ancho) */}
+        <div className="lg:col-span-2 space-y-4">
+          
+          {/* Ítems manuales agregados (si los hay) */}
+          {manualItems.length > 0 && (
+            <div className="bg-violet-50/20 border border-violet-100 rounded-2xl p-4 space-y-3">
+              <h3 className="text-xs font-bold text-violet-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                Productos temporales fuera de catálogo ({manualItems.length})
+              </h3>
+              <div className="space-y-2">
+                {manualItems.map(item => (
+                  <div key={item.id} className="flex items-center gap-3 bg-white border border-violet-100 p-3 rounded-xl shadow-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedManualIds.includes(item.id)}
+                      onChange={() => handleToggleSelectManual(item.id)}
+                      className="rounded border-zinc-300 text-violet-600 focus:ring-violet-500 w-4 h-4"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-zinc-900">{item.nombre}</p>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-zinc-400">
+                        {item.marca && <span>Marca: {item.marca}</span>}
+                        {item.marca && item.proveedor && <span>•</span>}
+                        {item.proveedor && <span>Prov: {item.proveedor}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs">
+                      <div>
+                        <span className="text-zinc-500">Cant:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.cantidad}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 1
+                            setManualItems(prev => prev.map(m => m.id === item.id ? { ...m, cantidad: val } : m))
+                          }}
+                          className="w-16 ml-1 px-1.5 py-1 text-center border border-zinc-200 rounded-lg font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">Costo:</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.precio_compra}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0
+                            setManualItems(prev => prev.map(m => m.id === item.id ? { ...m, precio_compra: val } : m))
+                          }}
+                          className="w-20 ml-1 px-1.5 py-1 text-right border border-zinc-200 rounded-lg font-semibold"
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleRemoveManualItem(item.id)}
+                        className="p-1 text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tabla de Productos Catálogo */}
+          <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                Productos del Catálogo
+              </h3>
+              <button
+                onClick={handleSelectAllFiltered}
+                className="text-xs text-zinc-600 hover:text-zinc-950 font-semibold transition"
+              >
+                {productosFiltrados.every(p => selectedProductIds.includes(p.id)) 
+                  ? 'Deseleccionar todos' 
+                  : 'Seleccionar todos los filtrados'
+                }
+              </button>
+            </div>
+            
+            {productosFiltrados.length === 0 ? (
+              <div className="text-center py-16 text-zinc-500">
+                <Package className="w-10 h-10 mx-auto text-zinc-300 mb-2" />
+                <p className="text-sm font-medium">No se encontraron productos</p>
+                <p className="text-xs text-zinc-400 mt-1">Prueba cambiando los filtros o agregando ítems manuales</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full border-collapse">
                   <thead>
-                    <tr className="border-b border-zinc-100 bg-zinc-50/30 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                      <th className="px-5 py-3.5">Fecha</th>
-                      <th className="px-5 py-3.5">Proveedor</th>
-                      <th className="px-5 py-3.5 text-center">Ítems</th>
-                      <th className="px-5 py-3.5 text-right">Total Estimado</th>
-                      <th className="px-5 py-3.5 text-center">Estado</th>
-                      <th className="px-5 py-3.5 text-right">Acciones</th>
+                    <tr className="border-b border-zinc-100 bg-zinc-50/30 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider text-left">
+                      <th className="px-4 py-3 w-8"></th>
+                      <th className="px-4 py-3">Producto</th>
+                      <th className="px-4 py-3">Proveedor</th>
+                      <th className="px-4 py-3">Marca</th>
+                      <th className="px-4 py-3 text-right">Stock</th>
+                      <th className="px-4 py-3 text-center w-24">Cantidad</th>
+                      <th className="px-4 py-3 text-right w-28">Costo Est.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-50 text-sm">
-                    {ordenes.map(ord => {
-                      const countItems = ord.items?.length || 0
-                      const isPending = ord.estado === 'pendiente'
-                      const isReceived = ord.estado === 'recibido'
-                      const isCanceled = ord.estado === 'cancelado'
-
-                      const isActing = loadingActionId === ord.id
+                    {productosFiltrados.map(prod => {
+                      const isSelected = selectedProductIds.includes(prod.id)
+                      const isOutOfStock = prod.stock === 0 && !prod.venta_sin_stock
+                      const isLowStock = prod.stock_minimo !== null && prod.stock <= prod.stock_minimo
+                      
+                      const isSaving = savingId === prod.id
+                      const isEditingProveedor = editProveedorId === prod.id
+                      const isEditingMarca = editMarcaId === prod.id
 
                       return (
-                        <tr key={ord.id} className="hover:bg-zinc-50/40 transition-colors">
-                          <td className="px-5 py-4 text-zinc-600 whitespace-nowrap">
-                            <span className="flex items-center gap-1.5">
-                              <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                              {new Date(ord.created_at).toLocaleDateString()}
-                            </span>
+                        <tr 
+                          key={prod.id} 
+                          className={`hover:bg-zinc-50/50 transition-colors ${
+                            isSelected ? 'bg-zinc-50/30' : ''
+                          }`}
+                        >
+                          {/* Checkbox */}
+                          <td className="px-4 py-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectProduct(prod.id)}
+                              className="rounded border-zinc-300 text-zinc-950 focus:ring-zinc-900 w-4 h-4"
+                            />
                           </td>
-                          <td className="px-5 py-4 font-bold text-zinc-900">
-                            {ord.proveedor_nombre}
-                            {ord.proveedores?.telefono && (
-                              <p className="text-[10px] text-zinc-400 font-normal mt-0.5">Tlf: {ord.proveedores.telefono}</p>
+
+                          {/* Nombre */}
+                          <td className="px-4 py-3">
+                            <div>
+                              <p className="font-semibold text-zinc-900 leading-tight">{prod.nombre}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5 text-xs text-zinc-400">
+                                <span>{prod.categorias?.nombre || 'Sin categoría'}</span>
+                                <span>•</span>
+                                <span>por {prod.unidad}</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Proveedor (Inline Editable) */}
+                          <td className="px-4 py-3">
+                            {isEditingProveedor ? (
+                              <input
+                                autoFocus
+                                defaultValue={prod.proveedor || ''}
+                                onBlur={(e) => handleSaveProductField(prod.id, 'proveedor', e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleSaveProductField(prod.id, 'proveedor', (e.target as HTMLInputElement).value)
+                                  } else if (e.key === 'Escape') {
+                                    setEditProveedorId(null)
+                                  }
+                                }}
+                                className="px-2 py-1 border border-zinc-300 rounded-lg text-xs w-full focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-white"
+                              />
+                            ) : (
+                              <div 
+                                onClick={() => setEditProveedorId(prod.id)}
+                                className={`text-xs px-2 py-1 rounded-lg border border-dashed transition cursor-pointer hover:border-zinc-400 hover:bg-zinc-50 truncate max-w-[120px] ${
+                                  prod.proveedor 
+                                    ? 'border-zinc-200 text-zinc-700 bg-white' 
+                                    : 'border-amber-200 text-amber-700 bg-amber-50/50'
+                                }`}
+                                title="Click para editar"
+                              >
+                                {isSaving && savingId === prod.id ? (
+                                  <span className="flex items-center gap-1">
+                                    <RefreshCw className="w-3 h-3 animate-spin" /> Guardando...
+                                  </span>
+                                ) : (
+                                  prod.proveedor || '+ Asignar'
+                                )}
+                              </div>
                             )}
                           </td>
-                          <td className="px-5 py-4 text-center font-semibold text-zinc-600">
-                            {countItems}u
-                          </td>
-                          <td className="px-5 py-4 text-right font-extrabold text-zinc-950 tabular-nums">
-                            {formatPEN(ord.total)}
-                          </td>
-                          <td className="px-5 py-4 text-center">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                              isReceived 
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                                : isCanceled 
-                                ? 'bg-red-50 text-red-700 border border-red-200' 
-                                : 'bg-amber-50 text-amber-700 border border-amber-200'
-                            }`}>
-                              {isReceived ? 'Ingresado (Stock)' : isCanceled ? 'Cancelado' : 'Pendiente'}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center justify-end gap-2">
-                              {/* Confirmar stock */}
-                              {isPending && (
-                                <button
-                                  onClick={() => handleRecibirOrden(ord.id)}
-                                  disabled={isActing}
-                                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition shadow-sm"
-                                  title="Ingresar productos de esta compra al inventario"
-                                >
-                                  {isActing ? (
-                                    <RefreshCw className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <CheckSquare className="w-3.5 h-3.5" />
-                                  )}
-                                  Recibir Stock
-                                </button>
-                              )}
 
-                              {/* WhatsApp copy */}
-                              <button
-                                onClick={() => copyWhatsAppMessage(ord)}
-                                className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
-                                title="Copiar para WhatsApp"
+                          {/* Marca (Inline Editable) */}
+                          <td className="px-4 py-3">
+                            {isEditingMarca ? (
+                              <input
+                                autoFocus
+                                defaultValue={prod.marca || ''}
+                                onBlur={(e) => handleSaveProductField(prod.id, 'marca', e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleSaveProductField(prod.id, 'marca', (e.target as HTMLInputElement).value)
+                                  } else if (e.key === 'Escape') {
+                                    setEditMarcaId(null)
+                                  }
+                                }}
+                                className="px-2 py-1 border border-zinc-300 rounded-lg text-xs w-full focus:outline-none focus:ring-1 focus:ring-zinc-950 bg-white"
+                              />
+                            ) : (
+                              <div 
+                                onClick={() => setEditMarcaId(prod.id)}
+                                className="text-xs px-2 py-1 rounded-lg border border-dashed border-zinc-200 text-zinc-600 bg-white transition cursor-pointer hover:border-zinc-400 hover:bg-zinc-50 truncate max-w-[90px]"
+                                title="Click para editar"
                               >
-                                <Send className="w-4 h-4" />
-                              </button>
+                                {isSaving && savingId === prod.id ? (
+                                  '...'
+                                ) : (
+                                  prod.marca || '+ Asignar'
+                                )}
+                              </div>
+                            )}
+                          </td>
 
-                              {/* Excel Export */}
-                              <button
-                                onClick={() => exportExcel(ord)}
-                                className="p-1.5 text-zinc-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
-                                title="Exportar Excel (.xlsx)"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-
-                              {/* PDF Download */}
-                              <a
-                                href={`/api/reabastecer/ordenes/${ord.id}/pdf`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                title="Descargar PDF de Orden de Compra"
-                              >
-                                <FileText className="w-4 h-4" />
-                              </a>
-
-                              {/* Cancelar */}
-                              {isPending && (
-                                <button
-                                  onClick={() => handleCancelarOrden(ord.id)}
-                                  disabled={isActing}
-                                  className="p-1.5 text-zinc-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
-                                  title="Cancelar Orden"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
+                          {/* Stock e Indicador Alerta */}
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex flex-col items-end">
+                              <span className={`font-semibold ${
+                                isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-600' : 'text-zinc-600'
+                              }`}>
+                                {prod.stock}
+                              </span>
+                              {prod.stock_minimo !== null && (
+                                <span className="text-[9px] text-zinc-400 font-normal">
+                                  mín. {prod.stock_minimo}
+                                </span>
                               )}
-
-                              {/* Eliminar (si no está recibido) */}
-                              {!isReceived && (
-                                <button
-                                  onClick={() => handleEliminarOrden(ord.id)}
-                                  disabled={isActing}
-                                  className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                  title="Eliminar Proforma"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                              {isOutOfStock && (
+                                <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5 mt-0.5">
+                                  <AlertTriangle className="w-2.5 h-2.5 shrink-0" /> Agotado
+                                </span>
                               )}
+                              {!isOutOfStock && isLowStock && (
+                                <span className="text-[9px] font-bold text-amber-500 flex items-center gap-0.5 mt-0.5">
+                                  <AlertTriangle className="w-2.5 h-2.5 shrink-0" /> Stock bajo
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Cantidad a Pedir */}
+                          <td className="px-4 py-3 text-center">
+                            <input
+                              type="number"
+                              min={1}
+                              disabled={!isSelected}
+                              value={orderQuantities[prod.id] !== undefined ? orderQuantities[prod.id] : getCantidadRecomendada(prod)}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 1
+                                setOrderQuantities(prev => ({ ...prev, [prod.id]: val }))
+                              }}
+                              className={`w-16 px-2 py-1 text-center border rounded-lg text-xs font-semibold ${
+                                isSelected 
+                                  ? 'border-zinc-300 text-zinc-950 font-bold focus:ring-1 focus:ring-zinc-900 bg-white' 
+                                  : 'border-zinc-100 text-zinc-300 bg-zinc-50'
+                              }`}
+                            />
+                          </td>
+
+                          {/* Costo Unitario */}
+                          <td className="px-4 py-3 text-right">
+                            <div className="relative inline-block w-24">
+                              <span className={`absolute left-2 top-1/2 -translate-y-1/2 text-xs ${
+                                isSelected ? 'text-zinc-400' : 'text-zinc-300'
+                              }`}>S/</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min={0}
+                                disabled={!isSelected}
+                                value={orderCosts[prod.id] !== undefined ? orderCosts[prod.id] : getCostoDefecto(prod)}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0
+                                  setOrderCosts(prev => ({ ...prev, [prod.id]: val }))
+                                }}
+                                className={`w-full pl-6 pr-1.5 py-1 text-right border rounded-lg text-xs font-semibold ${
+                                  isSelected 
+                                    ? 'border-zinc-300 text-zinc-950 focus:ring-1 focus:ring-zinc-900 bg-white' 
+                                    : 'border-zinc-100 text-zinc-300 bg-zinc-50'
+                                }`}
+                              />
                             </div>
                           </td>
                         </tr>
@@ -785,590 +986,99 @@ export default function SupplierOrdersManager({
             )}
           </div>
         </div>
-      )}
 
-      {/* ========================================================================= */}
-      {/* PESTAÑA B: CREADOR DE PROFORMA                                            */}
-      {/* ========================================================================= */}
-      {activeTab === 'nuevo' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-zinc-950 text-white rounded-2xl p-5 relative overflow-hidden">
-              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Items Seleccionados</p>
-              <p className="text-3xl font-extrabold tracking-tight mt-1">{statsNuevaOrden.totalItems}</p>
-              <p className="text-xs text-zinc-400 mt-2">Productos que formarán el pedido</p>
+        {/* Columna Derecha: Panel de Órdenes Agrupadas (1/3 de ancho) */}
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm p-5 space-y-4 sticky top-6">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <h3 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
+                <Building className="w-4 h-4 text-zinc-500" />
+                Órdenes de Compra
+              </h3>
+              <Badge variant="blue">{Object.keys(orderGroups).length}</Badge>
             </div>
 
-            <div className="bg-white rounded-2xl border border-zinc-100 p-5 flex flex-col justify-between shadow-sm">
-              <div>
-                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Costo Estimado de Compra</p>
-                <p className="text-3xl font-extrabold text-zinc-900 tracking-tight mt-1 tabular-nums">
-                  {formatPEN(statsNuevaOrden.totalCosto)}
-                </p>
-              </div>
-              <p className="text-xs text-zinc-400 mt-2">Costo unitario por cantidades especificadas</p>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-zinc-100 p-5 flex flex-col justify-between shadow-sm">
-              <div>
-                <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Proveedor del Pedido</p>
-                <p className="text-sm font-bold text-zinc-700 truncate mt-3">
-                  {activeProveedorNombre || 'Ninguno seleccionado'}
-                </p>
-              </div>
-              <p className="text-[10px] text-zinc-400 mt-2">Las órdenes se crean asociadas a un distribuidor</p>
-            </div>
-          </div>
-
-          {/* Configuración del Proveedor y Filtros */}
-          <div className="bg-white p-5 rounded-2xl border border-zinc-100 shadow-sm space-y-4">
-            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Paso 1: Definir Proveedor</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1.5">Seleccionar Proveedor Registrado</label>
-                <select
-                  value={selectedProveedorId}
-                  onChange={(e) => {
-                    setSelectedProveedorId(e.target.value)
-                    setCustomProveedorNombre('')
-                  }}
-                  className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition bg-white"
-                >
-                  <option value="">-- Usar proveedor no registrado / Personalizado --</option>
-                  {proveedores.map(p => (
-                    <option key={p.id} value={p.id}>{p.nombre}</option>
-                  ))}
-                </select>
-              </div>
-
-              {!selectedProveedorId && (
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1.5">Nombre de Proveedor Temporal</label>
-                  <input
-                    value={customProveedorNombre}
-                    onChange={(e) => setCustomProveedorNombre(e.target.value)}
-                    placeholder="Escribe el nombre del proveedor..."
-                    className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-zinc-50 pt-4 flex items-center gap-3 flex-wrap">
-              {/* Búsqueda de Catálogo */}
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                <input
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                  placeholder="Buscar productos en catálogo..."
-                  className="w-full pl-9 pr-4 py-2 rounded-xl border border-zinc-200 text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition"
-                />
-              </div>
-
-              {/* Mostrar todo el catálogo */}
-              <button
-                onClick={() => setMostrarTodos(!mostrarTodos)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition ${
-                  mostrarTodos 
-                    ? 'border-zinc-950 bg-zinc-950 text-white' 
-                    : 'border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50'
-                }`}
-              >
-                {mostrarTodos ? 'Ver solo alertas' : 'Ver todo el catálogo'}
-              </button>
-
-              {/* Agregar producto manual */}
-              <button
-                onClick={() => setMostrarFormManual(!mostrarFormManual)}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 text-xs font-bold transition ml-auto"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Producto Fuera de Catálogo
-              </button>
-            </div>
-          </div>
-
-          {/* Formulario Ítem Manual */}
-          {mostrarFormManual && (
-            <form onSubmit={handleAddManualItem} className="bg-violet-50/50 border border-violet-100 rounded-2xl p-5 space-y-4 animate-in fade-in duration-150">
-              <div className="flex items-center justify-between pb-2 border-b border-violet-100">
-                <p className="text-xs font-bold text-violet-950 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-violet-600" />
-                  Agregar producto fuera de catálogo a la orden
-                </p>
-                <button type="button" onClick={() => setMostrarFormManual(false)}>
-                  <X className="w-4 h-4 text-violet-500 hover:text-violet-700" />
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-                <div className="md:col-span-2">
-                  <label className="block text-[10px] font-bold text-violet-800 mb-1">Nombre *</label>
-                  <input
-                    required
-                    value={formManual.nombre}
-                    onChange={(e) => setFormManual(p => ({ ...p, nombre: e.target.value }))}
-                    placeholder="Ej: Pintura Latex Suprema"
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-violet-200 text-xs focus:ring-1 focus:ring-violet-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-violet-800 mb-1">Marca</label>
-                  <input
-                    value={formManual.marca}
-                    onChange={(e) => setFormManual(p => ({ ...p, marca: e.target.value }))}
-                    placeholder="Ej: Anypsa"
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-violet-200 text-xs focus:ring-1 focus:ring-violet-500"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-bold text-violet-800 mb-1">Cantidad</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={formManual.cantidad}
-                      onChange={(e) => setFormManual(p => ({ ...p, cantidad: parseInt(e.target.value) || 1 }))}
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-violet-200 text-xs focus:ring-1 focus:ring-violet-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-violet-800 mb-1">Unidad</label>
-                    <input
-                      value={formManual.unidad}
-                      onChange={(e) => setFormManual(p => ({ ...p, unidad: e.target.value }))}
-                      placeholder="balde"
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-violet-200 text-xs focus:ring-1 focus:ring-violet-500"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-violet-800 mb-1">Costo Unitario (S/)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={formManual.precio_compra}
-                    onChange={(e) => setFormManual(p => ({ ...p, precio_compra: parseFloat(e.target.value) || 0 }))}
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-violet-200 text-xs focus:ring-1 focus:ring-violet-500"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button
-                    type="submit"
-                    className="w-full py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs rounded-lg transition"
-                  >
-                    Añadir Ítem
-                  </button>
-                </div>
-              </div>
-            </form>
-          )}
-
-          {/* Listas e Ítems para seleccionar */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Tabla de Catálogo (2/3) */}
-            <div className="lg:col-span-2 space-y-4">
-              
-              {/* Ítems manuales temporales */}
-              {manualItems.length > 0 && (
-                <div className="bg-violet-50/25 border border-violet-100 rounded-2xl p-4 space-y-3 shadow-sm">
-                  <p className="text-xs font-bold text-violet-800 uppercase tracking-wider flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Productos manuales en esta proforma ({manualItems.length})
-                  </p>
-                  <div className="space-y-2">
-                    {manualItems.map(item => (
-                      <div key={item.id} className="flex items-center gap-3 bg-white border border-violet-100 p-3 rounded-xl shadow-sm">
-                        <input
-                          type="checkbox"
-                          checked={selectedManualIds.includes(item.id)}
-                          onChange={() => handleToggleSelectManual(item.id)}
-                          className="rounded border-zinc-300 text-violet-600 focus:ring-violet-500 w-4 h-4"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-zinc-900">{item.nombre}</p>
-                          <p className="text-[10px] text-zinc-400 mt-0.5">
-                            {item.marca && <span>Marca: {item.marca} </span>}
-                            <span>· Unidad: {item.unidad}</span>
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-4 text-xs">
-                          <div>
-                            <span className="text-zinc-500 font-semibold text-[10px]">CANT</span>
-                            <input
-                              type="number"
-                              min={1}
-                              value={item.cantidad}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value) || 1
-                                setManualItems(prev => prev.map(m => m.id === item.id ? { ...m, cantidad: val } : m))
-                              }}
-                              className="w-14 ml-1 px-1 py-0.5 text-center border border-zinc-200 rounded font-bold"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-zinc-500 font-semibold text-[10px]">COSTO</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.precio_compra}
-                              onChange={(e) => {
-                                const val = parseFloat(e.target.value) || 0
-                                setManualItems(prev => prev.map(m => m.id === item.id ? { ...m, precio_compra: val } : m))
-                              }}
-                              className="w-16 ml-1 px-1 py-0.5 text-right border border-zinc-200 rounded font-bold"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setManualItems(prev => prev.filter(m => m.id !== item.id))
-                              setSelectedManualIds(prev => prev.filter(id => id !== item.id))
-                            }}
-                            className="p-1 text-zinc-300 hover:text-red-500 transition"
-                          >
-                            <Trash className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Catálogo de Productos */}
-              <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
-                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Productos del Catálogo</h3>
-                  <button
-                    onClick={handleSelectAllFiltered}
-                    className="text-xs text-zinc-500 hover:text-zinc-950 font-bold"
-                  >
-                    {productosFiltrados.every(p => selectedProductIds.includes(p.id)) 
-                      ? 'Deseleccionar filtrados' 
-                      : 'Seleccionar todos los filtrados'}
-                  </button>
-                </div>
-
-                {productosFiltrados.length === 0 ? (
-                  <div className="text-center py-16 text-zinc-400">
-                    <Package className="w-10 h-10 mx-auto text-zinc-200 mb-2" />
-                    <p className="text-sm font-medium">No hay productos que coincidan</p>
-                    <p className="text-xs text-zinc-400">Prueba cambiando los criterios o agregando productos manuales.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-left text-xs">
-                      <thead>
-                        <tr className="border-b border-zinc-100 bg-zinc-50/30 text-zinc-400 uppercase font-semibold">
-                          <th className="px-4 py-3 w-8"></th>
-                          <th className="px-4 py-3">Producto</th>
-                          <th className="px-4 py-3">Proveedor</th>
-                          <th className="px-4 py-3">Marca</th>
-                          <th className="px-4 py-3 text-right">Stock</th>
-                          <th className="px-4 py-3 text-center w-20">Cant</th>
-                          <th className="px-4 py-3 text-right w-24">Costo Est</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-50 text-sm">
-                        {productosFiltrados.map(prod => {
-                          const isSelected = selectedProductIds.includes(prod.id)
-                          const isOutOfStock = prod.stock === 0 && !prod.venta_sin_stock
-                          const isLowStock = prod.stock_minimo !== null && prod.stock <= prod.stock_minimo
-                          const isSaving = savingId === prod.id
-
-                          return (
-                            <tr key={prod.id} className={`hover:bg-zinc-50/40 transition-colors ${isSelected ? 'bg-zinc-50/20' : ''}`}>
-                              <td className="px-4 py-3 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => handleToggleSelectProduct(prod.id)}
-                                  className="rounded border-zinc-300 text-zinc-950 w-4 h-4 focus:ring-zinc-900"
-                                />
-                              </td>
-                              <td className="px-4 py-3">
-                                <div>
-                                  <p className="font-bold text-zinc-900">{prod.nombre}</p>
-                                  <p className="text-[10px] text-zinc-400 mt-0.5">por {prod.unidad}</p>
-                                </div>
-                              </td>
-                              
-                              {/* Proveedor inline */}
-                              <td className="px-4 py-3">
-                                {editProveedorId === prod.id ? (
-                                  <input
-                                    autoFocus
-                                    defaultValue={prod.proveedor || ''}
-                                    onBlur={(e) => handleSaveProductField(prod.id, 'proveedor', e.target.value)}
-                                    className="px-2 py-0.5 border border-zinc-300 rounded text-xs w-28 bg-white"
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleSaveProductField(prod.id, 'proveedor', (e.target as HTMLInputElement).value)
-                                      if (e.key === 'Escape') setEditProveedorId(null)
-                                    }}
-                                  />
-                                ) : (
-                                  <span
-                                    onClick={() => setEditProveedorId(prod.id)}
-                                    className={`text-[10px] px-2 py-0.5 rounded cursor-pointer border border-dashed transition ${
-                                      prod.proveedor ? 'border-zinc-200 text-zinc-700 hover:border-zinc-400' : 'border-amber-200 text-amber-600 bg-amber-50'
-                                    }`}
-                                  >
-                                    {isSaving && savingId === prod.id ? 'Guardando...' : prod.proveedor || '+ Proveedor'}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Marca inline */}
-                              <td className="px-4 py-3">
-                                {editMarcaId === prod.id ? (
-                                  <input
-                                    autoFocus
-                                    defaultValue={prod.marca || ''}
-                                    onBlur={(e) => handleSaveProductField(prod.id, 'marca', e.target.value)}
-                                    className="px-2 py-0.5 border border-zinc-300 rounded text-xs w-24 bg-white"
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleSaveProductField(prod.id, 'marca', (e.target as HTMLInputElement).value)
-                                      if (e.key === 'Escape') setEditMarcaId(null)
-                                    }}
-                                  />
-                                ) : (
-                                  <span
-                                    onClick={() => setEditMarcaId(prod.id)}
-                                    className="text-[10px] px-2 py-0.5 rounded cursor-pointer border border-dashed border-zinc-200 text-zinc-600 hover:border-zinc-400"
-                                  >
-                                    {isSaving && savingId === prod.id ? '...' : prod.marca || '+ Marca'}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Stock */}
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex flex-col items-end">
-                                  <span className={`font-semibold ${isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-500' : 'text-zinc-600'}`}>
-                                    {prod.stock}
-                                  </span>
-                                  {isLowStock && (
-                                    <span className="text-[8px] font-bold text-amber-500 flex items-center gap-0.5">
-                                      <AlertTriangle className="w-2 h-2" /> Stock Bajo
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-
-                              {/* Cantidad a pedir */}
-                              <td className="px-4 py-3 text-center">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  disabled={!isSelected}
-                                  value={orderQuantities[prod.id] !== undefined ? orderQuantities[prod.id] : getCantidadRecomendada(prod)}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value) || 1
-                                    setOrderQuantities(p => ({ ...p, [prod.id]: val }))
-                                  }}
-                                  className={`w-12 text-center py-0.5 rounded border text-xs font-bold ${
-                                    isSelected ? 'border-zinc-300 bg-white' : 'border-zinc-100 bg-zinc-50 text-zinc-300'
-                                  }`}
-                                />
-                              </td>
-
-                              {/* Costo a pedir */}
-                              <td className="px-4 py-3 text-right">
-                                <div className="relative inline-block w-20">
-                                  <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400">S/</span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min={0}
-                                    disabled={!isSelected}
-                                    value={orderCosts[prod.id] !== undefined ? orderCosts[prod.id] : getCostoDefecto(prod)}
-                                    onChange={(e) => {
-                                      const val = parseFloat(e.target.value) || 0
-                                      setOrderCosts(p => ({ ...p, [prod.id]: val }))
-                                    }}
-                                    className={`w-full pl-5 pr-1 py-0.5 text-right rounded border text-xs font-bold ${
-                                      isSelected ? 'border-zinc-300 bg-white' : 'border-zinc-100 bg-zinc-50 text-zinc-300'
-                                    }`}
-                                  />
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Panel de Resumen Guardar (1/3) */}
-            <div className="space-y-4">
-              <div className="bg-white rounded-2xl border border-zinc-100 p-5 shadow-sm space-y-4 sticky top-6">
-                <h4 className="text-xs font-bold text-zinc-800 uppercase tracking-wider border-b border-zinc-100 pb-2 flex items-center gap-1">
-                  <Building className="w-4 h-4 text-zinc-400" />
-                  Previsualizar Proforma
-                </h4>
-
-                <div className="space-y-3">
-                  <div className="text-xs space-y-2">
-                    <p className="text-zinc-500 font-semibold">Proveedor:</p>
-                    <p className="text-sm font-bold text-zinc-800 bg-zinc-50 px-3 py-2 rounded-xl border border-zinc-100">
-                      {activeProveedorNombre || '(Falta definir proveedor)'}
-                    </p>
-                  </div>
-
-                  <div className="text-xs space-y-1 pt-2">
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Ítems a ordenar:</span>
-                      <span className="font-bold text-zinc-700">{statsNuevaOrden.totalItems} unidades</span>
-                    </div>
-                    <div className="flex justify-between pt-1 border-t border-zinc-50 text-sm font-bold">
-                      <span className="text-zinc-800">Costo total estimado:</span>
-                      <span className="text-zinc-950 tabular-nums">{formatPEN(statsNuevaOrden.totalCosto)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleSaveOrden}
-                  disabled={creandoOrden || statsNuevaOrden.totalItems === 0 || !activeProveedorNombre}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-zinc-950 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 disabled:opacity-50 transition shadow-sm"
-                >
-                  {creandoOrden && <RefreshCw className="w-4 h-4 animate-spin" />}
-                  Guardar Proforma en Sistema
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* PESTAÑA C: GESTIÓN DE PROVEEDORES                                         */}
-      {/* ========================================================================= */}
-      {activeTab === 'proveedores' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Listado de Proveedores (2/3) */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center">
-              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Mis Proveedores Registrados</h3>
-              <Badge variant="blue">{proveedores.length}</Badge>
-            </div>
-
-            {proveedores.length === 0 ? (
-              <div className="text-center py-20 text-zinc-400">
-                <Building className="w-12 h-12 mx-auto text-zinc-200 mb-3" />
-                <p className="text-sm font-bold text-zinc-600">No hay proveedores registrados</p>
-                <p className="text-xs text-zinc-400 mt-1">Registra tu primer proveedor usando el formulario de la derecha.</p>
+            {Object.keys(orderGroups).length === 0 ? (
+              <div className="text-center py-12 text-zinc-400">
+                <ClipboardList className="w-10 h-10 mx-auto text-zinc-200 mb-2" />
+                <p className="text-xs font-semibold">No hay ítems seleccionados</p>
+                <p className="text-[10px] text-zinc-400 mt-1">Selecciona productos a la izquierda para armar la orden</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-zinc-100 bg-zinc-50/30 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                      <th className="px-5 py-3">Nombre</th>
-                      <th className="px-5 py-3">Contacto</th>
-                      <th className="px-5 py-3">Teléfono (WhatsApp)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-50 text-sm">
-                    {proveedores.map(p => (
-                      <tr key={p.id} className="hover:bg-zinc-50/40 transition">
-                        <td className="px-5 py-3.5 font-bold text-zinc-950">{p.nombre}</td>
-                        <td className="px-5 py-3.5 text-zinc-600">{p.contacto || '—'}</td>
-                        <td className="px-5 py-3.5 text-zinc-600 tabular-nums">
-                          {p.telefono ? (
-                            <span className="flex items-center gap-1">
-                              <Phone className="w-3.5 h-3.5 text-zinc-400" />
-                              {p.telefono}
-                            </span>
-                          ) : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+                {Object.entries(orderGroups).map(([proveedor, items]) => {
+                  const totalItemsGroup = items.catalog.reduce((s, c) => s + c.cantidad, 0) + items.manual.reduce((s, m) => s + m.cantidad, 0)
+                  const totalCostoGroup = items.catalog.reduce((s, c) => s + (c.cantidad * c.costo), 0) + items.manual.reduce((s, m) => s + (m.cantidad * m.precio_compra), 0)
+
+                  return (
+                    <div key={proveedor} className="border border-zinc-100 rounded-xl p-4 bg-zinc-50/50 space-y-3">
+                      {/* Header Proveedor */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-bold text-zinc-900 text-sm leading-tight">{proveedor}</h4>
+                          <p className="text-[10px] text-zinc-400 mt-0.5">{totalItemsGroup} producto(s) en total</p>
+                        </div>
+                        <span className="text-xs font-black text-zinc-900 tabular-nums">
+                          {formatPEN(totalCostoGroup)}
+                        </span>
+                      </div>
+
+                      {/* Lista de ítems en miniatura */}
+                      <div className="space-y-1 bg-white border border-zinc-100 rounded-lg p-2 max-h-[140px] overflow-y-auto">
+                        {items.catalog.map(item => (
+                          <div key={item.product.id} className="flex justify-between items-center text-xs py-0.5 border-b border-zinc-50 last:border-0 gap-2">
+                            <span className="text-zinc-600 truncate flex-1 font-medium">{item.product.nombre}</span>
+                            <span className="text-[10px] font-bold text-zinc-900 shrink-0 bg-zinc-100 px-1 rounded">{item.cantidad}u</span>
+                          </div>
+                        ))}
+                        {items.manual.map(item => (
+                          <div key={item.id} className="flex justify-between items-center text-xs py-0.5 border-b border-zinc-50 last:border-0 gap-2">
+                            <span className="text-violet-600 truncate flex-1 font-medium">{item.nombre} <span className="text-[9px] bg-violet-100 px-1 rounded-full">N</span></span>
+                            <span className="text-[10px] font-bold text-violet-900 shrink-0 bg-violet-100 px-1 rounded">{item.cantidad}u</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Botones de acción por proveedor */}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <button
+                          onClick={() => handleSaveOrder(proveedor)}
+                          disabled={isSavingOrder === proveedor}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition disabled:opacity-50"
+                          title="Guardar en BD y generar proforma PDF corporativa"
+                        >
+                          {isSavingOrder === proveedor ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          {editingOrderId && proveedor === editingOrderProveedor ? 'Actualizar y Generar PDF' : 'Guardar y Generar PDF'}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <button
+                          onClick={() => copyWhatsAppMessage(proveedor)}
+                          className="flex-1 flex items-center justify-center gap-1 px-2.5 py-2 text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg transition"
+                          title="Copiar lista de productos para enviar por WhatsApp"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          WhatsApp
+                        </button>
+                        <button
+                          onClick={() => exportCsv(proveedor)}
+                          className="flex items-center justify-center p-2 text-zinc-600 hover:bg-white hover:text-zinc-900 border border-zinc-200 rounded-lg transition bg-zinc-50"
+                          title="Exportar CSV Excel"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
-
-          {/* Formulario Agregar Proveedor (1/3) */}
-          <div className="bg-white rounded-2xl border border-zinc-100 p-5 shadow-sm space-y-4">
-            <h4 className="text-xs font-bold text-zinc-800 uppercase tracking-wider border-b border-zinc-100 pb-2 flex items-center gap-1.5">
-              <Building className="w-4 h-4 text-zinc-400" />
-              Nuevo Proveedor
-            </h4>
-            <form onSubmit={handleAddProveedor} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-zinc-700 mb-1">Nombre de la Empresa *</label>
-                <input
-                  required
-                  value={formProveedor.nombre}
-                  onChange={(e) => setFormProveedor(p => ({ ...p, nombre: e.target.value }))}
-                  placeholder="Ej: Distribuidora Metalúrgica S.A."
-                  className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-zinc-700 mb-1">Contacto Personal</label>
-                <input
-                  value={formProveedor.contacto}
-                  onChange={(e) => setFormProveedor(p => ({ ...p, contacto: e.target.value }))}
-                  placeholder="Ej: Ing. Carlos Méndez"
-                  className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-zinc-700 mb-1">Teléfono (WhatsApp)</label>
-                <input
-                  value={formProveedor.telefono}
-                  onChange={(e) => setFormProveedor(p => ({ ...p, telefono: e.target.value }))}
-                  placeholder="Ej: +51 987654321"
-                  className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={creandoProveedor || !formProveedor.nombre.trim()}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-zinc-950 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 disabled:opacity-50 transition shadow-sm"
-              >
-                {creandoProveedor && <RefreshCw className="w-4 h-4 animate-spin" />}
-                Agregar Proveedor
-              </button>
-            </form>
-          </div>
-
         </div>
-      )}
 
-      {/* Toast Notification Premium */}
-      {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border animate-in slide-in-from-bottom-5 fade-in duration-200 ${
-          toast.type === 'success' 
-            ? 'bg-emerald-950 text-emerald-50 border-emerald-800' 
-            : toast.type === 'error' 
-            ? 'bg-red-950 text-red-50 border-red-800' 
-            : 'bg-zinc-950 text-zinc-50 border-zinc-800'
-        }`}>
-          {toast.type === 'success' && <CheckCircle className="w-4 h-4 text-emerald-400" />}
-          {toast.type === 'error' && <AlertTriangle className="w-4 h-4 text-red-400" />}
-          {toast.type === 'info' && <Bookmark className="w-4 h-4 text-zinc-400" />}
-          <span className="text-xs font-semibold">{toast.message}</span>
-          <button onClick={() => setToast(null)} className="ml-2 p-0.5 hover:bg-white/10 rounded transition">
-            <X className="w-3.5 h-3.5 opacity-60 hover:opacity-100" />
-          </button>
-        </div>
+      </div>
+        </>
       )}
-
     </div>
   )
 }

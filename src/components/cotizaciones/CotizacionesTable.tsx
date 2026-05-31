@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { cn, formatPEN, formatFecha, truncar, matchesFuzzy } from '@/lib/utils'
 import { ChevronDown, FileText, Check, X, Loader2, Pencil, Plus, Trash2, Search, Package } from 'lucide-react'
 import NuevaCotizacionModal from './NuevaCotizacionModal'
+import { toast } from 'sonner'
 interface Producto {
   id: string
   nombre: string
@@ -127,19 +128,27 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
   }
 
   async function eliminarCotizacion(id: string) {
-    if (!confirm('¿Seguro que quieres eliminar esta cotización?')) return
-    setEliminando(id)
-    try {
-      const res = await fetch(`/api/cotizaciones/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error()
-      setCotizaciones((prev) => prev.filter((c) => c.id !== id))
-      setExpandido(null)
-      router.refresh()
-    } catch {
-      alert('Error al eliminar la cotización')
-    } finally {
-      setEliminando(null)
-    }
+    toast('¿Seguro que quieres eliminar esta cotización?', {
+      action: {
+        label: 'Eliminar',
+        onClick: async () => {
+          setEliminando(id)
+          try {
+            const res = await fetch(`/api/cotizaciones/${id}`, { method: 'DELETE' })
+            if (!res.ok) throw new Error()
+            setCotizaciones((prev) => prev.filter((c) => c.id !== id))
+            setExpandido(null)
+            router.refresh()
+            toast.success('Cotización eliminada')
+          } catch {
+            toast.error('Error al eliminar la cotización')
+          } finally {
+            setEliminando(null)
+          }
+        }
+      },
+      cancel: { label: 'Cancelar', onClick: () => {} }
+    })
   }
 
   function calcularTotalEditado(cot: Cotizacion): number {
@@ -180,8 +189,9 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
       )
       setExpandido(null)
       router.refresh()
+      toast.success('Cotización aprobada y enviada')
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Error al aprobar')
+      toast.error(e instanceof Error ? e.message : 'Error al aprobar')
     } finally {
       setAprobando(null)
     }
@@ -203,8 +213,9 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
       setConfirmandoRechazo(null)
       setExpandido(null)
       router.refresh()
+      toast.success('Cotización rechazada')
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Error al rechazar')
+      toast.error(e instanceof Error ? e.message : 'Error al rechazar')
     } finally {
       setRechazando(null)
     }
