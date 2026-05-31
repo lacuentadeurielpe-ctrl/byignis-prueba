@@ -7,7 +7,7 @@ import { getYCloudApiKey } from '@/lib/tenant'
 import { logAccion } from '@/lib/audit'
 import { normalizarTelefono } from '@/lib/utils'
 
-const ESTADOS_VALIDOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'enviado', 'entregado', 'cancelado']
+const ESTADOS_VALIDOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'enviado', 'entregado', 'cancelado', 'devuelto']
 
 // Mensajes WhatsApp al cliente según el nuevo estado
 function mensajeEstado(numeroPedido: string, estado: string, nombreFerreteria: string): string | null {
@@ -22,6 +22,8 @@ function mensajeEstado(numeroPedido: string, estado: string, nombreFerreteria: s
       return `🎉 *${nombreFerreteria}*\n\nSu pedido *${numeroPedido}* ha sido *entregado*. Esperamos que todo sea de su agrado. ¡Hasta la próxima!`
     case 'cancelado':
       return `❌ *${nombreFerreteria}*\n\nLamentamos informarle que su pedido *${numeroPedido}* ha sido *cancelado*. Para más información contáctenos por este mismo chat.`
+    case 'devuelto':
+      return `🔄 *${nombreFerreteria}*\n\nSu pedido *${numeroPedido}* ha sido marcado como *devuelto*.`
     default:
       return null
   }
@@ -90,7 +92,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     await logAccion({
       ferreteriaId:  session.ferreteriaId,
       usuarioId:     session.userId,
-      accion:        body.estado === 'cancelado' ? 'cancelar_pedido' : 'cambiar_estado_pedido',
+      accion:        (body.estado === 'cancelado' || body.estado === 'devuelto') ? 'cancelar_pedido' : 'cambiar_estado_pedido',
       entidad:       'pedido',
       entidadId:     id,
       detalle: {
@@ -100,27 +102,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ...(body.motivo_cancelacion ? { motivo: body.motivo_cancelacion } : {}),
       },
     })
-  }
-
-  // ── Gestión de stock ───────────────────────────────────────────────────────
-  const estadoAnterior = pedidoActual?.estado
-  const estadosConfirmados = ['confirmado', 'en_preparacion', 'enviado', 'entregado']
-
-  if (estadoAnterior === 'pendiente' && estadosConfirmados.includes(body.estado)) {
-    // Descontar stock al salir de pendiente hacia cualquier estado confirmado
-    // (cubre el caso de saltar directo a en_preparacion, enviado o entregado)
-    await supabase.rpc('reducir_stock_pedido', { p_pedido_id: id })
-      .then(({ error: e }) => {
-        if (e) console.error('[Stock] Error descontando stock:', e.message)
-        else console.log(`[Stock] Stock descontado para pedido ${id}`)
-      })
-  } else if (body.estado === 'cancelado' && estadoAnterior && estadosConfirmados.includes(estadoAnterior)) {
-    // Restaurar stock si se cancela un pedido que ya tenía stock descontado
-    await supabase.rpc('restaurar_stock_pedido', { p_pedido_id: id })
-      .then(({ error: e }) => {
-        if (e) console.error('[Stock] Error restaurando stock:', e.message)
-        else console.log(`[Stock] Stock restaurado para pedido ${id}`)
-      })
   }
 
   // Enviar notificación WhatsApp al cliente si el estado lo amerita
