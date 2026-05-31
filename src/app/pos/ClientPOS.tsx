@@ -211,7 +211,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
         fechaUtc = d.toISOString()
       }
 
-      // 1. Crear el pedido
+      // 1. Crear el pedido — la API siempre lo crea como 'pendiente' o 'programado'
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -219,9 +219,6 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
           nombre_cliente: nombreFinal,
           telefono_cliente: telefonoFinal,
           modalidad: 'recojo',
-          estado: esProgramado ? 'programado' : 'entregado',
-          estado_pago: esProgramado ? 'pendiente' : 'pagado',
-          metodo_pago: esProgramado ? undefined : metodo,
           items,
           fecha_entrega_programada: fechaUtc,
         })
@@ -234,29 +231,44 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
 
       const { id: pedidoId } = await res.json()
 
-      // 2. Comprobante según tipo
-      if (tipoComprobante === 'nota_venta') {
-        // Usar el mismo generador de nota de venta interna de la sección Ventas
-        await fetch(`/api/orders/${pedidoId}/comprobante`, { method: 'POST' })
-      } else {
-        // Boleta o Factura electrónica vía Nubefact
-        const rucLimpio = dniRuc.replace(/\D/g, '')
-        const emitRes = await fetch('/api/comprobantes/emitir', {
-          method: 'POST',
+      // 2. Si es venta inmediata: PATCH para marcar como entregado + pagado
+      if (!esProgramado) {
+        await fetch(`/api/orders/${pedidoId}`, {
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            pedido_id: pedidoId,
-            tipo: tipoComprobante,
-            cliente_nombre: nombreFinal,
-            cliente_dni: tipoComprobante === 'boleta' ? rucLimpio : undefined,
-            cliente_ruc: tipoComprobante === 'factura' ? rucLimpio : undefined,
+            estado: 'entregado',
+            estado_pago: 'pagado',
+            metodo_pago: metodo,
           })
         })
-        if (emitRes.ok) {
-          const { pdfUrl } = await emitRes.json()
-          if (pdfUrl) window.open(pdfUrl, '_blank')
+      }
+
+      // 3. Comprobante según tipo (solo en ventas inmediatas)
+      if (!esProgramado) {
+        if (tipoComprobante === 'nota_venta') {
+          // Nota de venta interna — mismo generador que sección Ventas
+          await fetch(`/api/orders/${pedidoId}/comprobante`, { method: 'POST' })
         } else {
-          toast.error('Venta registrada, pero falló el comprobante electrónico')
+          // Boleta o Factura electrónica vía Nubefact
+          const rucLimpio = dniRuc.replace(/\D/g, '')
+          const emitRes = await fetch('/api/comprobantes/emitir', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pedido_id: pedidoId,
+              tipo: tipoComprobante,
+              cliente_nombre: nombreFinal,
+              cliente_dni: tipoComprobante === 'boleta' ? rucLimpio : undefined,
+              cliente_ruc: tipoComprobante === 'factura' ? rucLimpio : undefined,
+            })
+          })
+          if (emitRes.ok) {
+            const { pdfUrl } = await emitRes.json()
+            if (pdfUrl) window.open(pdfUrl, '_blank')
+          } else {
+            toast.error('Venta registrada, pero falló el comprobante electrónico')
+          }
         }
       }
 
