@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn, formatPEN, formatFecha, formatFechaHoraLima, labelEstadoPedido, colorEstadoPedido, labelEstadoPago, colorEstadoPago, matchesFuzzy } from '@/lib/utils'
-import { ChevronDown, Package, Loader2, Search, X, FileText, Send, ExternalLink, Plus, Bell, Download, CreditCard, CheckCircle2, Mic, Clock, Trash2 } from 'lucide-react'
+import { ChevronDown, Package, Loader2, Search, X, FileText, Send, ExternalLink, Plus, Bell, Download, CreditCard, CheckCircle2, Mic, Clock, Trash2, Pencil } from 'lucide-react'
 import NuevoPedidoModal from './NuevoPedidoModal'
 import { toast } from 'sonner'
 import PedidoVozModal from './PedidoVozModal'
@@ -99,7 +99,7 @@ interface Zona {
   tiempo_estimado_min: number
 }
 
-const ESTADOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado', 'cancelado']
+const ESTADOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado', 'cancelado', 'devuelto']
 
 const RANGOS_FECHA = [
   { label: 'Todos', value: '' },
