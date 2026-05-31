@@ -38,6 +38,7 @@ export type EstadoPedido =
   | 'enviado'
   | 'entregado'
   | 'cancelado'
+  | 'devuelto'
 
 export type EstadoPago =
   | 'pendiente'

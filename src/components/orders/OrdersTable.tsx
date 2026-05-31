@@ -99,7 +99,7 @@ interface Zona {
   tiempo_estimado_min: number
 }
 
-const ESTADOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'enviado', 'entregado', 'cancelado']
+const ESTADOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'enviado', 'entregado', 'cancelado', 'devuelto']
 
 const RANGOS_FECHA = [
   { label: 'Todos', value: '' },
