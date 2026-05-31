@@ -403,6 +403,7 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
       pdf_url:          resultado.data?.enlace_del_pdf ?? null,
       emitido_por:      opts.emitidoPor,
       error_envio:      resultado.ok ? null : (resultado.error ?? 'Error desconocido'),
+      datos_json:       { items: itemsFormales },
     }, {
       onConflict: 'pedido_id,tipo',   // si ya existe → actualiza
     })
@@ -675,6 +676,7 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
       pdf_url:          resultado.data?.enlace_del_pdf ?? null,
       emitido_por:      opts.emitidoPor,
       error_envio:      resultado.ok ? null : (resultado.error ?? 'Error desconocido'),
+      datos_json:       { items: itemsFormales },
     }, {
       onConflict: 'pedido_id,tipo',
     })

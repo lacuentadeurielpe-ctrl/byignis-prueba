@@ -57,12 +57,19 @@ export async function GET(
   }
 
   // 4. Preparar data
-  const items = comprobante.pedidos?.items_pedido?.map((i: any) => ({
+  let rawItems = []
+  if (comprobante.datos_json?.items && Array.isArray(comprobante.datos_json.items)) {
+    rawItems = comprobante.datos_json.items
+  } else {
+    rawItems = comprobante.pedidos?.items_pedido || []
+  }
+
+  const items = rawItems.map((i: any) => ({
     cantidad: i.cantidad,
     descripcion: i.nombre_producto,
     precio_unitario: i.precio_unitario,
     subtotal: i.subtotal,
-  })) || []
+  }))
 
   const data = {
     ferreteria: {
