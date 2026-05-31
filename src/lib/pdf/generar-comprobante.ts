@@ -59,7 +59,8 @@ export async function generarYEnviarComprobante({
     .from('comprobantes')
     .select('id, numero_comprobante, pdf_url, enviado_whatsapp')
     .eq('pedido_id', pedidoId)
-    .single()
+    .eq('tipo', 'nota_venta_interna')
+    .maybeSingle()
 
   if (existente) {
     if (existente.enviado_whatsapp) {
@@ -170,9 +171,20 @@ export async function generarYEnviarComprobante({
     .insert({
       ferreteria_id:      ferreteriaId,
       pedido_id:          pedidoId,
+      tipo:               'nota_venta_interna',
+      serie:              'NV02', // Serie diferente para los generales
+      numero:             Number(numeroComprobante.replace(/\D/g, '')) || 0,
+      numero_completo:    numeroComprobante,
       numero_comprobante: numeroComprobante,
+      estado:             'emitido',
+      moneda:             'PEN',
+      subtotal:           pedido.total,
+      igv:                0,
+      total:              pedido.total,
       pdf_url:            publicUrl,
       enviado_whatsapp:   false,
+      cliente_nombre:     pedido.nombre_cliente,
+      emitido_por:        'dashboard',
     })
     .select('id')
     .single()

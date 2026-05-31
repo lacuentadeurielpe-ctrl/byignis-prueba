@@ -13,14 +13,27 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const { id: pedidoId } = await params
 
   const admin = createAdminClient()
-  const { data: comprobantesList } = await admin
+  const url = new URL(_.url)
+  const comprobanteId = url.searchParams.get('id')
+
+  let query = admin
     .from('comprobantes')
-    .select('numero_comprobante, pdf_url')
+    .select('id, numero_comprobante, pdf_url, tipo')
     .eq('pedido_id', pedidoId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    
-  const comprobante = comprobantesList?.[0]
+
+  if (comprobanteId) {
+    query = query.eq('id', comprobanteId)
+  } else {
+    query = query.order('created_at', { ascending: false })
+  }
+
+  const { data: comprobantesList } = await query
+  let comprobante = comprobantesList?.[0]
+
+  if (!comprobanteId && comprobantesList) {
+    const nv = comprobantesList.find(c => c.tipo === 'nota_venta_interna')
+    if (nv) comprobante = nv
+  }
 
   if (!comprobante) {
     return new Response(`
@@ -32,7 +45,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     `, { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 404 })
   }
 
-  const pdfProxyUrl = `/api/orders/${pedidoId}/comprobante/pdf`
+  const pdfProxyUrl = `/api/orders/${pedidoId}/comprobante/pdf${comprobanteId ? `?id=${comprobanteId}` : `?id=${comprobante.id}`}`
   const numero = comprobante.numero_comprobante
 
   const html = `<!DOCTYPE html>
