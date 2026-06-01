@@ -61,13 +61,13 @@ export function useOrderComprobantes(pedidos: any[]) {
     }))
   }
 
-  function viewerUrl(pedidoId: string) {
-    return `/api/orders/${pedidoId}/comprobante/view`
+  function viewerUrl(pedidoId: string, comprobanteId?: string) {
+    return `/api/orders/${pedidoId}/comprobante/view${comprobanteId ? `?id=${comprobanteId}` : ''}`
   }
 
   async function verComprobante(pedidoId: string) {
     const estado = estadoComprobante(pedidoId)
-    if (estado.url) { window.open(viewerUrl(pedidoId), '_blank'); return }
+    if (estado.url) { window.open(viewerUrl(pedidoId, estado.id), '_blank'); return }
 
     patchComprobante(pedidoId, { cargando: true, error: null })
     try {
@@ -81,7 +81,7 @@ export function useOrderComprobantes(pedidos: any[]) {
           url: data.pdf_url || `/api/comprobantes/${data.id}/pdf`, 
           cargando: false 
         })
-        window.open(viewerUrl(pedidoId), '_blank')
+        window.open(viewerUrl(pedidoId, data.id), '_blank')
       } else if (res.status === 404) {
         const gen = await fetch(`/api/orders/${pedidoId}/comprobante`, { method: 'POST' })
         if (gen.ok) {
@@ -92,7 +92,7 @@ export function useOrderComprobantes(pedidos: any[]) {
             url: data.pdfUrl, 
             cargando: false 
           })
-          window.open(viewerUrl(pedidoId), '_blank')
+          window.open(viewerUrl(pedidoId, data.comprobanteId), '_blank')
         } else {
           throw new Error((await gen.json()).error ?? 'Error al generar')
         }

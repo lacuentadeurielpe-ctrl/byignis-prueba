@@ -31,7 +31,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   let comprobante = comprobantesList?.[0]
 
   if (!comprobanteId && comprobantesList) {
-    const nv = comprobantesList.find(c => c.tipo === 'nota_venta')
+    const nv = comprobantesList.find(c => c.tipo === 'nota_venta' || c.tipo === 'nota_venta_interna')
     if (nv) comprobante = nv
   }
 
