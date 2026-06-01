@@ -108,6 +108,20 @@ function redondear2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+function esErrorDuplicadoNubefact(errorMsg?: string): boolean {
+  if (!errorMsg) return false
+  const err = errorMsg.toLowerCase()
+  return (
+    err.includes('ya existe') || 
+    err.includes('codigo":23') || 
+    err.includes('codigo": 23') || 
+    err.includes('codigo 23') ||
+    err.includes('código 23') ||
+    err.includes('codigo: 23') ||
+    err.includes('codigo:23')
+  )
+}
+
 // ── Helper para Nota de Venta (Split Billing) ────────────────────────────────
 async function procesarItemsInformales(
   supabase: any,
@@ -198,10 +212,15 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     return { ok: false, error: 'El pedido no tiene items' }
   }
 
-  const items = todosLosItems
+  // REQUISITO: Filtrar productos formalizados (facturable !== false)
+  const items = todosLosItems.filter(i => i.productos?.facturable !== false)
+  if (items.length === 0) {
+    return { ok: false, error: 'El pedido no tiene productos facturables (comprados con factura) para emitir boleta.' }
+  }
+
   const comprobanteSecundarioId = undefined
+
   // ── 3. Verificar si ya existe boleta emitida — si es así, la devolvemos ────
-  //    Nunca llamamos a Nubefact dos veces para el mismo pedido.
   const { data: yaEmitida } = await supabase
     .from('comprobantes')
     .select('id, numero_completo, estado, pdf_url, xml_url')
@@ -212,7 +231,6 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     .maybeSingle()
 
   if (yaEmitida) {
-    // Ya emitida → devolver datos de BD sin tocar Nubefact
     return {
       ok:             true,
       comprobanteId:  yaEmitida.id,
@@ -223,12 +241,6 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     }
   }
 
-  // IMPORTANTE: NO borramos registros 'error' anteriores.
-  // generar_numero_comprobante usa MAX(numero) de la tabla — si borramos los
-  // errores, el contador retrocede y Nubefact rechaza con "documento ya existe".
-  // Los registros 'error' quedan como auditoría y el siguiente intento
-  // recibe un número correlativo nuevo (2, 3, …) que Nubefact nunca ha visto.
-
   // ── 4. Desencriptar token Nubefact ───────────────────────────────────────
   let tokenPlano: string
   try {
@@ -237,62 +249,7 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     return { ok: false, error: 'Error al descifrar el token Nubefact. Reconfigura en Settings.' }
   }
 
-  // ── 5. Generar correlativo atómico (función SQL de F1) ───────────────────
   const serie = ferreteria.serie_boletas ?? 'B001'
-  const { data: corrData, error: errCorr } = await supabase
-    .rpc('generar_numero_comprobante', {
-      p_ferreteria_id: opts.ferreteriaId,
-      p_tipo:          'boleta',
-      p_serie:         serie,
-    })
-
-  if (errCorr || corrData == null) {
-    return { ok: false, error: `Error generando correlativo: ${errCorr?.message ?? 'sin datos'}` }
-  }
-
-  const numero = corrData as number
-  const numeroCompleto = `${serie}-${String(numero).padStart(8, '0')}`
-
-  // ── 6. Calcular montos IGV ───────────────────────────────────────────────
-  const igvIncluido = ferreteria.igv_incluido_en_precios ?? false
-  const IGV_RATE    = 0.18
-
-  const nubefactItems: NubefactItem[] = items.map((item, i) => {
-    const precioConIgv = igvIncluido
-      ? item.precio_unitario
-      : item.precio_unitario * (1 + IGV_RATE)
-
-    const valorUnitario = igvIncluido
-      ? redondear2(item.precio_unitario / (1 + IGV_RATE))
-      : item.precio_unitario
-
-    const subtotalSinIgv = redondear2(valorUnitario * item.cantidad)
-    const totalItem      = redondear2(precioConIgv * item.cantidad)
-    const igvItem        = redondear2(totalItem - subtotalSinIgv)
-
-    return {
-      unidad_de_medida:  mapearUnidadSunat(item.unidad),
-      codigo:            String(i + 1).padStart(3, '0'),  // P001, P002... — no mostramos UUID
-      descripcion:       item.nombre_producto,
-      cantidad:          item.cantidad,
-      valor_unitario:    valorUnitario,
-      precio_unitario:   redondear2(precioConIgv),
-      descuento:         '',
-      subtotal:          subtotalSinIgv,
-      tipo_de_igv:       NUBEFACT_TIPO_IGV.GRAVADO_OP_ONEROSA,
-      igv:               igvItem,
-      total:             totalItem,
-      anticipo_regularizacion:  false,
-      anticipo_documento_serie:  '',
-      anticipo_documento_numero: '',
-    }
-  })
-
-  const totalGravada = redondear2(nubefactItems.reduce((s, i) => s + i.subtotal, 0))
-  const totalIgv     = redondear2(nubefactItems.reduce((s, i) => s + i.igv, 0))
-  const totalFinal   = redondear2(nubefactItems.reduce((s, i) => s + i.total, 0))
-
-  // ── 7. Determinar tipo documento cliente ────────────────────────────────
   const dniLimpio = opts.clienteDni.replace(/\D/g, '')
   const tipoDocCliente = dniLimpio.length === 8
     ? NUBEFACT_TIPO_DOC_CLIENTE.DNI
@@ -300,75 +257,165 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     ? NUBEFACT_TIPO_DOC_CLIENTE.RUC
     : NUBEFACT_TIPO_DOC_CLIENTE.SIN_DOC
 
-  // ── 8. Armar payload Nubefact ───────────────────────────────────────────
-  const payload: NubefactPayload = {
-    operacion:                   'generar_comprobante',
-    tipo_de_comprobante:         NUBEFACT_TIPO.BOLETA,
-    serie,
-    numero,
-    sunat_transaction:           1,
-    cliente_tipo_de_documento:   tipoDocCliente,
-    cliente_numero_de_documento: dniLimpio || '00000000',
-    cliente_denominacion:        opts.clienteNombre || 'CLIENTE VARIOS',
-    cliente_direccion:           '',
-    cliente_email:               '',
-    cliente_email_1:             '',
-    cliente_email_2:             '',
-    fecha_de_emision:            fechaPeruana(),
-    fecha_de_vencimiento:        '',
-    moneda:                      1,
-    tipo_de_cambio:              '',
-    porcentaje_de_igv:           18,
-    descuento_global:            '',
-    total_descuento:             '',
-    total_anticipo:              '',
-    total_gravada:               totalGravada,
-    total_inafecta:              '',
-    total_exonerada:             '',
-    total_igv:                   totalIgv,
-    total_gratuita:              '',
-    total_otros_cargos:          '',
-    total:                       totalFinal,
-    percepcion_tipo:             '',
-    percepcion_base_imponible:   '',
-    total_percepcion:            '',
-    total_incluido_percepcion:   '',
-    detraccion:                  false,
-    observaciones:               '',
-    documento_que_se_modifica_tipo:   '',
-    documento_que_se_modifica_serie:  '',
-    documento_que_se_modifica_numero: '',
-    tipo_de_nota_de_credito:     '',
-    tipo_de_nota_de_debito:      '',
-    enviar_automaticamente_a_la_sunat:  true,
-    enviar_automaticamente_al_cliente:  false,
-    // codigo_unico: estable por documento (serie+numero+ferretería).
-    // Si Nubefact ya tiene este código, devuelve el mismo resultado (idempotencia).
-    // Cambia automáticamente si se genera un nuevo correlativo en el reintento.
-    codigo_unico:                `${opts.ferreteriaId.slice(0, 8)}-${serie}-${String(numero).padStart(8, '0')}`,
-    condiciones_de_pago:         '',
-    medio_de_pago:               '',
-    placa_vehiculo:              '',
-    orden_compra_servicio:       '',
-    tabla_personalizada_codigo:  '',
-    formato_de_pdf:              '',
-    items:                       nubefactItems,
+  const MAX_RETRIES = 15
+  let attempt = 0
+  let resultado: any = null
+  let numero = 0
+  let numeroCompleto = ''
+  let totalGravada = 0
+  let totalIgv = 0
+  let totalFinal = 0
+
+  while (attempt < MAX_RETRIES) {
+    attempt++
+
+    // ── 5. Generar correlativo atómico (función SQL de F1) ───────────────────
+    const { data: corrData, error: errCorr } = await supabase
+      .rpc('generar_numero_comprobante', {
+        p_ferreteria_id: opts.ferreteriaId,
+        p_tipo:          'boleta',
+        p_serie:         serie,
+      })
+
+    if (errCorr || corrData == null) {
+      return { ok: false, error: `Error generando correlativo: ${errCorr?.message ?? 'sin datos'}` }
+    }
+
+    numero = corrData as number
+    numeroCompleto = `${serie}-${String(numero).padStart(8, '0')}`
+
+    // ── 6. Calcular montos IGV ───────────────────────────────────────────────
+    const igvIncluido = ferreteria.igv_incluido_en_precios ?? false
+    const IGV_RATE    = 0.18
+
+    const nubefactItems: NubefactItem[] = items.map((item, i) => {
+      const precioConIgv = igvIncluido
+        ? item.precio_unitario
+        : item.precio_unitario * (1 + IGV_RATE)
+
+      const valorUnitario = igvIncluido
+        ? redondear2(item.precio_unitario / (1 + IGV_RATE))
+        : item.precio_unitario
+
+      const subtotalSinIgv = redondear2(valorUnitario * item.cantidad)
+      const totalItem      = redondear2(precioConIgv * item.cantidad)
+      const igvItem        = redondear2(totalItem - subtotalSinIgv)
+
+      return {
+        unidad_de_medida:  mapearUnidadSunat(item.unidad),
+        codigo:            String(i + 1).padStart(3, '0'),
+        descripcion:       item.nombre_producto,
+        cantidad:          item.cantidad,
+        valor_unitario:    valorUnitario,
+        precio_unitario:   redondear2(precioConIgv),
+        descuento:         '',
+        subtotal:          subtotalSinIgv,
+        tipo_de_igv:       NUBEFACT_TIPO_IGV.GRAVADO_OP_ONEROSA,
+        igv:               igvItem,
+        total:             totalItem,
+        anticipo_regularizacion:  false,
+        anticipo_documento_serie:  '',
+        anticipo_documento_numero: '',
+      }
+    })
+
+    totalGravada = redondear2(nubefactItems.reduce((s, i) => s + i.subtotal, 0))
+    totalIgv     = redondear2(nubefactItems.reduce((s, i) => s + i.igv, 0))
+    totalFinal   = redondear2(nubefactItems.reduce((s, i) => s + i.total, 0))
+
+    // ── 8. Armar payload Nubefact ───────────────────────────────────────────
+    const payload: NubefactPayload = {
+      operacion:                   'generar_comprobante',
+      tipo_de_comprobante:         NUBEFACT_TIPO.BOLETA,
+      serie,
+      numero,
+      sunat_transaction:           1,
+      cliente_tipo_de_documento:   tipoDocCliente,
+      cliente_numero_de_documento: dniLimpio || '00000000',
+      cliente_denominacion:        opts.clienteNombre || 'CLIENTE VARIOS',
+      cliente_direccion:           '',
+      cliente_email:               '',
+      cliente_email_1:             '',
+      cliente_email_2:             '',
+      fecha_de_emision:            fechaPeruana(),
+      fecha_de_vencimiento:        '',
+      moneda:                      1,
+      tipo_de_cambio:              '',
+      porcentaje_de_igv:           18,
+      descuento_global:            '',
+      total_descuento:             '',
+      total_anticipo:              '',
+      total_gravada:               totalGravada,
+      total_inafecta:              '',
+      total_exonerada:             '',
+      total_igv:                   totalIgv,
+      total_gratuita:              '',
+      total_otros_cargos:          '',
+      total:                       totalFinal,
+      percepcion_tipo:             '',
+      percepcion_base_imponible:   '',
+      total_percepcion:            '',
+      total_incluido_percepcion:   '',
+      detraccion:                  false,
+      observaciones:               '',
+      documento_que_se_modifica_tipo:   '',
+      documento_que_se_modifica_serie:  '',
+      documento_que_se_modifica_numero: '',
+      tipo_de_nota_de_credito:     '',
+      tipo_de_nota_de_debito:      '',
+      enviar_automaticamente_a_la_sunat:  true,
+      enviar_automaticamente_al_cliente:  false,
+      codigo_unico:                `${opts.ferreteriaId.slice(0, 8)}-${serie}-${String(numero).padStart(8, '0')}`,
+      condiciones_de_pago:         '',
+      medio_de_pago:               '',
+      placa_vehiculo:              '',
+      orden_compra_servicio:       '',
+      tabla_personalizada_codigo:  '',
+      formato_de_pdf:              '',
+      items:                       nubefactItems,
+    }
+
+    resultado = await enviarANubefact(ferreteria.nubefact_ruta!, tokenPlano, payload)
+
+    if (resultado.ok) {
+      break
+    }
+
+    if (esErrorDuplicadoNubefact(resultado.error)) {
+      console.warn(`[emitirBoleta] Correlativo ${numeroCompleto} duplicado en Nubefact. Guardando error en DB local y avanzando correlativo...`)
+      await supabase
+        .from('comprobantes')
+        .upsert({
+          ferreteria_id:    opts.ferreteriaId,
+          pedido_id:        opts.pedidoId,
+          tipo:             'boleta',
+          serie,
+          numero,
+          numero_completo:  numeroCompleto,
+          numero_comprobante: numeroCompleto,
+          estado:           'error',
+          subtotal:         totalGravada,
+          igv:              totalIgv,
+          total:            totalFinal,
+          cliente_nombre:   opts.clienteNombre,
+          cliente_ruc_dni:  dniLimpio || null,
+          emitido_por:      opts.emitidoPor,
+          error_envio:      'Nubefact: Documento duplicado auto-avanzado',
+          datos_json:       { items },
+        }, {
+          onConflict: 'pedido_id,tipo',
+        })
+    } else {
+      break
+    }
   }
 
-  // ── 9. Enviar a Nubefact (usando la RUTA del tenant) ────────────────────
-  const resultado = await enviarANubefact(ferreteria.nubefact_ruta!, tokenPlano, payload)
-
-  // ── 10. Guardar en BD — UPSERT por (pedido_id, tipo) ───────────────────
-  //    Si ya existe un registro 'error' anterior para este pedido+tipo,
-  //    lo actualizamos con el nuevo numero y resultado (avanza el contador).
-  //    Si no existe, inserta normalmente.
-  //    NUNCA sobreescribe un registro 'emitido' (ya controlado en paso 3).
   const estadoComprobante = resultado.ok ? 'emitido' : 'error'
 
   const { data: comprobante, error: errInsert } = await supabase
     .from('comprobantes')
     .upsert({
-      ferreteria_id:    opts.ferreteriaId,          // AISLADO
+      ferreteria_id:    opts.ferreteriaId,
       pedido_id:        opts.pedidoId,
       tipo:             'boleta',
       serie,
@@ -390,13 +437,12 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
       error_envio:      resultado.ok ? null : (resultado.error ?? 'Error desconocido'),
       datos_json:       { items },
     }, {
-      onConflict: 'pedido_id,tipo',   // si ya existe → actualiza
+      onConflict: 'pedido_id,tipo',
     })
     .select('id')
     .single()
 
   if (errInsert || !comprobante) {
-    // El comprobante pudo haberse emitido en SUNAT pero no guardado — situación crítica
     console.error('[emitirBoleta] Error guardando comprobante en BD:', errInsert)
     if (resultado.ok) {
       return {
@@ -477,8 +523,14 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
     return { ok: false, error: 'El pedido no tiene items' }
   }
 
-  const items = todosLosItems
+  // REQUISITO: Filtrar productos formalizados (facturable !== false)
+  const items = todosLosItems.filter(i => i.productos?.facturable !== false)
+  if (items.length === 0) {
+    return { ok: false, error: 'El pedido no tiene productos facturables (comprados con factura) para emitir factura.' }
+  }
+
   const comprobanteSecundarioId = undefined
+
   // ── 3. Verificar si ya existe factura emitida — si es así, la devolvemos ──
   const { data: yaEmitida } = await supabase
     .from('comprobantes')
@@ -507,125 +559,168 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
     return { ok: false, error: 'Error al descifrar el token Nubefact. Reconfigura en Settings.' }
   }
 
-  // ── 5. Generar correlativo atómico ───────────────────────────────────────
   const serie = ferreteria.serie_facturas ?? 'F001'
-  const { data: corrData, error: errCorr } = await supabase
-    .rpc('generar_numero_comprobante', {
-      p_ferreteria_id: opts.ferreteriaId,
-      p_tipo:          'factura',
-      p_serie:         serie,
-    })
-
-  if (errCorr || corrData == null) {
-    return { ok: false, error: `Error generando correlativo: ${errCorr?.message ?? 'sin datos'}` }
-  }
-
-  const numero = corrData as number
-  const numeroCompleto = `${serie}-${String(numero).padStart(8, '0')}`
-
-  // ── 6. Calcular montos IGV ───────────────────────────────────────────────
-  const igvIncluido = ferreteria.igv_incluido_en_precios ?? false
-  const IGV_RATE    = 0.18
-
-  const nubefactItems: NubefactItem[] = items.map((item, i) => {
-    const precioConIgv = igvIncluido
-      ? item.precio_unitario
-      : item.precio_unitario * (1 + IGV_RATE)
-
-    const valorUnitario = igvIncluido
-      ? redondear2(item.precio_unitario / (1 + IGV_RATE))
-      : item.precio_unitario
-
-    const subtotalSinIgv = redondear2(valorUnitario * item.cantidad)
-    const totalItem      = redondear2(precioConIgv * item.cantidad)
-    const igvItem        = redondear2(totalItem - subtotalSinIgv)
-
-    return {
-      unidad_de_medida:  mapearUnidadSunat(item.unidad),
-      codigo:            String(i + 1).padStart(3, '0'),
-      descripcion:       item.nombre_producto,
-      cantidad:          item.cantidad,
-      valor_unitario:    valorUnitario,
-      precio_unitario:   redondear2(precioConIgv),
-      descuento:         '',
-      subtotal:          subtotalSinIgv,
-      tipo_de_igv:       NUBEFACT_TIPO_IGV.GRAVADO_OP_ONEROSA,
-      igv:               igvItem,
-      total:             totalItem,
-      anticipo_regularizacion:  false,
-      anticipo_documento_serie:  '',
-      anticipo_documento_numero: '',
-    }
-  })
-
-  const totalGravada = redondear2(nubefactItems.reduce((s, i) => s + i.subtotal, 0))
-  const totalIgv     = redondear2(nubefactItems.reduce((s, i) => s + i.igv, 0))
-  const totalFinal   = redondear2(nubefactItems.reduce((s, i) => s + i.total, 0))
-
-  // ── 7. Armar payload Nubefact para FACTURA ──────────────────────────────
   const rucLimpio = opts.clienteRuc.replace(/\D/g, '')
 
-  const payload: NubefactPayload = {
-    operacion:                   'generar_comprobante',
-    tipo_de_comprobante:         NUBEFACT_TIPO.FACTURA,
-    serie,
-    numero,
-    sunat_transaction:           1,
-    cliente_tipo_de_documento:   NUBEFACT_TIPO_DOC_CLIENTE.RUC,
-    cliente_numero_de_documento: rucLimpio,
-    cliente_denominacion:        opts.clienteNombre,
-    cliente_direccion:           '',
-    cliente_email:               '',
-    cliente_email_1:             '',
-    cliente_email_2:             '',
-    fecha_de_emision:            fechaPeruana(),
-    fecha_de_vencimiento:        '',
-    moneda:                      1,
-    tipo_de_cambio:              '',
-    porcentaje_de_igv:           18,
-    descuento_global:            '',
-    total_descuento:             '',
-    total_anticipo:              '',
-    total_gravada:               totalGravada,
-    total_inafecta:              '',
-    total_exonerada:             '',
-    total_igv:                   totalIgv,
-    total_gratuita:              '',
-    total_otros_cargos:          '',
-    total:                       totalFinal,
-    percepcion_tipo:             '',
-    percepcion_base_imponible:   '',
-    total_percepcion:            '',
-    total_incluido_percepcion:   '',
-    detraccion:                  false,
-    observaciones:               '',
-    documento_que_se_modifica_tipo:   '',
-    documento_que_se_modifica_serie:  '',
-    documento_que_se_modifica_numero: '',
-    tipo_de_nota_de_credito:     '',
-    tipo_de_nota_de_debito:      '',
-    enviar_automaticamente_a_la_sunat:  true,
-    enviar_automaticamente_al_cliente:  false,
-    codigo_unico:                `${opts.ferreteriaId.slice(0, 8)}-${serie}-${String(numero).padStart(8, '0')}`,
-    condiciones_de_pago:         '',
-    medio_de_pago:               '',
-    placa_vehiculo:              '',
-    orden_compra_servicio:       '',
-    tabla_personalizada_codigo:  '',
-    formato_de_pdf:              '',
-    items:                       nubefactItems,
+  const MAX_RETRIES = 15
+  let attempt = 0
+  let resultado: any = null
+  let numero = 0
+  let numeroCompleto = ''
+  let totalGravada = 0
+  let totalIgv = 0
+  let totalFinal = 0
+
+  while (attempt < MAX_RETRIES) {
+    attempt++
+
+    // ── 5. Generar correlativo atómico ───────────────────────────────────────
+    const { data: corrData, error: errCorr } = await supabase
+      .rpc('generar_numero_comprobante', {
+        p_ferreteria_id: opts.ferreteriaId,
+        p_tipo:          'factura',
+        p_serie:         serie,
+      })
+
+    if (errCorr || corrData == null) {
+      return { ok: false, error: `Error generando correlativo: ${errCorr?.message ?? 'sin datos'}` }
+    }
+
+    numero = corrData as number
+    numeroCompleto = `${serie}-${String(numero).padStart(8, '0')}`
+
+    // ── 6. Calcular montos IGV ───────────────────────────────────────────────
+    const igvIncluido = ferreteria.igv_incluido_en_precios ?? false
+    const IGV_RATE    = 0.18
+
+    const nubefactItems: NubefactItem[] = items.map((item, i) => {
+      const precioConIgv = igvIncluido
+        ? item.precio_unitario
+        : item.precio_unitario * (1 + IGV_RATE)
+
+      const valorUnitario = igvIncluido
+        ? redondear2(item.precio_unitario / (1 + IGV_RATE))
+        : item.precio_unitario
+
+      const subtotalSinIgv = redondear2(valorUnitario * item.cantidad)
+      const totalItem      = redondear2(precioConIgv * item.cantidad)
+      const igvItem        = redondear2(totalItem - subtotalSinIgv)
+
+      return {
+        unidad_de_medida:  mapearUnidadSunat(item.unidad),
+        codigo:            String(i + 1).padStart(3, '0'),
+        descripcion:       item.nombre_producto,
+        cantidad:          item.cantidad,
+        valor_unitario:    valorUnitario,
+        precio_unitario:   redondear2(precioConIgv),
+        descuento:         '',
+        subtotal:          subtotalSinIgv,
+        tipo_de_igv:       NUBEFACT_TIPO_IGV.GRAVADO_OP_ONEROSA,
+        igv:               igvItem,
+        total:             totalItem,
+        anticipo_regularizacion:  false,
+        anticipo_documento_serie:  '',
+        anticipo_documento_numero: '',
+      }
+    })
+
+    totalGravada = redondear2(nubefactItems.reduce((s, i) => s + i.subtotal, 0))
+    totalIgv     = redondear2(nubefactItems.reduce((s, i) => s + i.igv, 0))
+    totalFinal   = redondear2(nubefactItems.reduce((s, i) => s + i.total, 0))
+
+    // ── 7. Armar payload Nubefact para FACTURA ──────────────────────────────
+    const payload: NubefactPayload = {
+      operacion:                   'generar_comprobante',
+      tipo_de_comprobante:         NUBEFACT_TIPO.FACTURA,
+      serie,
+      numero,
+      sunat_transaction:           1,
+      cliente_tipo_de_documento:   NUBEFACT_TIPO_DOC_CLIENTE.RUC,
+      cliente_numero_de_documento: rucLimpio,
+      cliente_denominacion:        opts.clienteNombre,
+      cliente_direccion:           '',
+      cliente_email:               '',
+      cliente_email_1:             '',
+      cliente_email_2:             '',
+      fecha_de_emision:            fechaPeruana(),
+      fecha_de_vencimiento:        '',
+      moneda:                      1,
+      tipo_de_cambio:              '',
+      porcentaje_de_igv:           18,
+      descuento_global:            '',
+      total_descuento:             '',
+      total_anticipo:              '',
+      total_gravada:               totalGravada,
+      total_inafecta:              '',
+      total_exonerada:             '',
+      total_igv:                   totalIgv,
+      total_gratuita:              '',
+      total_otros_cargos:          '',
+      total:                       totalFinal,
+      percepcion_tipo:             '',
+      percepcion_base_imponible:   '',
+      total_percepcion:            '',
+      total_incluido_percepcion:   '',
+      detraccion:                  false,
+      observaciones:               '',
+      documento_que_se_modifica_tipo:   '',
+      documento_que_se_modifica_serie:  '',
+      documento_que_se_modifica_numero: '',
+      tipo_de_nota_de_credito:     '',
+      tipo_de_nota_de_debito:      '',
+      enviar_automaticamente_a_la_sunat:  true,
+      enviar_automaticamente_al_cliente:  false,
+      codigo_unico:                `${opts.ferreteriaId.slice(0, 8)}-${serie}-${String(numero).padStart(8, '0')}`,
+      condiciones_de_pago:         '',
+      medio_de_pago:               '',
+      placa_vehiculo:              '',
+      orden_compra_servicio:       '',
+      tabla_personalizada_codigo:  '',
+      formato_de_pdf:              '',
+      items:                       nubefactItems,
+    }
+
+    resultado = await enviarANubefact(ferreteria.nubefact_ruta!, tokenPlano, payload)
+
+    if (resultado.ok) {
+      break
+    }
+
+    if (esErrorDuplicadoNubefact(resultado.error)) {
+      console.warn(`[emitirFactura] Correlativo ${numeroCompleto} duplicado en Nubefact. Guardando error en DB local y avanzando correlativo...`)
+      await supabase
+        .from('comprobantes')
+        .upsert({
+          ferreteria_id:    opts.ferreteriaId,
+          pedido_id:        opts.pedidoId,
+          tipo:             'factura',
+          serie,
+          numero,
+          numero_completo:  numeroCompleto,
+          numero_comprobante: numeroCompleto,
+          estado:           'error',
+          subtotal:         totalGravada,
+          igv:              totalIgv,
+          total:            totalFinal,
+          cliente_nombre:   opts.clienteNombre,
+          cliente_ruc_dni:  rucLimpio,
+          emitido_por:      opts.emitidoPor,
+          error_envio:      'Nubefact: Documento duplicado auto-avanzado',
+          datos_json:       { items },
+        }, {
+          onConflict: 'pedido_id,tipo',
+        })
+    } else {
+      break
+    }
   }
 
-  // ── 8. Enviar a Nubefact ────────────────────────────────────────────────
-  const resultado = await enviarANubefact(ferreteria.nubefact_ruta!, tokenPlano, payload)
-
-  // ── 9. Guardar en BD — UPSERT por (pedido_id, tipo) ───────────────────
   const estadoComprobante = resultado.ok ? 'emitido' : 'error'
 
   const { data: comprobante, error: errInsert } = await supabase
     .from('comprobantes')
     .upsert({
-      ferreteria_id:    opts.ferreteriaId,          // AISLADO
+      ferreteria_id:    opts.ferreteriaId,
       pedido_id:        opts.pedidoId,
       tipo:             'factura',
       serie,
