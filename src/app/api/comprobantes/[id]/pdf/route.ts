@@ -23,7 +23,7 @@ export async function GET(
   // 1. Obtener comprobante
   const { data: comprobante, error: errComp } = await supabase
     .from('comprobantes')
-    .select('*, pedidos(items_pedido(*))')
+    .select('*, pedidos(items_pedido(*, productos(facturable)))')
     .eq('id', id)
     .eq('ferreteria_id', session.ferreteriaId)
     .single()
@@ -57,11 +57,11 @@ export async function GET(
   }
 
   // 4. Preparar data
-  let rawItems = []
-  if (comprobante.datos_json?.items && Array.isArray(comprobante.datos_json.items)) {
-    rawItems = comprobante.datos_json.items
-  } else {
-    rawItems = comprobante.pedidos?.items_pedido || []
+  let rawItems = comprobante.pedidos?.items_pedido || []
+
+  // Si es boleta o factura, filtrar para que solo vayan los productos facturables
+  if (comprobante.tipo === 'boleta' || comprobante.tipo === 'factura') {
+    rawItems = rawItems.filter((i: any) => i.productos?.facturable !== false)
   }
 
   const items = rawItems.map((i: any) => ({

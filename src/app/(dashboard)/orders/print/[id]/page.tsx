@@ -52,11 +52,10 @@ export default async function PrintTicketPage({
 
       if (comp.tipo === 'nota_venta' || comp.tipo === 'nota_venta_interna') {
         tituloComprobante = 'NOTA DE VENTA'
-        itemsAImprimir = comp.datos_json?.items || itemsAImprimir
       } else {
         tituloComprobante = comp.tipo === 'factura' ? 'FACTURA ELECTRÓNICA' : 'BOLETA ELECTRÓNICA'
         esSunat = true
-        itemsAImprimir = comp.datos_json?.items || itemsAImprimir
+        itemsAImprimir = itemsAImprimir.filter((item: any) => item.productos?.facturable !== false)
       }
     }
   }

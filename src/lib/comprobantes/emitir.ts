@@ -401,7 +401,7 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
           cliente_ruc_dni:  dniLimpio || null,
           emitido_por:      opts.emitidoPor,
           error_envio:      'Nubefact: Documento duplicado auto-avanzado',
-          datos_json:       { items },
+          pdf_url:          '',
         }, {
           onConflict: 'pedido_id,tipo',
         })
@@ -432,10 +432,9 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
       nubefact_hash:    resultado.data?.hash_cpe       ?? null,
       nubefact_qr_cadena: resultado.data?.cadena_para_codigo_qr ?? null,
       xml_url:          resultado.data?.enlace_del_xml ?? null,
-      pdf_url:          resultado.data?.enlace_del_pdf ?? null,
+      pdf_url:          resultado.data?.enlace_del_pdf ?? '',
       emitido_por:      opts.emitidoPor,
       error_envio:      resultado.ok ? null : (resultado.error ?? 'Error desconocido'),
-      datos_json:       { items },
     }, {
       onConflict: 'pedido_id,tipo',
     })
@@ -706,7 +705,7 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
           cliente_ruc_dni:  rucLimpio,
           emitido_por:      opts.emitidoPor,
           error_envio:      'Nubefact: Documento duplicado auto-avanzado',
-          datos_json:       { items },
+          pdf_url:          '',
         }, {
           onConflict: 'pedido_id,tipo',
         })
@@ -737,10 +736,9 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
       nubefact_hash:    resultado.data?.hash_cpe       ?? null,
       nubefact_qr_cadena: resultado.data?.cadena_para_codigo_qr ?? null,
       xml_url:          resultado.data?.enlace_del_xml ?? null,
-      pdf_url:          resultado.data?.enlace_del_pdf ?? null,
+      pdf_url:          resultado.data?.enlace_del_pdf ?? '',
       emitido_por:      opts.emitidoPor,
       error_envio:      resultado.ok ? null : (resultado.error ?? 'Error desconocido'),
-      datos_json:       { items },
     }, {
       onConflict: 'pedido_id,tipo',
     })
