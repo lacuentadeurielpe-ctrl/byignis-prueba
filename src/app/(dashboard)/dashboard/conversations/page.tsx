@@ -5,6 +5,7 @@ import { redirect }            from 'next/navigation'
 import ConversationsList       from '@/components/conversations/ConversationsList'
 import { MessageSquare }       from 'lucide-react'
 import { getSessionInfo }      from '@/lib/auth/roles'
+import { ChatRepository }      from '@/lib/db/repositories/chat'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,23 +14,14 @@ export default async function ConversationsPage() {
   if (!session) redirect('/auth/login')
 
   const supabase = await createClient()
+  const chatRepo = new ChatRepository(supabase)
 
-  const { data: conversaciones } = await supabase
-    .from('conversaciones')
-    .select('id, estado, bot_pausado, ultima_actividad, clientes(nombre, telefono)')
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('ultima_actividad', { ascending: false })
-    .limit(50)
-
+  const conversaciones = await chatRepo.obtenerConversacionesList(session.ferreteriaId)
   const convIds = (conversaciones ?? []).map(c => c.id)
 
   let ultimosMensajes: Record<string, { contenido: string; role: string }> = {}
   if (convIds.length > 0) {
-    const { data: mensajes } = await supabase
-      .from('mensajes')
-      .select('conversacion_id, contenido, role, created_at')
-      .in('conversacion_id', convIds)
-      .order('created_at', { ascending: false })
+    const mensajes = await chatRepo.obtenerUltimosMensajesPorConversaciones(convIds)
 
     for (const m of mensajes ?? []) {
       if (!ultimosMensajes[m.conversacion_id]) {

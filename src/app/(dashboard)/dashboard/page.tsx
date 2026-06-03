@@ -1,6 +1,9 @@
 // Dashboard principal — Fase 2 REFORMA
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { VentasRepository } from '@/lib/db/repositories/ventas'
+import { ChatRepository } from '@/lib/db/repositories/chat'
+import { ClientesRepository } from '@/lib/db/repositories/clientes'
 import { formatPEN, labelEstadoPedido } from '@/lib/utils'
 import {
   ShoppingCart, MessageSquare, TrendingUp, TrendingDown,
@@ -103,58 +106,60 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const per        = calcPeriodo(periodo)
   const hace30     = inicioDiaLima(-29)
 
+  // Instanciar repositorios
+  const ventasRepo = new VentasRepository(supabase)
+  const chatRepo = new ChatRepository(supabase)
+  const clientesRepo = new ClientesRepository(supabase)
+
   // ── Queries en paralelo ──────────────────────────────────────────────
   const [
-    { data: pedidosActivos },
-    { data: cobrosPendientes },
-    { data: pedidos30d },
-    { data: cotizaciones30d },
-    { data: itemsCotizacion },
-    { data: pedidosHoy },
-    { data: pedidosAyer },
-    { count: convActivas },
-    { data: feedPedidos },
-    { data: feedCotizaciones },
-    { data: feedPagos },
+    pedidosActivos,
+    cobrosPendientes,
+    pedidos30d,
+    cotizaciones30d,
+    itemsCotizacion,
+    pedidosHoy,
+    pedidosAyer,
+    convActivas,
+    feedPedidos,
+    feedCotizaciones,
+    feedPagos,
   ] = await Promise.all([
     // Pedidos activos para pipeline (todos menos cancelados)
-    supabase.from('pedidos').select('id, estado, total, nombre_cliente, numero_pedido, created_at, updated_at')
-      .eq('ferreteria_id', fid).not('estado', 'in', '(cancelado)').order('created_at', { ascending: false }),
+    ventasRepo.obtenerPedidosActivosPipeline(fid),
     // Cobros pendientes hoy
-    supabase.from('pedidos').select('id, numero_pedido, nombre_cliente, total, metodo_pago')
-      .eq('ferreteria_id', fid).eq('estado', 'entregado').neq('estado_pago', 'pagado').gte('created_at', inicioHoy),
+    ventasRepo.obtenerCobrosPendientesHoy(fid, inicioHoy),
     // Gráfico 30d
-    supabase.from('pedidos').select('created_at').eq('ferreteria_id', fid).gte('created_at', hace30),
-    supabase.from('cotizaciones').select('created_at').eq('ferreteria_id', fid).gte('created_at', hace30),
+    ventasRepo.obtenerPedidosDesdeFecha(fid, hace30),
+    ventasRepo.obtenerCotizacionesDesdeFecha(fid, hace30),
     // Top productos
-    supabase.from('items_cotizacion').select('nombre_producto, cantidad, cotizaciones!inner(ferreteria_id, created_at)')
-      .eq('cotizaciones.ferreteria_id', fid).gte('cotizaciones.created_at', hace30),
-    // Snapshot hoy/ayer
-    supabase.from('pedidos').select('total, estado').eq('ferreteria_id', fid).gte('created_at', inicioHoy).neq('estado', 'cancelado'),
-    supabase.from('pedidos').select('total').eq('ferreteria_id', fid).gte('created_at', inicioAyer).lt('created_at', inicioHoy).neq('estado', 'cancelado'),
+    ventasRepo.obtenerTopProductos30d(fid, hace30),
+    // Snapshot hoy/ayer (excluyendo cancelados en JS después de obtenerlos)
+    ventasRepo.obtenerPedidosRango(fid, inicioHoy, finDiaLima(0)),
+    ventasRepo.obtenerPedidosRango(fid, inicioAyer, inicioHoy),
     // Chats pausados
-    supabase.from('conversaciones').select('*', { count: 'exact', head: true }).eq('ferreteria_id', fid).eq('bot_pausado', true),
+    chatRepo.contarConversacionesPausadas(fid),
     // Feed actividad
-    supabase.from('pedidos').select('id, numero_pedido, nombre_cliente, estado, updated_at, total')
-      .eq('ferreteria_id', fid).not('estado', 'in', '(pendiente)').order('updated_at', { ascending: false }).limit(14),
-    supabase.from('cotizaciones').select('id, estado, created_at, clientes(nombre)')
-      .eq('ferreteria_id', fid).order('created_at', { ascending: false }).limit(6),
-    supabase.from('pagos_registrados').select('id, monto, estado, registrado_at, clientes(nombre)')
-      .eq('ferreteria_id', fid).order('registrado_at', { ascending: false }).limit(5),
+    ventasRepo.obtenerFeedPedidos(fid, 14),
+    ventasRepo.obtenerFeedCotizaciones(fid, 6),
+    ventasRepo.obtenerFeedPagos(fid, 5),
   ])
 
   // Queries del período
   const [
-    { data: pedidosPer }, { data: pedidosPrevPer },
-    { count: convPer },   { count: convPrevPer },
-    { count: clientesNuevosPer }, { count: clientesPrevPer },
+    pedidosPer,
+    pedidosPrevPer,
+    convPer,
+    convPrevPer,
+    clientesNuevosPer,
+    clientesPrevPer,
   ] = await Promise.all([
-    supabase.from('pedidos').select('estado, total, costo_total').eq('ferreteria_id', fid).gte('created_at', per.inicio).lt('created_at', per.fin),
-    supabase.from('pedidos').select('estado, total, costo_total').eq('ferreteria_id', fid).gte('created_at', per.prevInicio).lt('created_at', per.prevFin),
-    supabase.from('conversaciones').select('*', { count: 'exact', head: true }).eq('ferreteria_id', fid).gte('ultima_actividad', per.inicio).lt('ultima_actividad', per.fin),
-    supabase.from('conversaciones').select('*', { count: 'exact', head: true }).eq('ferreteria_id', fid).gte('ultima_actividad', per.prevInicio).lt('ultima_actividad', per.prevFin),
-    supabase.from('clientes').select('*', { count: 'exact', head: true }).eq('ferreteria_id', fid).gte('created_at', per.inicio).lt('created_at', per.fin),
-    supabase.from('clientes').select('*', { count: 'exact', head: true }).eq('ferreteria_id', fid).gte('created_at', per.prevInicio).lt('created_at', per.prevFin),
+    ventasRepo.obtenerPedidosRango(fid, per.inicio, per.fin),
+    ventasRepo.obtenerPedidosRango(fid, per.prevInicio, per.prevFin),
+    chatRepo.contarConversacionesActivasRango(fid, per.inicio, per.fin),
+    chatRepo.contarConversacionesActivasRango(fid, per.prevInicio, per.prevFin),
+    clientesRepo.contarClientesNuevosRango(fid, per.inicio, per.fin),
+    clientesRepo.contarClientesNuevosRango(fid, per.prevInicio, per.prevFin),
   ])
 
   // ── Cómputos ──────────────────────────────────────────────────────────
@@ -194,8 +199,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const cmbClientes = cambio(clientesNuevosPer ?? 0, clientesPrevPer ?? 0)
 
   // Snapshot hoy
-  const ingresosHoy  = (pedidosHoy ?? []).reduce((s, p) => s + (p.total ?? 0), 0)
-  const ingresosAyer = (pedidosAyer ?? []).reduce((s, p) => s + (p.total ?? 0), 0)
+  const ingresosHoy  = (pedidosHoy ?? []).filter((p: any) => p.estado !== 'cancelado').reduce((s, p) => s + (p.total ?? 0), 0)
+  const ingresosAyer = (pedidosAyer ?? []).filter((p: any) => p.estado !== 'cancelado').reduce((s, p) => s + (p.total ?? 0), 0)
   const cmbHoy       = cambio(ingresosHoy, ingresosAyer)
   const cobrosN      = (cobrosPendientes ?? []).length
 

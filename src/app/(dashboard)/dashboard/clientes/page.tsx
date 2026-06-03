@@ -6,6 +6,7 @@ import { Users, UserPlus, GitMerge } from 'lucide-react'
 import ClientesTable from '@/components/clientes/ClientesTable'
 import ClientesDashboardMetrics from '@/components/clientes/ClientesDashboardMetrics'
 import ClientesPageActions from '@/components/clientes/ClientesPageActions'
+import { ClientesRepository } from '@/lib/db/repositories/clientes'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,19 +15,11 @@ export default async function ClientesPage() {
   if (!session) redirect('/auth/login')
 
   const supabase = await createClient()
+  const clientesRepo = new ClientesRepository(supabase)
 
   // Clientes con métricas + todos los campos de identificación
-  // ferreteria_id filtrado → aislamiento multi-tenancy garantizado
-  const { data: clientes } = await supabase
-    .from('clientes')
-    .select(`
-      id, nombre, telefono, dni_ruc, tipo, alias, email,
-      telefono_secundario, direccion_habitual, tags, notas_internas, created_at,
-      pedidos(id, total, estado, created_at),
-      creditos(monto_total, monto_pagado, estado)
-    `)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('created_at', { ascending: false })
+  // ferreteria_id filtrado → aislamiento multi-tenancy garantizado a través de capa de repositorio
+  const clientes = await clientesRepo.obtenerClientesConResumen(session.ferreteriaId)
 
   // Calcular métricas por cliente
   const clientesConMetricas = (clientes ?? []).map((c) => {

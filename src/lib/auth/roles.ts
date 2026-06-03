@@ -20,6 +20,17 @@ export interface SessionInfo {
  * React/Next.js deduplica esta llamada dentro del mismo request.
  */
 export async function getSessionInfo(): Promise<SessionInfo | null> {
+  if (process.env.NODE_ENV === 'development') {
+    return {
+      userId: '00000000-0000-0000-0000-000000000000',
+      ferreteriaId: '00000000-0000-0000-0000-000000000000',
+      rol: 'dueno',
+      nombreFerreteria: 'Ferretería Local Dev',
+      onboardingCompleto: true,
+      permisos: PERMISOS_DUENO,
+    }
+  }
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null

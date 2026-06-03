@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,14 +11,14 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
 
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('vehiculos')
-    .select('*')
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('nombre')
+  const deliveryRepo = new DeliveryRepository(supabase)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+  try {
+    const data = await deliveryRepo.listarVehiculos(session.ferreteriaId)
+    return NextResponse.json(data)
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }
 
 // POST /api/vehiculos — crear vehículo
@@ -47,21 +48,19 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('vehiculos')
-    .insert({
-      ferreteria_id:          session.ferreteriaId,
-      nombre:                 nombre.trim(),
+  const deliveryRepo = new DeliveryRepository(supabase)
+
+  try {
+    const data = await deliveryRepo.crearVehiculo(session.ferreteriaId, {
+      nombre: nombre.trim(),
       tipo,
       capacidad_kg,
       capacidad_m3,
       velocidad_promedio_kmh,
-      costo_por_km:           costo_por_km ?? null,
-      activo:                 true,
+      costo_por_km: costo_por_km ?? null,
     })
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data, { status: 201 })
+    return NextResponse.json(data, { status: 201 })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }

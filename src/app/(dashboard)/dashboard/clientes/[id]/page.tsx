@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { redirect, notFound } from 'next/navigation'
 import ClienteDetalleView from './ClienteDetalleView'
+import { ClientesRepository } from '@/lib/db/repositories/clientes'
+import { ChatRepository } from '@/lib/db/repositories/chat'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,68 +18,37 @@ export default async function ClienteDetallePage({ params }: Props) {
   if (!session) redirect('/auth/login')
 
   const supabase = await createClient()
+  const clientesRepo = new ClientesRepository(supabase)
+  const chatRepo = new ChatRepository(supabase)
 
-  // 1. Datos del cliente
-  const { data: cliente } = await supabase
-    .from('clientes')
-    .select(`
-      id, nombre, telefono, dni_ruc, tipo, alias, email,
-      telefono_secundario, direccion_habitual, tags, notas_internas, created_at
-    `)
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .single()
+  // 1. Datos del cliente (retorna null si falla o no pertenece a la ferretería)
+  let cliente: any = null
+  try {
+    cliente = await clientesRepo.obtenerDetalleCliente(session.ferreteriaId, id)
+  } catch {
+    cliente = null
+  }
 
   if (!cliente) notFound()
 
-  // 2. Pedidos del cliente
-  const { data: pedidos } = await supabase
-    .from('pedidos')
-    .select('id, numero_pedido, estado, estado_pago, total, modalidad, created_at, items_pedido(nombre_producto, cantidad, precio_unitario, subtotal)')
-    .eq('cliente_id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('created_at', { ascending: false })
-
-  // 3. Cotizaciones del cliente
-  const { data: cotizaciones } = await supabase
-    .from('cotizaciones')
-    .select('id, numero_cotizacion, estado, total, created_at')
-    .eq('cliente_id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('created_at', { ascending: false })
-
-  // 4. Créditos (Cuenta Corriente) del cliente
-  const { data: creditos } = await supabase
-    .from('creditos')
-    .select(`
-      id, monto_total, monto_pagado, fecha_limite, estado, created_at, notas,
-      pedidos(numero_pedido),
-      abonos_credito(id, monto, metodo_pago, notas, created_at)
-    `)
-    .eq('cliente_id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('created_at', { ascending: false })
-
-  // 5. Conversación activa
-  const { data: conversacion } = await supabase
-    .from('conversaciones')
-    .select('id, estado, bot_pausado, ultima_actividad')
-    .eq('cliente_id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('ultima_actividad', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // 2. Cargar en paralelo pedidos, cotizaciones, créditos y conversación activa
+  const [pedidos, cotizaciones, creditos, conversacion] = await Promise.all([
+    clientesRepo.obtenerPedidosDeCliente(session.ferreteriaId, id),
+    clientesRepo.obtenerCotizacionesDeCliente(session.ferreteriaId, id),
+    clientesRepo.obtenerCreditosDeCliente(session.ferreteriaId, id),
+    chatRepo.obtenerConversacionReciente(session.ferreteriaId, id),
+  ])
 
   // Cargar últimos mensajes si hay conversación
   let mensajes: any[] = []
   if (conversacion) {
-    const { data: msjs } = await supabase
-      .from('mensajes')
-      .select('id, role, contenido, tipo, created_at')
-      .eq('conversacion_id', conversacion.id)
-      .order('created_at', { ascending: false })
-      .limit(30)
-    mensajes = (msjs || []).reverse()
+    try {
+      const msjs = await chatRepo.obtenerMensajesDeConversacion(conversacion.id, 30)
+      // Nota: obtenerMensajesDeConversacion ya retorna ordenados ascendentemente (reverse del listado original descendente)
+      mensajes = msjs || []
+    } catch {
+      mensajes = []
+    }
   }
 
   return (

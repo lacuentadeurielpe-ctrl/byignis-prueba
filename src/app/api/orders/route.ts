@@ -6,6 +6,11 @@ import { calcularETA } from '@/lib/delivery/eta'
 import { crearEntrega } from '@/lib/delivery/assignment'
 import { normalizarTelefono } from '@/lib/utils'
 
+// Repositories
+import { VentasRepository } from '@/lib/db/repositories/ventas'
+import { ChatRepository } from '@/lib/db/repositories/chat'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
+
 export const dynamic = 'force-dynamic'
 
 interface ItemNuevoPedido {
@@ -23,6 +28,9 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const supabase = await createClient()
+  const ventasRepo = new VentasRepository(supabase)
+  const chatRepo = new ChatRepository(supabase)
+  const deliveryRepo = new DeliveryRepository(supabase)
 
   const body = await request.json()
   const {
@@ -57,21 +65,18 @@ export async function POST(request: Request) {
   const costo_total = items.reduce((s: number, i: ItemNuevoPedido) => s + i.cantidad * i.costo_unitario, 0)
 
   // Generar número de pedido
-  const { data: numeroPedido, error: errNum } = await supabase
-    .rpc('generar_numero_pedido', { p_ferreteria_id: session.ferreteriaId })
-  if (errNum || !numeroPedido)
-    return NextResponse.json({ error: `Error generando número: ${errNum?.message}` }, { status: 500 })
+  let numeroPedido
+  try {
+    numeroPedido = await ventasRepo.generarNumeroPedido(session.ferreteriaId)
+  } catch (error: any) {
+    return NextResponse.json({ error: `Error generando número: ${error.message}` }, { status: 500 })
+  }
 
   // ── Buscar o crear cliente ───────────────────────────────────────────
   let clienteId: string | null = null
   const telefonoNormalizado = normalizarTelefono(telefono_cliente)
 
-  const { data: clienteExistente } = await supabase
-    .from('clientes')
-    .select('id')
-    .eq('ferreteria_id', session.ferreteriaId)
-    .eq('telefono', telefonoNormalizado)
-    .maybeSingle()
+  const clienteExistente = await chatRepo.obtenerClientePorTelefono(session.ferreteriaId, telefonoNormalizado)
 
   if (clienteExistente) {
     clienteId = clienteExistente.id
@@ -82,64 +87,48 @@ export async function POST(request: Request) {
         .eq('id', clienteId)
     }
   } else {
-    const { data: nuevoCliente, error: errCliente } = await supabase
-      .from('clientes')
-      .insert({
-        ferreteria_id: session.ferreteriaId,
-        telefono: telefonoNormalizado,
-        nombre: nombre_cliente.trim(),
-      })
-      .select('id')
-      .single()
-
-    if (errCliente || !nuevoCliente) {
+    try {
+      const nuevoCliente = await chatRepo.crearCliente(session.ferreteriaId, telefonoNormalizado, nombre_cliente.trim())
+      clienteId = nuevoCliente.id
+    } catch (errCliente: any) {
       return NextResponse.json({ error: 'Error al registrar cliente: ' + errCliente?.message }, { status: 500 })
     }
-    clienteId = nuevoCliente.id
   }
 
   // Si hay fecha programada, el pedido nace en 'programado' y no en 'pendiente'
   const estadoInicial = fecha_entrega_programada ? 'programado' : 'pendiente'
 
-  const { data: pedido, error: errPedido } = await supabase
-    .from('pedidos')
-    .insert({
-      ferreteria_id:            session.ferreteriaId,
-      cotizacion_id:            null,
-      cliente_id:               clienteId,
-      numero_pedido:            numeroPedido,
-      nombre_cliente:           nombre_cliente.trim(),
-      telefono_cliente:         telefonoNormalizado,
-      modalidad,
-      direccion_entrega:        direccion_entrega?.trim() ?? null,
-      zona_delivery_id:         zona_delivery_id ?? null,
-      notas:                    notas?.trim() ?? null,
-      estado:                   estadoInicial,
-      total,
-      costo_total,
-      fecha_entrega_programada: fecha_entrega_programada ?? null,
-    })
-    .select('id, numero_pedido')
-    .single()
-
-
-  if (errPedido || !pedido)
-    return NextResponse.json({ error: errPedido?.message ?? 'Error creando pedido' }, { status: 500 })
-
-  const itemsInsert = items.map((i: ItemNuevoPedido) => ({
-    pedido_id: pedido.id,
-    producto_id: i.producto_id,
-    nombre_producto: i.nombre_producto,
-    unidad: i.unidad,
-    cantidad: i.cantidad,
-    precio_unitario: i.precio_unitario,
-    costo_unitario: i.costo_unitario,
-    subtotal: i.cantidad * i.precio_unitario,
-  }))
-
-  const { error: errItems } = await supabase.from('items_pedido').insert(itemsInsert)
-  if (errItems)
-    return NextResponse.json({ error: errItems.message }, { status: 500 })
+  let pedido
+  try {
+    pedido = await ventasRepo.crearPedido(
+      session.ferreteriaId,
+      {
+        clienteId,
+        numeroPedido,
+        nombreCliente:           nombre_cliente.trim(),
+        telefonoCliente:         telefonoNormalizado,
+        modalidad,
+        direccionEntrega:        direccion_entrega?.trim() ?? null,
+        zonaDeliveryId:         zona_delivery_id ?? null,
+        estado:                  estadoInicial,
+        total,
+        costoTotal:              costo_total,
+        fechaEntregaProgramada: fecha_entrega_programada ?? null,
+      },
+      items.map(i => ({
+        productoId: i.producto_id,
+        nombreProducto: i.nombre_producto,
+        unidad: i.unidad,
+        cantidad: i.cantidad,
+        precioOriginal: i.precio_unitario,
+        precioUnitario: i.precio_unitario,
+        subtotal: i.cantidad * i.precio_unitario,
+        costoUnitario: i.costo_unitario
+      }))
+    )
+  } catch (errPedido: any) {
+    return NextResponse.json({ error: errPedido.message ?? 'Error creando pedido' }, { status: 500 })
+  }
 
   // ── Entrega + ETA (fire-and-forget, solo pedidos inmediatos) ─────────────────
   // Los pedidos programados no crean entrega aún — el cron los activa el día indicado.
@@ -163,23 +152,10 @@ export async function POST(request: Request) {
             const coords = await geocodificarDireccion(dirEta, ferreteria.nombre ?? 'Perú')
 
             if (coords) {
-              const { data: vehiculos } = await supabase
-                .from('vehiculos')
-                .select('velocidad_promedio_kmh')
-                .eq('ferreteria_id', ferreteriaIdEta)
-                .eq('activo', true)
-                .order('velocidad_promedio_kmh', { ascending: false })
-                .limit(1)
-
+              const vehiculos = await deliveryRepo.listarVehiculosActivos(ferreteriaIdEta)
               const velocidadKmh = vehiculos?.[0]?.velocidad_promedio_kmh ?? 30
 
-              const { count: cola } = await supabase
-                .from('pedidos')
-                .select('id', { count: 'exact', head: true })
-                .eq('ferreteria_id', ferreteriaIdEta)
-                .eq('modalidad', 'delivery')
-                .in('estado', ['confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado'])
-                .neq('id', pedidoIdEta)
+              const cola = await deliveryRepo.contarEntregasEnCola(ferreteriaIdEta, pedidoIdEta)
 
               const eta = await calcularETA({
                 ferreteriaLat: ferreteria.lat,
@@ -224,18 +200,15 @@ export async function GET(request: Request) {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const supabase = await createClient()
+  const ventasRepo = new VentasRepository(supabase)
+
   const { searchParams } = new URL(request.url)
   const estado = searchParams.get('estado')
 
-  let query = supabase
-    .from('pedidos')
-    .select('*, clientes(nombre, telefono), zonas_delivery(nombre), items_pedido(*), eta_minutos, direccion_entrega, entregas(id, estado, vehiculos(nombre, tipo))')
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('created_at', { ascending: false })
-
-  if (estado) query = query.eq('estado', estado)
-
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  try {
+    const data = await ventasRepo.obtenerPedidosPorFerreteria(session.ferreteriaId, estado)
+    return NextResponse.json(data)
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }

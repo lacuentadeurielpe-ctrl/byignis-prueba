@@ -7,6 +7,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { enviarDocumento } from '@/lib/whatsapp/ycloud'
 import { ComprobantePDF, type DatosComprobante } from './comprobante'
 
+// Repositories
+import { VentasRepository } from '@/lib/db/repositories/ventas'
+import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
+
 export interface ResultadoComprobante {
   ok: boolean
   numero_comprobante?: string
@@ -28,39 +32,29 @@ export async function generarYEnviarComprobante({
   ycloudApiKey?: string
 }): Promise<ResultadoComprobante> {
   const supabase = createAdminClient()
+  const ventasRepo = new VentasRepository(supabase)
+  const facturacionRepo = new FacturacionRepository(supabase)
 
   // ── 1. Cargar pedido con todos los datos necesarios ──────────────────────
-  const { data: pedido, error: errPedido } = await supabase
-    .from('pedidos')
-    .select('*, items_pedido(*), clientes(nombre, telefono)')
-    .eq('id', pedidoId)
-    .eq('ferreteria_id', ferreteriaId)
-    .single()
-
-  if (errPedido || !pedido) {
+  let pedido
+  try {
+    pedido = await ventasRepo.obtenerPedidoPorId(ferreteriaId, pedidoId)
+  } catch (errPedido: any) {
     return { ok: false, error: `Pedido no encontrado: ${errPedido?.message}` }
   }
 
   // ── 2. Cargar ferretería ─────────────────────────────────────────────────
-  const { data: ferreteria, error: errFerr } = await supabase
-    .from('ferreterias')
-    .select('id, nombre, direccion, telefono_whatsapp, formas_pago, logo_url, color_comprobante, mensaje_comprobante')
-    .eq('id', ferreteriaId)
-    .single()
-
-  if (errFerr || !ferreteria) {
+  let ferreteria
+  try {
+    ferreteria = await facturacionRepo.obtenerFerreteriaComprobanteInfo(ferreteriaId)
+  } catch (errFerr: any) {
     return { ok: false, error: `Ferretería no encontrada: ${errFerr?.message}` }
   }
 
   // ── 3. Verificar si ya existe un comprobante para este pedido ────────────
   //    Si ya existe (proforma o definitivo) y fue enviado → deduplicación: no reenviar
   //    Si existe pero no fue enviado → reenviar usando el PDF ya generado
-  const { data: existente } = await supabase
-    .from('comprobantes')
-    .select('id, numero_comprobante, pdf_url, enviado_whatsapp')
-    .eq('pedido_id', pedidoId)
-    .eq('tipo', 'nota_venta')
-    .maybeSingle()
+  const existente = await facturacionRepo.obtenerComprobantePorPedido(ferreteriaId, pedidoId, 'nota_venta')
 
   if (existente) {
     if (existente.enviado_whatsapp) {
@@ -68,7 +62,7 @@ export async function generarYEnviarComprobante({
       return {
         ok: true,
         numero_comprobante: existente.numero_comprobante,
-        pdf_url: existente.pdf_url,
+        pdf_url: existente.pdf_url ?? undefined,
         comprobante_id: existente.id,
       }
     }
@@ -83,33 +77,28 @@ export async function generarYEnviarComprobante({
 
     try {
       const apiKeyR = ycloudApiKey ?? process.env.YCLOUD_API_KEY
-      if (apiKeyR) {
+      if (apiKeyR && existente.pdf_url) {
         await enviarDocumento({ from: fromR, to: telefonoClienteR, pdfUrl: existente.pdf_url, filename: filenameR, caption: captionR, apiKey: ycloudApiKey })
-        await supabase.from('comprobantes').update({ enviado_whatsapp: true, enviado_at: new Date().toISOString() }).eq('id', existente.id)
+        await facturacionRepo.actualizarEnvioComprobante(existente.id, true, null)
       }
     } catch (_) { /* no fallar */ }
 
     return {
       ok: true,
       numero_comprobante: existente.numero_comprobante,
-      pdf_url: existente.pdf_url,
+      pdf_url: existente.pdf_url ?? undefined,
       comprobante_id: existente.id,
     }
   }
 
   // ── 4. Generar número correlativo (atómico en DB) ────────────────────────
-  const { data: numData, error: errNum } = await supabase
-    .rpc('generar_numero_comprobante', {
-      p_ferreteria_id: ferreteriaId,
-      p_tipo:          'nota_venta',
-      p_serie:         'NV02',
-    })
-
-  if (errNum || !numData) {
+  let numero
+  try {
+    numero = await facturacionRepo.generarNumeroComprobante(ferreteriaId, 'nota_venta', 'NV02')
+  } catch (errNum: any) {
     return { ok: false, error: `Error generando número: ${errNum?.message}` }
   }
 
-  const numero = numData as number
   const numeroComprobante = `NV02-${String(numero).padStart(8, '0')}`
 
   // ── 5. Construir datos para el PDF ───────────────────────────────────────
@@ -171,9 +160,9 @@ export async function generarYEnviarComprobante({
     .getPublicUrl(storagePath)
 
   // ── 8. Guardar registro en DB ────────────────────────────────────────────
-  const { data: comprobante, error: errInsert } = await supabase
-    .from('comprobantes')
-    .insert({
+  let comprobante
+  try {
+    comprobante = await facturacionRepo.guardarComprobante({
       ferreteria_id:      ferreteriaId,
       pedido_id:          pedidoId,
       tipo:               'nota_venta',
@@ -186,14 +175,10 @@ export async function generarYEnviarComprobante({
       igv:                0,
       total:              pedido.total,
       pdf_url:            publicUrl,
-      enviado_whatsapp:   false,
       cliente_nombre:     pedido.nombre_cliente,
       emitido_por:        'dashboard',
     })
-    .select('id')
-    .single()
-
-  if (errInsert || !comprobante) {
+  } catch (errInsert: any) {
     return { ok: false, error: `Error guardando comprobante: ${errInsert?.message}` }
   }
 
@@ -229,14 +214,7 @@ export async function generarYEnviarComprobante({
   }
 
   // ── 10. Actualizar estado de envío en DB ─────────────────────────────────
-  await supabase
-    .from('comprobantes')
-    .update({
-      enviado_whatsapp: enviado,
-      enviado_at:       enviado ? new Date().toISOString() : null,
-      error_envio:      errorEnvio,
-    })
-    .eq('id', comprobante.id)
+  await facturacionRepo.actualizarEnvioComprobante(comprobante.id, enviado, errorEnvio)
 
   if (errorEnvio) {
     console.error(`[Comprobante] Error enviando ${numeroComprobante}:`, errorEnvio)
@@ -256,21 +234,18 @@ export async function eliminarComprobantePedido(
   ferreteriaId: string,
 ): Promise<void> {
   const supabase = createAdminClient()
+  const facturacionRepo = new FacturacionRepository(supabase)
 
-  const { data: comp } = await supabase
-    .from('comprobantes')
-    .select('id, numero_comprobante')
-    .eq('pedido_id', pedidoId)
-    .single()
+  try {
+    const comp = await facturacionRepo.eliminarComprobantePorPedido(ferreteriaId, pedidoId)
+    if (!comp) return
 
-  if (!comp) return
-
-  // Borrar PDF del storage
-  const storagePath = `${ferreteriaId}/${comp.numero_comprobante}.pdf`
-  await supabase.storage.from('comprobantes').remove([storagePath])
-
-  // Borrar registro en DB
-  await supabase.from('comprobantes').delete().eq('id', comp.id)
+    // Borrar PDF del storage
+    const storagePath = `${ferreteriaId}/${comp.numero_comprobante}.pdf`
+    await supabase.storage.from('comprobantes').remove([storagePath])
+  } catch (e) {
+    console.error('[Comprobante] Error al eliminar comprobante:', e)
+  }
 }
 
 // ── Reenvío de comprobante existente ─────────────────────────────────────────
@@ -282,33 +257,22 @@ export async function reenviarComprobante({
   ferreteriaId: string
 }): Promise<ResultadoComprobante> {
   const supabase = createAdminClient()
+  const ventasRepo = new VentasRepository(supabase)
+  const facturacionRepo = new FacturacionRepository(supabase)
 
   // Obtener el comprobante existente
-  const { data: comprobante, error } = await supabase
-    .from('comprobantes')
-    .select('*')
-    .eq('pedido_id', pedidoId)
-    .single()
+  const comprobante = await facturacionRepo.obtenerComprobantePorPedido(ferreteriaId, pedidoId, 'nota_venta')
 
-  if (error || !comprobante) {
+  if (!comprobante) {
     return { ok: false, error: 'No existe un comprobante para este pedido' }
   }
 
   // Obtener datos de ferretería y pedido para el reenvío
-  const [{ data: ferreteria }, { data: pedido }] = await Promise.all([
-    supabase
-      .from('ferreterias')
-      .select('nombre, telefono_whatsapp')
-      .eq('id', ferreteriaId)
-      .single(),
-    supabase
-      .from('pedidos')
-      .select('numero_pedido, telefono_cliente, clientes(telefono)')
-      .eq('id', pedidoId)
-      .single(),
-  ])
-
-  if (!ferreteria || !pedido) {
+  let ferreteria, pedido
+  try {
+    ferreteria = await facturacionRepo.obtenerFerreteriaInfo(ferreteriaId)
+    pedido = await ventasRepo.obtenerPedidoPorId(ferreteriaId, pedidoId)
+  } catch (error: any) {
     return { ok: false, error: 'Error obteniendo datos para el reenvío' }
   }
 
@@ -318,7 +282,7 @@ export async function reenviarComprobante({
   const caption = `📄 *${ferreteria.nombre}*\nAquí está su comprobante N° ${comprobante.numero_comprobante} del pedido *${pedido.numero_pedido}* (reenvío). 🙏`
 
   try {
-    if (process.env.YCLOUD_API_KEY && process.env.YCLOUD_API_KEY !== 'your_ycloud_api_key') {
+    if (process.env.YCLOUD_API_KEY && process.env.YCLOUD_API_KEY !== 'your_ycloud_api_key' && comprobante.pdf_url) {
       await enviarDocumento({
         from,
         to: telefonoCliente,
@@ -328,23 +292,17 @@ export async function reenviarComprobante({
       })
     }
 
-    await supabase
-      .from('comprobantes')
-      .update({ enviado_whatsapp: true, enviado_at: new Date().toISOString(), error_envio: null })
-      .eq('id', comprobante.id)
+    await facturacionRepo.actualizarEnvioComprobante(comprobante.id, true, null)
 
     return {
       ok: true,
       numero_comprobante: comprobante.numero_comprobante,
-      pdf_url: comprobante.pdf_url,
+      pdf_url: comprobante.pdf_url ?? undefined,
       comprobante_id: comprobante.id,
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    await supabase
-      .from('comprobantes')
-      .update({ error_envio: msg })
-      .eq('id', comprobante.id)
+    await facturacionRepo.actualizarEnvioComprobante(comprobante.id, false, msg)
     return { ok: false, error: msg }
   }
 }

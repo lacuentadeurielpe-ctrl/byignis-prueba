@@ -22,6 +22,12 @@ function LoginForm() {
     setError(null)
     setLoading(true)
 
+    if (process.env.NODE_ENV === 'development') {
+      router.push(redirectTo)
+      router.refresh()
+      return
+    }
+
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
 

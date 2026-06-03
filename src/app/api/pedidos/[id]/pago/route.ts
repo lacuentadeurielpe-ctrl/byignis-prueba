@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { checkPermiso } from '@/lib/auth/permisos'
+import { VentasRepository } from '@/lib/db/repositories/ventas'
 
 export async function POST(
   request: Request,
@@ -14,16 +15,15 @@ export async function POST(
   const { id } = await params
   const body = await request.json()
   const supabase = await createClient()
+  const ventasRepo = new VentasRepository(supabase)
 
   // Verificar que el pedido pertenece a la ferretería
-  const { data: pedido } = await supabase
-    .from('pedidos')
-    .select('id, estado_pago, metodo_pago, estado')
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .single()
-
-  if (!pedido) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
+  let pedido
+  try {
+    pedido = await ventasRepo.obtenerPedidoPorId(session.ferreteriaId, id)
+  } catch (error) {
+    return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
+  }
 
   // No permitir cambios de pago en pedidos cancelados
   if (pedido.estado === 'cancelado') {
@@ -70,14 +70,10 @@ export async function POST(
     return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 })
   }
 
-  const { data, error } = await supabase
-    .from('pedidos')
-    .update(update)
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .select('id, estado_pago, metodo_pago, pago_confirmado_por, pago_confirmado_at')
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  try {
+    const data = await ventasRepo.actualizarPagoPedido(session.ferreteriaId, id, update)
+    return NextResponse.json(data)
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }

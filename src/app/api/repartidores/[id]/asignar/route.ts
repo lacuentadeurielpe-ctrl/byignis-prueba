@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
 
 export async function PATCH(
   request: Request,
@@ -18,27 +19,21 @@ export async function PATCH(
   if (!pedidoId) return NextResponse.json({ error: 'pedidoId requerido' }, { status: 400 })
 
   const supabase = await createClient()
+  const deliveryRepo = new DeliveryRepository(supabase)
 
-  // Verificar que el repartidor pertenece a la ferretería
-  const { data: repartidor } = await supabase
-    .from('repartidores')
-    .select('id, nombre, telefono')
-    .eq('id', repartidorId)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .eq('activo', true)
-    .single()
-
-  if (!repartidor) return NextResponse.json({ error: 'Repartidor no encontrado' }, { status: 404 })
+  // Verificar que el repartidor pertenece a la ferretería y está activo
+  let repartidor
+  try {
+    repartidor = await deliveryRepo.obtenerRepartidorActivo(session.ferreteriaId, repartidorId)
+  } catch (error) {
+    return NextResponse.json({ error: 'Repartidor no encontrado' }, { status: 404 })
+  }
 
   // Asignar al pedido (debe ser de esta ferretería)
-  const { data, error } = await supabase
-    .from('pedidos')
-    .update({ repartidor_id: repartidorId })
-    .eq('id', pedidoId)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .select('id, repartidor_id')
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ...data, repartidor })
+  try {
+    const data = await deliveryRepo.asignarRepartidorAPedido(session.ferreteriaId, pedidoId, repartidorId)
+    return NextResponse.json({ ...data, repartidor })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }

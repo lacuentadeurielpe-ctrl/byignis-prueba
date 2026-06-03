@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
 import ClientPOS from './ClientPOS'
+import { CatalogRepository } from '@/lib/db/repositories/catalogo'
+import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
 
 export const metadata = {
   title: 'Caja POS | Ferrobot'
@@ -12,19 +14,13 @@ export default async function POSPage() {
   if (!session) redirect('/auth/login')
 
   const supabase = await createClient()
+  const catalogRepo = new CatalogRepository(supabase)
+  const facturacionRepo = new FacturacionRepository(supabase)
 
-  const { data: productos } = await supabase
-    .from('productos')
-    .select('id, nombre, unidad, precio_base, precio_compra, stock, codigo_barras')
-    .eq('ferreteria_id', session.ferreteriaId)
-    .eq('activo', true)
-    .order('nombre')
-
-  const { data: ferreteria } = await supabase
-    .from('ferreterias')
-    .select('nombre')
-    .eq('id', session.ferreteriaId)
-    .single()
+  const [productos, ferreteria] = await Promise.all([
+    catalogRepo.listarProductosActivos(session.ferreteriaId),
+    facturacionRepo.obtenerFerreteriaInfo(session.ferreteriaId),
+  ])
 
   return (
     <ClientPOS 

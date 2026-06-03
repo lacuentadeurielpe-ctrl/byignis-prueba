@@ -14,6 +14,7 @@ import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import { enviarMensaje, enviarDocumento, enviarImagen } from '@/lib/whatsapp/ycloud'
 import { withTimeout } from '@/lib/utils'
+import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ export interface ToolContext {
   ycloudApiKey?: string
   agentesActivos?: AgentesActivos   // F4: si undefined → todo activo
   umbralUpsellSoles?: number        // F5: monto mínimo de cotización para activar upsell (0 = siempre)
+  nubefactTokenPlano?: string       // Inyectado
 }
 
 export interface ToolResult {
@@ -711,15 +713,10 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     const productoId = args.producto_id as string
     if (!productoId) return { ok: false, error: 'producto_id requerido' }
 
-    const { data, error } = await ctx.supabase
-      .from('productos')
-      .select('id, nombre, unidad, stock, precio_base')
-      .eq('id', productoId)
-      .eq('ferreteria_id', ctx.ferreteriaId)    // FERRETERÍA AISLADA
-      .eq('activo', true)
-      .single()
+    const repo = new CatalogRepository(ctx.supabase)
+    const data = await repo.obtenerProductoConStock(ctx.ferreteriaId, productoId)
 
-    if (error || !data) return { ok: false, error: 'Producto no encontrado en esta ferretería' }
+    if (!data) return { ok: false, error: 'Producto no encontrado en esta ferretería' }
     return { ok: true, data }
   },
 
@@ -1154,11 +1151,13 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       }
 
       const resultFact = await emitirFactura({
+        supabase:      ctx.supabase,
         pedidoId:      ped.id,
         ferreteriaId:  ctx.ferreteriaId,
         clienteNombre: ped.nombre_cliente || 'CLIENTE',
         clienteRuc:    rucParaFactura,
         emitidoPor:    'bot',
+        tokenPlano:    ctx.nubefactTokenPlano || '',
       })
 
       if (resultFact.ok && resultFact.pdfUrl && telefonoWA && ctx.ycloudApiKey) {
@@ -1189,12 +1188,14 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
 
     // Emitir boleta electrónica (caso default)
     const resultBol = await emitirBoleta({
+      supabase:      ctx.supabase,
       pedidoId:      ped.id,
       ferreteriaId:  ctx.ferreteriaId,
       tipoBoleta:    'boleta',
       clienteNombre: ped.nombre_cliente || 'CLIENTES VARIOS',
       clienteDni:    '',
       emitidoPor:    'bot',
+      tokenPlano:    ctx.nubefactTokenPlano || '',
     })
 
     if (resultBol.ok && resultBol.pdfUrl && telefonoWA && ctx.ycloudApiKey) {

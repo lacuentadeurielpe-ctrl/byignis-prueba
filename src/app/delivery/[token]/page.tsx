@@ -1,7 +1,7 @@
-// Interfaz móvil del repartidor — accesible solo con token, sin login
 import { createClient } from '@supabase/supabase-js'
 import { Truck } from 'lucide-react'
 import DeliveryView from './DeliveryView'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
 
 function adminClient() {
   return createClient(
@@ -14,26 +14,12 @@ interface Props {
   params: Promise<{ token: string }>
 }
 
-const PEDIDO_SELECT = `
-  id, numero_pedido, nombre_cliente, telefono_cliente,
-  direccion_entrega, total, estado, estado_pago, notas,
-  cobrado_monto, cobrado_metodo, incidencia_tipo, incidencia_desc,
-  created_at,
-  clientes(nombre, telefono),
-  zonas_delivery(nombre),
-  items_pedido(id, nombre_producto, cantidad, precio_unitario)
-`
-
 export default async function DeliveryPage({ params }: Props) {
   const { token } = await params
   const supabase = adminClient()
+  const deliveryRepo = new DeliveryRepository(supabase)
 
-  const { data: repartidor } = await supabase
-    .from('repartidores')
-    .select('id, nombre, ferreteria_id, puede_registrar_deuda, pin_hash, ferreterias(nombre, modo_asignacion_delivery)')
-    .eq('token', token)
-    .eq('activo', true)
-    .single()
+  const repartidor = await deliveryRepo.obtenerRepartidorPorToken(token)
 
   if (!repartidor) {
     return (
@@ -52,39 +38,14 @@ export default async function DeliveryPage({ params }: Props) {
   const modo: 'manual' | 'libre' = ferr?.modo_asignacion_delivery === 'libre' ? 'libre' : 'manual'
   const hoy = new Date().toISOString().slice(0, 10)
 
-  const [
-    { data: pedidos },
-    { data: cobrosHoy },
-  ] = await Promise.all([
-    supabase
-      .from('pedidos')
-      .select(PEDIDO_SELECT)
-      .eq('ferreteria_id', repartidor.ferreteria_id)
-      .eq('repartidor_id', repartidor.id)
-      .in('estado', ['confirmado', 'en_preparacion', 'enviado'])
-      .order('created_at', { ascending: true }),
-
-    supabase
-      .from('pedidos')
-      .select('id, numero_pedido, total, cobrado_monto, cobrado_metodo, estado_pago, clientes(nombre), created_at')
-      .eq('ferreteria_id', repartidor.ferreteria_id)
-      .eq('repartidor_id', repartidor.id)
-      .eq('estado', 'entregado')
-      .gte('created_at', `${hoy}T00:00:00`)
-      .order('created_at', { ascending: false }),
+  const [pedidos, cobrosHoy] = await Promise.all([
+    deliveryRepo.obtenerPedidosAsignadosRepartidor(repartidor.ferreteria_id, repartidor.id),
+    deliveryRepo.obtenerCobrosHoyRepartidor(repartidor.ferreteria_id, repartidor.id, hoy),
   ])
 
-  let pedidosDisponibles: unknown[] = []
+  let pedidosDisponibles: any[] = []
   if (modo === 'libre') {
-    const { data: disponibles } = await supabase
-      .from('pedidos')
-      .select(PEDIDO_SELECT)
-      .eq('ferreteria_id', repartidor.ferreteria_id)
-      .is('repartidor_id', null)
-      .eq('modalidad', 'delivery')
-      .in('estado', ['confirmado', 'en_preparacion'])
-      .order('created_at', { ascending: true })
-    pedidosDisponibles = disponibles ?? []
+    pedidosDisponibles = await deliveryRepo.obtenerPedidosDisponiblesReparto(repartidor.ferreteria_id)
   }
 
   const totalPendientes = pedidos?.length ?? 0

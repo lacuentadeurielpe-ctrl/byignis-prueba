@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { SaasRepository } from '@/lib/db/repositories/saas'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
 import { Loader2, Plus, X, CheckCircle } from 'lucide-react'
 import type { TipoRuc, RegimenTributario } from '@/types/database'
 import type { RucInfo } from '@/lib/sunat/ruc'
@@ -201,9 +203,12 @@ export default function OnboardingPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/auth/login'); return }
 
-    const { data: ferreteria, error: errFerreteria } = await supabase
-      .from('ferreterias')
-      .insert({
+    const saasRepo = new SaasRepository(supabase)
+    const deliveryRepo = new DeliveryRepository(supabase)
+
+    let ferreteria;
+    try {
+      ferreteria = await saasRepo.crearFerreteria({
         owner_id: user.id,
         nombre: form.nombre.trim(),
         direccion: form.direccion.trim() || null,
@@ -223,11 +228,9 @@ export default function OnboardingPage() {
         representante_legal_nombre: tipoRuc === 'ruc20' ? repLegalNombre.trim() || null : null,
         representante_legal_dni: tipoRuc === 'ruc20' ? repLegalDni.trim() || null : null,
       })
-      .select()
-      .single()
-
-    if (errFerreteria) {
-      if (errFerreteria.message.includes('telefono_whatsapp')) {
+    } catch (err: any) {
+      console.error('Error al registrar ferretería:', err)
+      if (err.message?.includes('telefono_whatsapp')) {
         setError('Ese número de WhatsApp ya está registrado en el sistema.')
       } else {
         setError('Error al guardar la información. Inténtalo de nuevo.')
@@ -238,13 +241,17 @@ export default function OnboardingPage() {
 
     const zonasValidas = zonas.filter((z) => z.nombre.trim())
     if (zonasValidas.length > 0) {
-      await supabase.from('zonas_delivery').insert(
-        zonasValidas.map((z) => ({
-          ferreteria_id: ferreteria.id,
-          nombre: z.nombre.trim(),
-          tiempo_estimado_min: z.tiempo_estimado_min,
-        }))
-      )
+      try {
+        await deliveryRepo.crearZonasDelivery(
+          ferreteria.id,
+          zonasValidas.map((z) => ({
+            nombre: z.nombre.trim(),
+            tiempo_estimado_min: z.tiempo_estimado_min,
+          }))
+        )
+      } catch (err) {
+        console.error('Error al registrar zonas de delivery:', err)
+      }
     }
 
     router.push('/dashboard')

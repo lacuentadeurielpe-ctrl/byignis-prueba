@@ -7,6 +7,12 @@ import { getYCloudApiKey } from '@/lib/tenant'
 import { logAccion } from '@/lib/audit'
 import { normalizarTelefono } from '@/lib/utils'
 
+// Repositories
+import { VentasRepository } from '@/lib/db/repositories/ventas'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
+import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
+import { ChatRepository } from '@/lib/db/repositories/chat'
+
 const ESTADOS_VALIDOS = ['programado', 'pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado', 'cancelado', 'devuelto']
 
 // Mensajes WhatsApp al cliente según el nuevo estado
@@ -37,6 +43,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const supabase = await createClient()
+  const ventasRepo = new VentasRepository(supabase)
+  const deliveryRepo = new DeliveryRepository(supabase)
+  const facturacionRepo = new FacturacionRepository(supabase)
+
   const { id } = await params
   const body = await request.json()
 
@@ -44,26 +54,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Estado inválido' }, { status: 400 })
 
   // Obtener datos de la ferretería (para mensajes WhatsApp y validación)
-  const { data: ferreteria } = await supabase
-    .from('ferreterias')
-    .select('id, nombre, telefono_whatsapp, modo_asignacion_delivery')
-    .eq('id', session.ferreteriaId)
-    .single()
+  const ferreteria = await facturacionRepo.obtenerFerreteriaInfo(session.ferreteriaId)
   if (!ferreteria) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   // Obtener estado actual del pedido antes de actualizar (para gestión de stock y validación de pago)
-  const { data: pedidoActual } = await supabase
-    .from('pedidos')
-    .select('estado, metodo_pago, estado_pago')
-    .eq('id', id)
-    .eq('ferreteria_id', ferreteria.id)
-    .single()
+  const pedidoActual = await ventasRepo.obtenerPedidoPorId(ferreteria.id, id)
+  if (!pedidoActual) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
 
   // Validar pago antes de avanzar a en_preparacion o enviado
   // Solo tarjeta/POS requiere confirmación anticipada — el resto puede cobrarse contra entrega
   if (body.estado && ['en_preparacion', 'enviado'].includes(body.estado)) {
-    const metodo = pedidoActual?.metodo_pago
-    const estadoPago = pedidoActual?.estado_pago
+    const metodo = pedidoActual.metodo_pago
+    const estadoPago = pedidoActual.estado_pago
     if (metodo === 'tarjeta' && estadoPago !== 'pagado') {
       return NextResponse.json({
         error: 'Los pagos con tarjeta/POS deben confirmarse antes de preparar el pedido',
@@ -73,21 +75,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  const { data, error } = await supabase
-    .from('pedidos')
-    .update({
+  let data
+  try {
+    data = await ventasRepo.actualizarEstadoPedido(ferreteria.id, id, {
       estado: body.estado,
       notas: body.notas,
       ...(body.estado === 'cancelado' && body.motivo_cancelacion
         ? { motivo_cancelacion: body.motivo_cancelacion }
         : {}),
     })
-    .eq('id', id)
-    .eq('ferreteria_id', ferreteria.id)
-    .select('*, clientes(nombre, telefono), items_pedido(*)')
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   // ── Auditoría ──────────────────────────────────────────────────────────────
   if (body.estado) {
@@ -98,7 +97,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entidad:       'pedido',
       entidadId:     id,
       detalle: {
-        estado_anterior: pedidoActual?.estado ?? null,
+        estado_anterior: pedidoActual.estado ?? null,
         estado_nuevo:    body.estado,
         numero_pedido:   data.numero_pedido,
         ...(body.motivo_cancelacion ? { motivo: body.motivo_cancelacion } : {}),
@@ -131,12 +130,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // Modo libre: notificar a todos los repartidores activos con teléfono al confirmar
   if (body.estado === 'confirmado' && data.modalidad === 'delivery' && (ferreteria as any).modo_asignacion_delivery === 'libre') {
-    const { data: repartidores } = await supabase
-      .from('repartidores')
-      .select('id, nombre, telefono, token')
-      .eq('ferreteria_id', ferreteria.id)
-      .eq('activo', true)
-      .not('telefono', 'is', null)
+    const repartidores = await deliveryRepo.listarRepartidoresActivosConToken(ferreteria.id)
 
     if (repartidores?.length) {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL
@@ -182,16 +176,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const supabase = await createClient()
-  const { id } = await params
-  const { data, error } = await supabase
-    .from('pedidos')
-    .select('*, clientes(nombre, telefono), zonas_delivery(nombre), items_pedido(*)')
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .single()
+  const ventasRepo = new VentasRepository(supabase)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 })
-  return NextResponse.json(data)
+  const { id } = await params
+  try {
+    const data = await ventasRepo.obtenerPedidoPorId(session.ferreteriaId, id)
+    return NextResponse.json(data)
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 404 })
+  }
 }
 
 // ── Interfaces para PUT ──────────────────────────────────────────────────────
@@ -210,6 +203,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const supabase = await createClient()
+  const ventasRepo = new VentasRepository(supabase)
+  const chatRepo = new ChatRepository(supabase)
+
   const { id } = await params
   const body = await request.json()
 
@@ -240,15 +236,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Dirección requerida para delivery' }, { status: 400 })
 
   // Obtener pedido actual y verificar que pertenece a esta ferretería
-  const { data: pedidoActual, error: errPedido } = await supabase
-    .from('pedidos')
-    .select('id, ferreteria_id, estado_pago, estado, numero_pedido, cliente_id')
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .single()
-
-  if (errPedido || !pedidoActual)
+  let pedidoActual
+  try {
+    pedidoActual = await ventasRepo.obtenerPedidoPorId(session.ferreteriaId, id)
+  } catch (error) {
     return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
+  }
 
   // Bloquear edición si el pago ya fue confirmado (pre-requisito de boleta/factura SUNAT)
   if (pedidoActual.estado_pago === 'pagado') {
@@ -266,12 +259,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const telefonoNormalizado = normalizarTelefono(telefono_cliente)
   let clienteId: string | null = pedidoActual.cliente_id ?? null
 
-  const { data: clienteExistente } = await supabase
-    .from('clientes')
-    .select('id')
-    .eq('ferreteria_id', session.ferreteriaId)
-    .eq('telefono', telefonoNormalizado)
-    .maybeSingle()
+  const clienteExistente = await chatRepo.obtenerClientePorTelefono(session.ferreteriaId, telefonoNormalizado)
 
   if (clienteExistente) {
     clienteId = clienteExistente.id
@@ -281,61 +269,31 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       .eq('id', clienteId)
   } else {
     // Nuevo teléfono — crear cliente
-    const { data: nuevoCliente } = await supabase
-      .from('clientes')
-      .insert({
-        ferreteria_id: session.ferreteriaId,
-        telefono: telefonoNormalizado,
-        nombre: nombre_cliente.trim(),
-      })
-      .select('id')
-      .single()
+    const nuevoCliente = await chatRepo.crearCliente(session.ferreteriaId, telefonoNormalizado, nombre_cliente.trim())
     if (nuevoCliente) clienteId = nuevoCliente.id
   }
 
-  // Actualizar pedido
-  const { error: errUpdate } = await supabase
-    .from('pedidos')
-    .update({
-      nombre_cliente:   nombre_cliente.trim(),
-      telefono_cliente: telefonoNormalizado,
-      cliente_id:       clienteId,
-      modalidad,
-      direccion_entrega: modalidad === 'delivery' ? (direccion_entrega?.trim() ?? null) : null,
-      zona_delivery_id:  modalidad === 'delivery' && zona_delivery_id ? zona_delivery_id : null,
-      notas:            notas?.trim() ?? null,
-      total,
-      costo_total,
-    })
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-
-  if (errUpdate)
-    return NextResponse.json({ error: errUpdate.message }, { status: 500 })
-
-  // Reemplazar items: borrar los anteriores e insertar los nuevos
-  const { error: errDelItems } = await supabase
-    .from('items_pedido')
-    .delete()
-    .eq('pedido_id', id)
-
-  if (errDelItems)
-    return NextResponse.json({ error: 'Error eliminando items anteriores: ' + errDelItems.message }, { status: 500 })
-
-  const itemsInsert = items.map((i: ItemEditado) => ({
-    pedido_id:       id,
-    producto_id:     i.producto_id,
-    nombre_producto: i.nombre_producto,
-    unidad:          i.unidad,
-    cantidad:        i.cantidad,
-    precio_unitario: i.precio_unitario,
-    costo_unitario:  i.costo_unitario,
-    subtotal:        i.cantidad * i.precio_unitario,
-  }))
-
-  const { error: errItems } = await supabase.from('items_pedido').insert(itemsInsert)
-  if (errItems)
-    return NextResponse.json({ error: 'Error insertando nuevos items: ' + errItems.message }, { status: 500 })
+  // Actualizar pedido e ítems usando el repositorio
+  try {
+    await ventasRepo.editarPedido(
+      session.ferreteriaId,
+      id,
+      {
+        nombre_cliente:   nombre_cliente.trim(),
+        telefono_cliente: telefonoNormalizado,
+        cliente_id:       clienteId,
+        modalidad,
+        direccion_entrega: modalidad === 'delivery' ? (direccion_entrega?.trim() ?? null) : null,
+        zona_delivery_id:  modalidad === 'delivery' && zona_delivery_id ? zona_delivery_id : null,
+        notas:            notas?.trim() ?? null,
+        total,
+        costo_total,
+      },
+      items
+    )
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   // Auditoría
   await logAccion({
@@ -352,4 +310,21 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   })
 
   return NextResponse.json({ id, total, costo_total, items_count: items.length })
+}
+
+// DELETE /api/orders/[id] — eliminar pedido
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSessionInfo()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { id } = await params
+  const supabase = await createClient()
+  const ventasRepo = new VentasRepository(supabase)
+
+  try {
+    await ventasRepo.eliminarPedido(session.ferreteriaId, id)
+    return NextResponse.json({ ok: true })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }

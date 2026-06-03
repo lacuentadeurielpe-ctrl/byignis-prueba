@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,10 +23,10 @@ export async function PATCH(
   } = body
 
   const supabase = await createClient()
+  const deliveryRepo = new DeliveryRepository(supabase)
 
-  const { data, error } = await supabase
-    .from('vehiculos')
-    .update({
+  try {
+    const data = await deliveryRepo.actualizarVehiculo(session.ferreteriaId, id, {
       ...(nombre                 !== undefined && { nombre: nombre.trim() }),
       ...(tipo                   !== undefined && { tipo }),
       ...(capacidad_kg           !== undefined && { capacidad_kg }),
@@ -34,15 +35,12 @@ export async function PATCH(
       ...(costo_por_km           !== undefined && { costo_por_km }),
       ...(activo                 !== undefined && { activo }),
     })
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)   // ferretería aislada
-    .select()
-    .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!data) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
-
-  return NextResponse.json(data)
+    if (!data) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+    return NextResponse.json(data)
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }
 
 // DELETE /api/vehiculos/[id]
@@ -56,28 +54,22 @@ export async function DELETE(
   const { id } = await params
 
   const supabase = await createClient()
+  const deliveryRepo = new DeliveryRepository(supabase)
 
-  // Verificar que no tenga entregas activas
-  const { count } = await supabase
-    .from('entregas')
-    .select('id', { count: 'exact', head: true })
-    .eq('vehiculo_id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .in('estado', ['pendiente', 'carga', 'en_ruta'])
+  try {
+    // Verificar que no tenga entregas activas
+    const count = await deliveryRepo.contarEntregasActivasDeVehiculo(session.ferreteriaId, id)
 
-  if ((count ?? 0) > 0) {
-    return NextResponse.json(
-      { error: 'No se puede eliminar — el vehículo tiene entregas activas' },
-      { status: 409 },
-    )
+    if (count > 0) {
+      return NextResponse.json(
+        { error: 'No se puede eliminar — el vehículo tiene entregas activas' },
+        { status: 409 },
+      )
+    }
+
+    await deliveryRepo.eliminarVehiculo(session.ferreteriaId, id)
+    return NextResponse.json({ ok: true })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
-
-  const { error } = await supabase
-    .from('vehiculos')
-    .delete()
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)   // ferretería aislada
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
 }

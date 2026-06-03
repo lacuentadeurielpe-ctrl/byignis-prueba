@@ -9,6 +9,12 @@ import PagosView, { type PagoItem } from '@/components/pagos/PagosView'
 import type { PermisoMap } from '@/lib/auth/permisos'
 import { cn } from '@/lib/utils'
 
+// Repositories
+import { VentasRepository } from '@/lib/db/repositories/ventas'
+import { CatalogRepository } from '@/lib/db/repositories/catalogo'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
+import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
+
 export const dynamic = 'force-dynamic'
 
 const TABS = [
@@ -31,54 +37,36 @@ export default async function VentasPage({
   if (!session) redirect('/auth/login')
 
   const supabase = await createClient()
+  const ventasRepo = new VentasRepository(supabase)
+  const catalogRepo = new CatalogRepository(supabase)
+  const deliveryRepo = new DeliveryRepository(supabase)
+  const facturacionRepo = new FacturacionRepository(supabase)
 
   // ── Pedidos (default) ────────────────────────────────────────────────────
   let pedidosContent: React.ReactNode = null
   if (tab === 'pedidos') {
     const [
-      { data: pedidos },
-      { data: productos },
-      { data: zonas },
-      { data: repartidores },
-      { data: ferreteriaData },
+      pedidos,
+      productos,
+      zonas,
+      repartidores,
+      ferreteriaData,
     ] = await Promise.all([
-      supabase
-        .from('pedidos')
-        .select('*, clientes(nombre, telefono, dni_ruc), zonas_delivery(nombre), items_pedido(*), comprobantes(id, tipo, numero_completo, estado, pdf_url), metodo_pago, estado_pago, pago_confirmado_por, pago_confirmado_at')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .order('created_at', { ascending: false })
-        .limit(100),
-      supabase
-        .from('productos')
-        .select('id, nombre, unidad, precio_base, precio_compra, stock')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .eq('activo', true)
-        .order('nombre'),
-      supabase
-        .from('zonas_delivery')
-        .select('id, nombre, tiempo_estimado_min')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .order('nombre'),
-      supabase
-        .from('repartidores')
-        .select('id, nombre, telefono, activo')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .order('nombre'),
-      supabase
-        .from('ferreterias')
-        .select('nubefact_token_enc, tipo_ruc')
-        .eq('id', session.ferreteriaId)
-        .single(),
+      ventasRepo.obtenerPedidosDashboard(session.ferreteriaId),
+      catalogRepo.listarProductosActivos(session.ferreteriaId),
+      deliveryRepo.listarZonasDelivery(session.ferreteriaId),
+      deliveryRepo.listarRepartidores(session.ferreteriaId),
+      facturacionRepo.obtenerDatosFerreteriaDashboard(session.ferreteriaId),
     ])
 
     pedidosContent = (
       <OrdersTable
-        pedidos={pedidos ?? []}
-        productos={productos ?? []}
-        zonas={zonas ?? []}
+        pedidos={pedidos as any[] ?? []}
+        productos={productos as any[] ?? []}
+        zonas={zonas as any[] ?? []}
         ferreteriaId={session.ferreteriaId}
         rol={session.rol}
-        repartidores={repartidores ?? []}
+        repartidores={repartidores as any[] ?? []}
         permisos={session.permisos as PermisoMap}
         nubefactConfigurado={!!ferreteriaData?.nubefact_token_enc}
         tieneRuc={ferreteriaData?.tipo_ruc !== 'sin_ruc'}
@@ -90,27 +78,13 @@ export default async function VentasPage({
   let cotizacionesContent: React.ReactNode = null
   if (tab === 'cotizaciones') {
     const [
-      { data: cotizaciones },
-      { data: configBot },
-      { data: productos }
+      cotizaciones,
+      configBot,
+      productos
     ] = await Promise.all([
-      supabase
-        .from('cotizaciones')
-        .select('*, clientes(nombre, telefono), items_cotizacion(*, productos(precio_compra))')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .order('created_at', { ascending: false })
-        .limit(100),
-      supabase
-        .from('configuracion_bot')
-        .select('margen_minimo_porcentaje')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .single(),
-      supabase
-        .from('productos')
-        .select('id, nombre, unidad, precio_base, precio_compra, stock')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .eq('activo', true)
-        .order('nombre'),
+      ventasRepo.obtenerCotizacionesDashboard(session.ferreteriaId),
+      catalogRepo.obtenerConfiguracionBot(session.ferreteriaId),
+      catalogRepo.listarProductosActivos(session.ferreteriaId),
     ])
 
     const lista = (cotizaciones ?? []).map((c) => ({
@@ -121,7 +95,7 @@ export default async function VentasPage({
     cotizacionesContent = (
       <CotizacionesTable
         cotizaciones={lista}
-        productos={productos ?? []}
+        productos={productos as any[] ?? []}
         margenMinimo={configBot?.margen_minimo_porcentaje ?? 10}
       />
     )
@@ -130,18 +104,7 @@ export default async function VentasPage({
   // ── Pagos ────────────────────────────────────────────────────────────────
   let pagosContent: React.ReactNode = null
   if (tab === 'pagos') {
-    const { data: pagos } = await supabase
-      .from('pagos_registrados')
-      .select(`
-        id, metodo, monto, moneda, numero_operacion, nombre_pagador,
-        ultimos_digitos, fecha_pago, banco_origen, estado, url_captura,
-        confianza_extraccion, notas, registrado_at,
-        cliente:clientes(id, nombre, telefono),
-        pedido:pedidos(id, numero_pedido, total)
-      `)
-      .eq('ferreteria_id', session.ferreteriaId)
-      .order('registrado_at', { ascending: false })
-      .limit(100)
+    const pagos = await ventasRepo.obtenerPagosDashboard(session.ferreteriaId)
 
     const porEstado = (pagos ?? []).reduce<Record<string, number>>((acc, p) => {
       acc[p.estado] = (acc[p.estado] ?? 0) + 1

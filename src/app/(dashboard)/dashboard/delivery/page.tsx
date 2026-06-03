@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { Truck } from 'lucide-react'
 import DeliveryDashboard from './DeliveryDashboard'
 import { inicioDiaLima } from '@/lib/tiempo'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,7 @@ export default async function DeliveryPage() {
   if (!session) redirect('/auth/login')
 
   const supabase = await createClient()
+  const deliveryRepo = new DeliveryRepository(supabase)
 
   // Cargar entregas del día (activas + completadas hoy)
   const hoy = new Date().toISOString().slice(0, 10)
@@ -20,31 +22,9 @@ export default async function DeliveryPage() {
   const inicioHoy   = inicioDiaLima(0)
   const fin14dias   = inicioDiaLima(15)   // exclusivo → 14 días completos
 
-  const [{ data: entregas }, { data: pedidosProgramados }] = await Promise.all([
-    supabase
-      .from('entregas')
-      .select(`
-        id, estado, orden_en_ruta, eta_actual,
-        distancia_km, duracion_estimada_min, duracion_real_min,
-        salio_at, llego_at,
-        pedidos(id, numero_pedido, nombre_cliente, direccion_entrega, total, eta_minutos, estado),
-        vehiculos(id, nombre, tipo),
-        repartidores(id, nombre)
-      `)
-      .eq('ferreteria_id', session.ferreteriaId)   // FERRETERÍA AISLADA
-      .or(`estado.in.(pendiente,carga,en_ruta),and(estado.eq.entregado,llego_at.gte.${hoy}T00:00:00),and(estado.eq.fallida,created_at.gte.${hoy}T00:00:00)`)
-      .order('orden_en_ruta', { ascending: true })
-      .order('created_at', { ascending: true }),
-
-    // Pedidos programados para los próximos 14 días
-    supabase
-      .from('pedidos')
-      .select('id, numero_pedido, nombre_cliente, telefono_cliente, direccion_entrega, total, modalidad, fecha_entrega_programada, zonas_delivery(nombre)')
-      .eq('ferreteria_id', session.ferreteriaId)   // FERRETERÍA AISLADA
-      .eq('estado', 'programado')
-      .gte('fecha_entrega_programada', inicioHoy)
-      .lt('fecha_entrega_programada', fin14dias)
-      .order('fecha_entrega_programada', { ascending: true }),
+  const [entregas, pedidosProgramados] = await Promise.all([
+    deliveryRepo.obtenerEntregasDashboard(session.ferreteriaId, hoy),
+    deliveryRepo.obtenerPedidosProgramados(session.ferreteriaId, inicioHoy, fin14dias),
   ])
 
   return (

@@ -2,6 +2,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { Wrench } from 'lucide-react'
 import InviteAcceptButton from './InviteAcceptButton'
+import { SaasRepository } from '@/lib/db/repositories/saas'
 
 interface Props {
   params: Promise<{ token: string }>
@@ -10,13 +11,10 @@ interface Props {
 export default async function InvitePage({ params }: Props) {
   const { token } = await params
   const supabase = await createClient()
+  const saasRepo = new SaasRepository(supabase)
 
-  // Leer la invitación sin exponer datos sensibles
-  const { data: inv } = await supabase
-    .from('invitaciones')
-    .select('id, usada, expires_at, ferreterias(nombre)')
-    .eq('token', token)
-    .single()
+  // Leer la invitación sin exponer datos sensibles a través de la capa de repositorio
+  const inv = await saasRepo.obtenerInvitacionPorToken(token)
 
   const ferreteriaNombre = (inv?.ferreterias as any)?.nombre ?? null
   const expirada = inv ? new Date(inv.expires_at) < new Date() : false

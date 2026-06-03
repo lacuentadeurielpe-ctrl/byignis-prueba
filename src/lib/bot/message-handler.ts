@@ -19,6 +19,8 @@ import {
   mensajeYaProcesado,
   yaEnvioMensajeFueraHorario,
 } from '@/lib/bot/session'
+import { ChatRepository } from '@/lib/db/repositories/chat'
+import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { formatHora } from '@/lib/utils'
 import { enviarMensaje as enviarWhatsApp } from '@/lib/whatsapp/ycloud'
 import { generarYEnviarComprobante, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
@@ -36,6 +38,7 @@ import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
 import { geocodificarDireccion } from '@/lib/delivery/geocoding'
 import { calcularETA } from '@/lib/delivery/eta'
 import { crearEntrega } from '@/lib/delivery/assignment'
+import { desencriptar } from '@/lib/encryption'
 
 // ── Mapeo intent → tipo de tarea IA ──────────────────────────────────────────
 // Determina cuántos créditos cuesta y qué modelo corresponde usar.
@@ -134,8 +137,9 @@ export async function handleIncomingMessage({
   }
 
   // ── 2. Config del bot ─────────────────────────────────────────────────────
-  const { data: config } = await supabase
-    .from('configuracion_bot').select('*').eq('ferreteria_id', ferreteria.id).single()
+  const catalogRepo = new CatalogRepository(supabase)
+  const chatRepo = new ChatRepository(supabase)
+  const config = await catalogRepo.obtenerConfiguracionBot(ferreteria.id)
 
   const timeoutSesion = config?.timeout_sesion_minutos ?? 60
   const maxContexto = config?.max_mensajes_contexto ?? 10
@@ -186,17 +190,11 @@ export async function handleIncomingMessage({
   }
 
   // ── 6. Cargar catálogo, zonas y flujo activo ──────────────────────────────
-  const [{ data: productos }, { data: zonas }, { data: convActual }] = await Promise.all([
-    supabase.from('productos')
-      .select('*, categorias(id,nombre), reglas_descuento(*)')
-      .eq('ferreteria_id', ferreteria.id).eq('activo', true).order('nombre'),
-    supabase.from('zonas_delivery')
-      .select('*').eq('ferreteria_id', ferreteria.id).eq('activo', true),
-    supabase.from('conversaciones')
-      .select('datos_flujo').eq('id', conversacion.id).single(),
+  const [productos, zonas, datosFlujo] = await Promise.all([
+    catalogRepo.listarProductosActivos(ferreteria.id),
+    catalogRepo.listarZonasDeliveryActivas(ferreteria.id),
+    chatRepo.obtenerDatosFlujo(conversacion.id),
   ])
-
-  const datosFlujo = convActual?.datos_flujo as DatosFlujoPedido | null
 
   // ── 7. Verificar créditos mínimos (1) sin descontar aún ─────────────────
   // No sabemos el tipo de tarea hasta obtener el intent de DeepSeek.
@@ -234,22 +232,10 @@ export async function handleIncomingMessage({
       }
 
       // Cargar perfil del cliente y resumen previo de contexto
-      const [{ data: clienteFull }, { data: convFull }] = await Promise.all([
-        supabase
-          .from('clientes')
-          .select('perfil')
-          .eq('id', conversacion.cliente_id)
-          .eq('ferreteria_id', ferreteria.id)  // FERRETERÍA AISLADA
-          .single(),
-        supabase
-          .from('conversaciones')
-          .select('resumen_contexto')
-          .eq('id', conversacion.id)
-          .eq('ferreteria_id', ferreteria.id)  // FERRETERÍA AISLADA
-          .single(),
+      const [perfilCliente, resumenPrevio] = await Promise.all([
+        chatRepo.obtenerPerfilCliente(ferreteria.id, conversacion.cliente_id),
+        chatRepo.obtenerResumenContexto(ferreteria.id, conversacion.id),
       ])
-      const perfilCliente = (clienteFull?.perfil as Record<string, unknown> | null) ?? null
-      const resumenPrevio = (convFull?.resumen_contexto as string | null) ?? null
 
       // Compaction: si el historial es largo, resumir los viejos.
       // Si falla (p.ej. DeepSeek caído), continuar con el historial crudo — nunca bloquear.
@@ -1150,6 +1136,9 @@ export async function handleIncomingMessage({
       }
 
       // ── Caso 3: pagado + Nubefact configurado → boleta o factura ──────────
+      const tokenPlano = (ferreteria as any).nubefact_token_enc
+        ? await desencriptar((ferreteria as any).nubefact_token_enc)
+        : ''
 
       // Si pide factura, verificar que tengamos RUC del cliente
       if (pidioFactura) {
@@ -1171,11 +1160,13 @@ export async function handleIncomingMessage({
           // Tenemos RUC → emitir factura
           console.log(`[Bot F6] Emitiendo factura para pedido=${pedidoTarget.id} ruc=${rucParaFactura}`)
           const resultFact = await emitirFactura({
+            supabase:      admin,
             pedidoId:      pedidoTarget.id,
             ferreteriaId:  ferreteria.id,  // FERRETERÍA AISLADA
             clienteNombre: (pedidoTarget as any).nombre_cliente || 'CLIENTE',
             clienteRuc:    rucParaFactura,
             emitidoPor:    'bot',
+            tokenPlano,
           })
 
           if (resultFact.ok && resultFact.pdfUrl) {
@@ -1199,12 +1190,14 @@ export async function handleIncomingMessage({
       // Emitir BOLETA (caso default o fallback de factura sin RUC)
       console.log(`[Bot F6] Emitiendo boleta para pedido=${pedidoTarget.id}`)
       const resultBol = await emitirBoleta({
+        supabase:      admin,
         pedidoId:      pedidoTarget.id,
         ferreteriaId:  ferreteria.id,  // FERRETERÍA AISLADA
         tipoBoleta:    'boleta',
         clienteNombre: (pedidoTarget as any).nombre_cliente || 'CLIENTES VARIOS',
         clienteDni:    '',
         emitidoPor:    'bot',
+        tokenPlano,
       })
 
       if (resultBol.ok && resultBol.pdfUrl) {

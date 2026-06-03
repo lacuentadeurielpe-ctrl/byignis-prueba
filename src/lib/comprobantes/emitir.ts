@@ -5,8 +5,6 @@
 //   - El token Nubefact se obtiene de la propia ferretería (nunca env global)
 //   - El correlativo usa pg_advisory_xact_lock para evitar duplicados concurrentes
 
-import { createAdminClient } from '@/lib/supabase/admin'
-import { desencriptar }      from '@/lib/encryption'
 import { enviarANubefact }   from '@/lib/nubefact'
 import {
   NUBEFACT_TIPO,
@@ -19,12 +17,14 @@ import {
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
 export interface OpcionesEmision {
+  supabase:       any      // Inyectado
   pedidoId:       string
   ferreteriaId:   string   // FERRETERÍA AISLADA — siempre requerido
   tipoBoleta:     'boleta' // F3 solo boletas; facturas en F4
   clienteNombre:  string
   clienteDni:     string   // puede ser '' → emite sin documento
   emitidoPor:     'dashboard' | 'bot'
+  tokenPlano:     string   // Inyectado
 }
 
 export interface ResultadoEmision {
@@ -173,7 +173,7 @@ async function procesarItemsInformales(
 // ── Función principal ─────────────────────────────────────────────────────────
 
 export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmision> {
-  const supabase = createAdminClient()
+  const supabase = opts.supabase
 
   // ── 1. Cargar ferretería — FERRETERÍA AISLADA ────────────────────────────
   const { data: ferreteria, error: errFerr } = await supabase
@@ -241,13 +241,8 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     }
   }
 
-  // ── 4. Desencriptar token Nubefact ───────────────────────────────────────
-  let tokenPlano: string
-  try {
-    tokenPlano = await desencriptar(ferreteria.nubefact_token_enc)
-  } catch {
-    return { ok: false, error: 'Error al descifrar el token Nubefact. Reconfigura en Settings.' }
-  }
+  // ── 4. Token Nubefact ───────────────────────────────────────────────────
+  const tokenPlano = opts.tokenPlano
 
   const serie = ferreteria.serie_boletas ?? 'B001'
   const dniLimpio = opts.clienteDni.replace(/\D/g, '')
@@ -475,15 +470,17 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
 // ── Factura electrónica (F4) ──────────────────────────────────────────────────
 
 export interface OpcionesFactura {
+  supabase:      any      // Inyectado
   pedidoId:      string
   ferreteriaId:  string   // FERRETERÍA AISLADA — siempre requerido
   clienteNombre: string
   clienteRuc:    string   // 11 dígitos, obligatorio
   emitidoPor:    'dashboard' | 'bot'
+  tokenPlano:    string   // Inyectado
 }
 
 export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmision> {
-  const supabase = createAdminClient()
+  const supabase = opts.supabase
 
   // ── 1. Cargar ferretería — FERRETERÍA AISLADA ────────────────────────────
   const { data: ferreteria, error: errFerr } = await supabase
@@ -550,13 +547,8 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
     }
   }
 
-  // ── 4. Desencriptar token Nubefact ───────────────────────────────────────
-  let tokenPlano: string
-  try {
-    tokenPlano = await desencriptar(ferreteria.nubefact_token_enc)
-  } catch {
-    return { ok: false, error: 'Error al descifrar el token Nubefact. Reconfigura en Settings.' }
-  }
+  // ── 4. Token Nubefact ───────────────────────────────────────────────────
+  const tokenPlano = opts.tokenPlano
 
   const serie = ferreteria.serie_facturas ?? 'F001'
   const rucLimpio = opts.clienteRuc.replace(/\D/g, '')
@@ -780,16 +772,18 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
 // ── Nota de Crédito (F3 - Devoluciones) ──────────────────────────────────────
 
 export interface OpcionesNotaCredito {
+  supabase:                any      // Inyectado
   comprobanteReferenciaId: string
   ferreteriaId:            string
   motivoCodigo:            string   // Ej. '01' = Anulación, '07' = Devolución
   motivoDescripcion:       string
   emitidoPor:              'dashboard' | 'bot'
   itemsDevueltos?:         { producto_id: string | null; cantidad: number }[]
+  tokenPlano:              string   // Inyectado
 }
 
 export async function emitirNotaCredito(opts: OpcionesNotaCredito): Promise<ResultadoEmision> {
-  const supabase = createAdminClient()
+  const supabase = opts.supabase
 
   // 1. Cargar ferretería
   const { data: ferreteria, error: errFerr } = await supabase
@@ -857,9 +851,7 @@ export async function emitirNotaCredito(opts: OpcionesNotaCredito): Promise<Resu
   const numero = corrData as number
   const numeroCompleto = `${serie}-${String(numero).padStart(8, '0')}`
 
-  let tokenPlano: string
-  try { tokenPlano = await desencriptar(ferreteria.nubefact_token_enc) } 
-  catch { return { ok: false, error: 'Error al descifrar token Nubefact' } }
+  const tokenPlano = opts.tokenPlano
 
   // 4. Copiar y filtrar items del original
   const igvIncluido = ferreteria.igv_incluido_en_precios ?? false

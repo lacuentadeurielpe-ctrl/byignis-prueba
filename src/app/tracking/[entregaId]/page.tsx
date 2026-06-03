@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import TrackingView from './TrackingView'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,25 +23,14 @@ export default async function TrackingPage({
 }) {
   const { entregaId } = await params
   const supabase = adminClient()
+  const deliveryRepo = new DeliveryRepository(supabase)
 
-  const { data: entrega } = await supabase
-    .from('entregas')
-    .select(`
-      id, estado, eta_actual, distancia_km,
-      pedidos(
-        id, numero_pedido, nombre_cliente, telefono_cliente,
-        direccion_entrega, total, estado, eta_minutos,
-        cliente_lat, cliente_lng
-      ),
-      vehiculos(nombre, tipo, velocidad_promedio_kmh),
-      repartidores(
-        nombre, telefono,
-        gps_ultima_lat, gps_ultima_lng, gps_actualizado_at,
-        ferreterias(nombre, telefono_whatsapp)
-      )
-    `)
-    .eq('id', entregaId)
-    .single()
+  let entrega;
+  try {
+    entrega = await deliveryRepo.obtenerTrackingEntrega(entregaId)
+  } catch (err) {
+    console.error('Error al cargar tracking de entrega:', err)
+  }
 
   if (!entrega) notFound()
 

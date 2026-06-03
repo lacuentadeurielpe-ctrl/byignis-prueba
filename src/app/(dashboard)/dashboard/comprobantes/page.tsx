@@ -3,6 +3,7 @@ import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
 import { Receipt, FileText } from 'lucide-react'
 import ComprobantesTable from '@/components/comprobantes/ComprobantesTable'
+import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,23 +12,12 @@ export default async function ComprobantesPage() {
   if (!session) redirect('/auth/login')
 
   const supabase = await createClient()
+  const facturacionRepo = new FacturacionRepository(supabase)
 
   // Obtener comprobantes y ferretería
-  const [
-    { data: comprobantes },
-    { data: ferreteriaData }
-  ] = await Promise.all([
-    supabase
-      .from('comprobantes')
-      .select('*, pedidos(id, numero_pedido, total, items_pedido(*))')
-      .eq('ferreteria_id', session.ferreteriaId)
-      .order('created_at', { ascending: false })
-      .limit(200),
-    supabase
-      .from('ferreterias')
-      .select('nubefact_token_enc, tipo_ruc')
-      .eq('id', session.ferreteriaId)
-      .single(),
+  const [comprobantes, ferreteriaData] = await Promise.all([
+    facturacionRepo.obtenerComprobantesDashboard(session.ferreteriaId),
+    facturacionRepo.obtenerConfiguracionFacturacion(session.ferreteriaId),
   ])
 
   return (

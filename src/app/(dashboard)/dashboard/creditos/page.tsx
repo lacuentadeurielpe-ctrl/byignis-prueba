@@ -5,6 +5,7 @@ import CreditosTable from '@/components/creditos/CreditosTable'
 import { CreditCard } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import type { PermisoMap } from '@/lib/auth/permisos'
+import { VentasRepository } from '@/lib/db/repositories/ventas'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,17 +15,9 @@ export default async function CreditosPage() {
   if (!checkPermiso(session, 'ver_creditos')) redirect('/dashboard')
 
   const supabase = await createClient()
+  const ventasRepo = new VentasRepository(supabase)
 
-  const { data: creditos } = await supabase
-    .from('creditos')
-    .select(`
-      *,
-      clientes(id, nombre, telefono),
-      pedidos(id, numero_pedido, total),
-      abonos_credito(id, monto, metodo_pago, notas, registrado_por, created_at)
-    `)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('created_at', { ascending: false })
+  const creditos = await ventasRepo.listarCreditosDashboard(session.ferreteriaId)
 
   const total = creditos?.length ?? 0
   const activos = creditos?.filter((c) => c.estado === 'activo').length ?? 0

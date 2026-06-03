@@ -1,6 +1,9 @@
 // Búsqueda de productos en el catálogo y construcción de cotizaciones
 import type { Producto, ReglaDescuento, UnidadProducto } from '@/types/database'
-import type { ItemSolicitado } from '@/lib/ai/deepseek'
+export interface ItemSolicitado {
+  nombre_buscado: string
+  cantidad: number
+}
 import { formatPEN } from '@/lib/utils'
 
 export interface ResultadoBusqueda {

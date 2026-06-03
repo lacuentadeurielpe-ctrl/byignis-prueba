@@ -8,6 +8,9 @@ import RendicionesView from '@/components/rendiciones/RendicionesView'
 import ContabilidadPanel from '@/components/contabilidad/ContabilidadPanel'
 import type { PermisoMap } from '@/lib/auth/permisos'
 import { cn } from '@/lib/utils'
+import { FinanzasRepository } from '@/lib/db/repositories/finanzas'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
+import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +27,9 @@ export default async function FinanzasPage({
   if (!checkPermiso(session, 'ver_caja_dia')) redirect('/dashboard')
 
   const supabase = await createClient()
+  const finanzasRepo = new FinanzasRepository(supabase)
+  const deliveryRepo = new DeliveryRepository(supabase)
+  const facturacionRepo = new FacturacionRepository(supabase)
 
   // Contabilidad solo para dueños; si vendedor intenta acceder → rendiciones
   const esDueno = session.rol === 'dueno'
@@ -34,26 +40,17 @@ export default async function FinanzasPage({
   // ── Rendiciones ──────────────────────────────────────────────────────────
   let rendicionesContent: React.ReactNode = null
   if (tab === 'rendiciones') {
-    const [{ data: rendiciones }, { data: repartidores }] = await Promise.all([
-      supabase
-        .from('rendiciones')
-        .select('*, repartidores(id, nombre, telefono)')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .order('fecha', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(60),
-      supabase
-        .from('repartidores')
-        .select('id, nombre')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .eq('activo', true)
-        .order('nombre'),
+    const [rendiciones, repartidores] = await Promise.all([
+      finanzasRepo.obtenerRendicionesDashboard(session.ferreteriaId),
+      deliveryRepo.listarRepartidores(session.ferreteriaId),
     ])
+
+    const repartidoresActivos = (repartidores ?? []).filter((r: any) => r.activo)
 
     rendicionesContent = (
       <RendicionesView
         rendiciones={rendiciones ?? []}
-        repartidores={repartidores ?? []}
+        repartidores={repartidoresActivos}
         permisos={session.permisos as PermisoMap}
         rol={session.rol}
       />
@@ -63,18 +60,9 @@ export default async function FinanzasPage({
   // ── Contabilidad ─────────────────────────────────────────────────────────
   let contabilidadContent: React.ReactNode = null
   if (tab === 'contabilidad' && esDueno) {
-    const [{ data: libros }, { data: ferreteria }] = await Promise.all([
-      supabase
-        .from('libros_contables')
-        .select('*')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .order('periodo', { ascending: false })
-        .limit(24),
-      supabase
-        .from('ferreterias')
-        .select('ruc, razon_social, nombre_comercial, regimen_tributario')
-        .eq('id', session.ferreteriaId)
-        .single(),
+    const [libros, ferreteria] = await Promise.all([
+      finanzasRepo.obtenerLibrosContablesDashboard(session.ferreteriaId),
+      facturacionRepo.obtenerConfiguracionFacturacion(session.ferreteriaId),
     ])
 
     contabilidadContent = (

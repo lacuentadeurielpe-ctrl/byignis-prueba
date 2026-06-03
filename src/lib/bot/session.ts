@@ -1,8 +1,7 @@
-// Gestión de sesiones de conversación
-// Una sesión es una conversación activa entre cliente y ferretería
+// Gestión de sesiones de conversación utilizando el ChatRepository
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Conversacion, Cliente } from '@/types/database'
-import { normalizarTelefono } from '@/lib/utils'
+import { ChatRepository } from '@/lib/db/repositories/chat'
 
 interface GetOrCreateSessionResult {
   conversacion: Conversacion
@@ -10,55 +9,26 @@ interface GetOrCreateSessionResult {
   esNueva: boolean
 }
 
-// Obtiene la sesión activa de un cliente o crea una nueva
 export async function getOrCreateSession(
   supabase: SupabaseClient,
   ferreteriaId: string,
   telefonoCliente: string,
-  timeoutSesionMinutos: number
+  _timeoutSesionMinutos: number // mantenido por firma
 ): Promise<GetOrCreateSessionResult> {
+  const repo = new ChatRepository(supabase)
+
   // 1. Obtener o crear cliente
-  const telNormal = normalizarTelefono(telefonoCliente)
-  let { data: cliente } = await supabase
-    .from('clientes')
-    .select('*')
-    .eq('ferreteria_id', ferreteriaId)
-    .eq('telefono', telNormal)
-    .single()
-
+  let cliente = await repo.obtenerClientePorTelefono(ferreteriaId, telefonoCliente)
   if (!cliente) {
-    const { data: nuevoCliente, error } = await supabase
-      .from('clientes')
-      .insert({ ferreteria_id: ferreteriaId, telefono: telNormal })
-      .select()
-      .single()
-
-    if (error) throw new Error(`Error creando cliente: ${error.message}`)
-    cliente = nuevoCliente
+    cliente = await repo.crearCliente(ferreteriaId, telefonoCliente)
   }
 
-
-  // 2. Buscar la conversación más reciente del cliente — modelo WhatsApp:
-  //    una sola conversación por número de teléfono, permanente, nunca expira.
-  const { data: conversacionExistente } = await supabase
-    .from('conversaciones')
-    .select('*')
-    .eq('ferreteria_id', ferreteriaId)
-    .eq('cliente_id', cliente.id)
-    .order('ultima_actividad', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  // 2. Buscar la conversación más reciente
+  const conversacionExistente = await repo.obtenerConversacionReciente(ferreteriaId, cliente.id)
 
   if (conversacionExistente) {
-    // Si estaba cerrada, reabrirla
     const esCerrada = conversacionExistente.estado === 'cerrada'
-    await supabase
-      .from('conversaciones')
-      .update({
-        ultima_actividad: new Date().toISOString(),
-        ...(esCerrada ? { estado: 'activa', bot_pausado: false } : {}),
-      })
-      .eq('id', conversacionExistente.id)
+    await repo.reabrirConversacion(conversacionExistente.id, esCerrada)
 
     return {
       conversacion: {
@@ -71,24 +41,11 @@ export async function getOrCreateSession(
     }
   }
 
-  // 3. Crear conversación (solo si no existe ninguna para este cliente)
-  const { data: nuevaConversacion, error: errConv } = await supabase
-    .from('conversaciones')
-    .insert({
-      ferreteria_id: ferreteriaId,
-      cliente_id: cliente.id,
-      estado: 'activa',
-      bot_pausado: false,
-    })
-    .select()
-    .single()
-
-  if (errConv) throw new Error(`Error creando conversación: ${errConv.message}`)
-
+  // 3. Crear conversación
+  const nuevaConversacion = await repo.crearConversacion(ferreteriaId, cliente.id)
   return { conversacion: nuevaConversacion, cliente, esNueva: true }
 }
 
-// Guarda un mensaje en el historial
 export async function guardarMensaje(
   supabase: SupabaseClient,
   conversacionId: string,
@@ -96,40 +53,26 @@ export async function guardarMensaje(
   contenido: string,
   ycloudMessageId?: string
 ) {
-  const { error } = await supabase.from('mensajes').insert({
-    conversacion_id: conversacionId,
-    role,
-    contenido,
-    ycloud_message_id: ycloudMessageId ?? null,
-  })
-
-  if (error) console.error('[Session] Error guardando mensaje:', error.message)
+  const repo = new ChatRepository(supabase)
+  await repo.guardarMensaje({ conversacionId, role, contenido, ycloudMessageId })
 }
 
-// Obtiene el historial reciente de mensajes de una conversación
 export async function getHistorial(
   supabase: SupabaseClient,
   conversacionId: string,
   limite: number
 ): Promise<{ role: 'cliente' | 'bot' | 'dueno'; contenido: string }[]> {
-  const { data } = await supabase
-    .from('mensajes')
-    .select('role, contenido')
-    .eq('conversacion_id', conversacionId)
-    .order('created_at', { ascending: false })
-    .limit(limite)
-
-  return (data ?? []).reverse() as { role: 'cliente' | 'bot' | 'dueno'; contenido: string }[]
+  const repo = new ChatRepository(supabase)
+  return repo.obtenerHistorial(conversacionId, limite)
 }
 
-// Verifica si el bot debe retomar el control (timeout de intervención del dueño)
 export async function verificarRetomarBot(
   supabase: SupabaseClient,
   conversacion: Conversacion,
   timeoutIntervencionMinutos: number
 ): Promise<boolean> {
   if (!conversacion.bot_pausado) return false
-  if (!conversacion.dueno_activo_at) return true // nunca hubo actividad → retomar
+  if (!conversacion.dueno_activo_at) return true
 
   const limiteIntervacion = new Date(
     Date.now() - timeoutIntervencionMinutos * 60 * 1000
@@ -138,107 +81,46 @@ export async function verificarRetomarBot(
   const duenoTardio = conversacion.dueno_activo_at < limiteIntervacion
 
   if (duenoTardio) {
-    // Reactivar el bot
-    await supabase
-      .from('conversaciones')
-      .update({ bot_pausado: false, estado: 'activa' })
-      .eq('id', conversacion.id)
+    const repo = new ChatRepository(supabase)
+    await repo.reactivarBot(conversacion.id)
     return true
   }
 
   return false
 }
 
-// Pausa el bot y registra que el dueño está tomando control
 export async function pausarBot(supabase: SupabaseClient, conversacionId: string) {
-  await supabase
-    .from('conversaciones')
-    .update({ bot_pausado: true, estado: 'intervenida_dueno', dueno_activo_at: new Date().toISOString() })
-    .eq('id', conversacionId)
+  const repo = new ChatRepository(supabase)
+  await repo.pausarBot(conversacionId)
 }
 
-/**
- * Deduplicación atómica: intenta insertar el mensaje con el ycloud_message_id.
- * Si ya existe (UNIQUE constraint), la inserción falla silenciosamente y retorna true.
- * Esto previene race conditions cuando YCloud llama el webhook múltiples veces.
- */
 export async function mensajeYaProcesado(
   supabase: SupabaseClient,
   ycloudMessageId: string
 ): Promise<boolean> {
-  const { data } = await supabase
-    .from('mensajes')
-    .select('id')
-    .eq('ycloud_message_id', ycloudMessageId)
-    .maybeSingle()
-
-  return !!data
+  const repo = new ChatRepository(supabase)
+  return repo.mensajeYaProcesado(ycloudMessageId)
 }
 
-/**
- * Pausa el bot cuando el dueño envía un mensaje manualmente desde YCloud.
- * Actualiza dueno_activo_at para reiniciar el timer de auto-reanudación.
- * Si no existe conversación activa para ese cliente, no hace nada.
- */
 export async function pausarBotPorDueno(
   supabase: SupabaseClient,
   ferreteriaId: string,
   telefonoCliente: string
 ): Promise<void> {
-  // Find the client by phone
-  const telNormal = normalizarTelefono(telefonoCliente)
-  const { data: cliente } = await supabase
-    .from('clientes')
-    .select('id')
-    .eq('ferreteria_id', ferreteriaId)
-    .eq('telefono', telNormal)
-    .maybeSingle()
-
-
+  const repo = new ChatRepository(supabase)
+  const cliente = await repo.obtenerClientePorTelefono(ferreteriaId, telefonoCliente)
   if (!cliente) return
 
-  // Find active conversation
-  const { data: conv } = await supabase
-    .from('conversaciones')
-    .select('id')
-    .eq('ferreteria_id', ferreteriaId)
-    .eq('cliente_id', cliente.id)
-    .in('estado', ['activa', 'intervenida_dueno'])
-    .order('ultima_actividad', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const conv = await repo.obtenerConversacionReciente(ferreteriaId, cliente.id)
+  if (!conv || !['activa', 'intervenida_dueno'].includes(conv.estado)) return
 
-  if (!conv) return
-
-  await supabase
-    .from('conversaciones')
-    .update({
-      bot_pausado:     true,
-      estado:          'intervenida_dueno',
-      dueno_activo_at: new Date().toISOString(),
-    })
-    .eq('id', conv.id)
+  await repo.pausarBot(conv.id)
 }
 
-/**
- * Verifica si ya se envió un mensaje de "fuera de horario" en los últimos 60 minutos.
- * Evita spam de ese mensaje cuando el cliente escribe múltiples veces fuera del horario.
- */
 export async function yaEnvioMensajeFueraHorario(
   supabase: SupabaseClient,
   conversacionId: string
 ): Promise<boolean> {
-  const hace60min = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-
-  const { data } = await supabase
-    .from('mensajes')
-    .select('id')
-    .eq('conversacion_id', conversacionId)
-    .eq('role', 'bot')
-    .gte('created_at', hace60min)
-    .ilike('contenido', '%estamos cerrados%')
-    .limit(1)
-    .maybeSingle()
-
-  return !!data
+  const repo = new ChatRepository(supabase)
+  return repo.yaEnvioMensajeFueraHorario(conversacionId)
 }

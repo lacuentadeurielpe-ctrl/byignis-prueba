@@ -7,6 +7,8 @@ import ConversationsList   from '@/components/conversations/ConversationsList'
 import ChatView            from '@/components/conversations/ChatView'
 import ContextPanel        from '@/components/conversations/ContextPanel'
 import { getSessionInfo }  from '@/lib/auth/roles'
+import { ChatRepository }  from '@/lib/db/repositories/chat'
+import { ClientesRepository } from '@/lib/db/repositories/clientes'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,42 +22,29 @@ export default async function ConversationPage({ params }: Props) {
   if (!session) redirect('/auth/login')
 
   const supabase = await createClient()
+  const chatRepo = new ChatRepository(supabase)
+  const clientesRepo = new ClientesRepository(supabase)
 
   // Conversación activa
-  const { data: conversacion } = await supabase
-    .from('conversaciones')
-    .select('*, clientes(nombre, telefono)')
-    .eq('id', id)
-    .eq('ferreteria_id', session.ferreteriaId)
-    .single()
+  let conversacion: any = null
+  try {
+    conversacion = await chatRepo.obtenerConversacionPorId(session.ferreteriaId, id)
+  } catch {
+    conversacion = null
+  }
 
   if (!conversacion) notFound()
 
   // Mensajes (incluye tipo para mostrar indicador de audio)
-  const { data: mensajes } = await supabase
-    .from('mensajes')
-    .select('id, role, contenido, tipo, created_at')
-    .eq('conversacion_id', id)
-    .order('created_at', { ascending: true })
-    .limit(200)
+  const mensajes = await chatRepo.obtenerMensajesDeConversacion(id)
 
   // Lista de conversaciones (panel izquierdo)
-  const { data: conversaciones } = await supabase
-    .from('conversaciones')
-    .select('id, estado, bot_pausado, ultima_actividad, clientes(nombre, telefono)')
-    .eq('ferreteria_id', session.ferreteriaId)
-    .order('ultima_actividad', { ascending: false })
-    .limit(50)
-
+  const conversaciones = await chatRepo.obtenerConversacionesList(session.ferreteriaId)
   const convIds = (conversaciones ?? []).map(c => c.id)
 
   let ultimosMensajes: Record<string, { contenido: string; role: string }> = {}
   if (convIds.length > 0) {
-    const { data: msgs } = await supabase
-      .from('mensajes')
-      .select('conversacion_id, contenido, role, created_at')
-      .in('conversacion_id', convIds)
-      .order('created_at', { ascending: false })
+    const msgs = await chatRepo.obtenerUltimosMensajesPorConversaciones(convIds)
 
     for (const m of msgs ?? []) {
       if (!ultimosMensajes[m.conversacion_id]) {
@@ -83,21 +72,14 @@ export default async function ConversationPage({ params }: Props) {
   const clienteId    = (conversacion as Record<string, unknown>).cliente_id as string | null
 
   // Últimos pedidos del cliente para el panel CRM
-  const { data: pedidosCliente } = clienteId
-    ? await supabase
-        .from('pedidos')
-        .select('id, numero_pedido, estado, total, created_at, modalidad')
-        .eq('ferreteria_id', session.ferreteriaId)
-        .eq('cliente_id', clienteId)
-        .order('created_at', { ascending: false })
-        .limit(4)
-    : { data: null }
+  let pedidosCliente: any[] = []
+  if (clienteId) {
+    const allPedidos = await clientesRepo.obtenerPedidosDeCliente(session.ferreteriaId, clienteId)
+    pedidosCliente = (allPedidos ?? []).slice(0, 4)
+  }
 
   // Total de mensajes para stats
-  const { count: totalMensajes } = await supabase
-    .from('mensajes')
-    .select('*', { count: 'exact', head: true })
-    .eq('conversacion_id', id)
+  const totalMensajes = await chatRepo.contarMensajesDeConversacion(id)
 
   return (
     <div className="absolute inset-0 flex overflow-hidden">

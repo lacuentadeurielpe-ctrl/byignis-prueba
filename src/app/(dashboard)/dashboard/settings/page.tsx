@@ -15,6 +15,9 @@ import AuditoriaTab from '@/components/settings/AuditoriaTab'
 import VehiculosSection from '@/components/settings/VehiculosSection'
 import { Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SaasRepository } from '@/lib/db/repositories/saas'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
+import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,11 +63,8 @@ export default async function SettingsPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: ferreteria } = await supabase
-    .from('ferreterias')
-    .select('*')
-    .eq('owner_id', user.id)
-    .single()
+  const saasRepo = new SaasRepository(supabase)
+  const ferreteria = await saasRepo.obtenerFerreteriaPorDuenio(user.id)
 
   if (!ferreteria) return null
 
@@ -72,29 +72,16 @@ export default async function SettingsPage({
   const tabActivo = ALL_TABS.some((t) => t.id === params.tab) ? (params.tab ?? 'general') : 'general'
 
   const admin = createAdminClient()
-  const [{ data: zonas }, { data: configBot }, estadoMP, { data: ycloudConfig }, { data: productosActivos }] = await Promise.all([
-    supabase
-      .from('zonas_delivery')
-      .select('id, nombre, tiempo_estimado_min')
-      .eq('ferreteria_id', ferreteria.id)
-      .order('nombre'),
-    supabase
-      .from('configuracion_bot')
-      .select('margen_minimo_porcentaje, debounce_segundos, ventana_gracia_minutos, perfil_bot, agentes_activos, cierre_cotizacion_activo, umbral_upsell_soles')
-      .eq('ferreteria_id', ferreteria.id)
-      .single(),
+  const saasRepoAdmin = new SaasRepository(admin)
+  const deliveryRepo = new DeliveryRepository(supabase)
+  const catalogRepo = new CatalogRepository(supabase)
+
+  const [zonas, configBot, estadoMP, ycloudConfig, productosActivos] = await Promise.all([
+    deliveryRepo.listarZonasDelivery(ferreteria.id),
+    saasRepo.obtenerConfiguracionBot(ferreteria.id),
     getEstadoMP(ferreteria.id),
-    admin
-      .from('configuracion_ycloud')
-      .select('numero_whatsapp, estado_conexion, ultimo_mensaje_at, ultimo_error')
-      .eq('ferreteria_id', ferreteria.id)
-      .single(),
-    supabase
-      .from('productos')
-      .select('id, nombre, unidad')
-      .eq('ferreteria_id', ferreteria.id)
-      .eq('activo', true)
-      .order('nombre'),
+    saasRepoAdmin.obtenerConfiguracionYCloud(ferreteria.id),
+    catalogRepo.listarProductosActivos(ferreteria.id),
   ])
 
   const nubefactConfig = {

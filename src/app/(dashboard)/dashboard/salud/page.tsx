@@ -11,6 +11,14 @@ import {
 } from 'lucide-react'
 import { cn, formatFecha } from '@/lib/utils'
 
+// Repositories
+import { SaasRepository } from '@/lib/db/repositories/saas'
+import { CatalogRepository } from '@/lib/db/repositories/catalogo'
+import { DeliveryRepository } from '@/lib/db/repositories/logistica'
+import { ChatRepository } from '@/lib/db/repositories/chat'
+import { VentasRepository } from '@/lib/db/repositories/ventas'
+import { ClientesRepository } from '@/lib/db/repositories/clientes'
+
 export const dynamic = 'force-dynamic'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -40,64 +48,43 @@ export default async function SaludPage() {
   const supabase = await createClient()
   const admin    = createAdminClient()
 
+  const saasRepo = new SaasRepository(supabase)
+  const saasRepoAdmin = new SaasRepository(admin)
+  const catalogRepo = new CatalogRepository(supabase)
+  const deliveryRepo = new DeliveryRepository(supabase)
+  const chatRepo = new ChatRepository(supabase)
+  const ventasRepo = new VentasRepository(supabase)
+  const clientesRepo = new ClientesRepository(supabase)
+
   const hace7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const now = new Date().toISOString()
 
   // ── Consultas en paralelo (todas aisladas por ferreteriaId) ───────────────
   const [
-    { data: ferreteria },
-    { data: ycloudConfig },
-    { data: configBot },
-    { count: productosCount },
-    { count: zonasCount },
-    { count: conversaciones7d },
-    { count: cotizaciones7d },
-    { count: pedidos7d },
-    { data: clientesRaw },
+    ferreteria,
+    ycloudConfig,
+    configBot,
+    productosCount,
+    zonas,
+    conversaciones7d,
+    cotizaciones7d,
+    pedidos7d,
+    clientesRaw,
   ] = await Promise.all([
-    supabase
-      .from('ferreterias')
-      .select('horario_apertura, horario_cierre, dias_atencion, formas_pago')
-      .eq('id', session.ferreteriaId)
-      .single(),
-    admin
-      .from('configuracion_ycloud')
-      .select('estado_conexion, ultimo_mensaje_at, ultimo_error')
-      .eq('ferreteria_id', session.ferreteriaId)
-      .maybeSingle(),
-    supabase
-      .from('configuracion_bot')
-      .select('perfil_bot')
-      .eq('ferreteria_id', session.ferreteriaId)
-      .maybeSingle(),
-    supabase
-      .from('productos')
-      .select('*', { count: 'exact', head: true })
-      .eq('ferreteria_id', session.ferreteriaId)
-      .eq('activo', true),
-    supabase
-      .from('zonas_delivery')
-      .select('*', { count: 'exact', head: true })
-      .eq('ferreteria_id', session.ferreteriaId),
-    supabase
-      .from('conversaciones')
-      .select('*', { count: 'exact', head: true })
-      .eq('ferreteria_id', session.ferreteriaId)
-      .gte('updated_at', hace7d),
-    supabase
-      .from('cotizaciones')
-      .select('*', { count: 'exact', head: true })
-      .eq('ferreteria_id', session.ferreteriaId)
-      .gte('created_at', hace7d),
-    supabase
-      .from('pedidos')
-      .select('*', { count: 'exact', head: true })
-      .eq('ferreteria_id', session.ferreteriaId)
-      .gte('created_at', hace7d),
-    supabase
-      .from('clientes')
-      .select('id, nombre, pedidos(created_at, total, estado)')
-      .eq('ferreteria_id', session.ferreteriaId),
+    saasRepo.obtenerFerreteria(session.ferreteriaId),
+    saasRepoAdmin.obtenerConfiguracionYCloud(session.ferreteriaId),
+    saasRepo.obtenerConfiguracionBot(session.ferreteriaId),
+    catalogRepo.contarProductosActivos(session.ferreteriaId),
+    deliveryRepo.listarZonasDelivery(session.ferreteriaId),
+    chatRepo.contarConversacionesActivasRango(session.ferreteriaId, hace7d, now),
+    ventasRepo.obtenerCotizacionesDesdeFecha(session.ferreteriaId, hace7d),
+    ventasRepo.obtenerPedidosDesdeFecha(session.ferreteriaId, hace7d),
+    clientesRepo.obtenerClientesConResumen(session.ferreteriaId),
   ])
+
+  const zonasCount = zonas?.length ?? 0
+  const cotizaciones7dCount = cotizaciones7d?.length ?? 0
+  const pedidos7dCount = pedidos7d?.length ?? 0
 
   // ── Estado del bot ───────────────────────────────────────────────────────
   const ultimoMensajeAt   = ycloudConfig?.ultimo_mensaje_at ?? null
@@ -186,8 +173,8 @@ export default async function SaludPage() {
     .slice(0, 10)
 
   const conv7d = conversaciones7d ?? 0
-  const cot7d  = cotizaciones7d  ?? 0
-  const ped7d  = pedidos7d       ?? 0
+  const cot7d  = cotizaciones7dCount
+  const ped7d  = pedidos7dCount
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
