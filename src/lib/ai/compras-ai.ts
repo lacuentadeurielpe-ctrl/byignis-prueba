@@ -204,8 +204,8 @@ async function sliceImage(
     const height = metadata.height || 1000
     const width = metadata.width || 1000
 
-    const MAX_SLICE_HEIGHT = 1500
-    const OVERLAP = 300
+    const MAX_SLICE_HEIGHT = 800
+    const OVERLAP = 150
 
     if (height <= MAX_SLICE_HEIGHT) {
       if (!isFirstImage && cabeceraGlobalBuffer) {
