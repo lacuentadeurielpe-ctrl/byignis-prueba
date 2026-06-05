@@ -78,7 +78,7 @@ async function llamarOpenAIVision(systemPrompt: string, imagenes: { base64: stri
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: 'gpt-4o-mini',
-      max_tokens: 1500,
+      max_tokens: 4096,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
@@ -133,7 +133,7 @@ async function llamarClaudeVision(systemPrompt: string, imagenes: { base64: stri
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1500,
+      max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: 'user', content: contentBlocks }],
     }),
@@ -156,7 +156,7 @@ async function llamarClaudeText(systemPrompt: string, userPrompt: string): Promi
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1500,
+      max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     }),
