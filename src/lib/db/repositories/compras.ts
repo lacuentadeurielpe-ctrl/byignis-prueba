@@ -197,4 +197,68 @@ export class ComprasRepository {
 
     return data
   }
+
+  /**
+   * Busca un producto_id en base a un alias registrado para la ferretería.
+   */
+  async obtenerProductoIdPorAlias(ferreteriaId: string, alias: string): Promise<string | null> {
+    const { data, error } = await this.supabase
+      .from('alias_productos')
+      .select('producto_id')
+      .eq('ferreteria_id', ferreteriaId)
+      .eq('alias', alias.trim())
+      .maybeSingle()
+
+    if (error) {
+      console.error('[ComprasRepository] Error al obtener producto por alias:', error.message)
+      return null
+    }
+
+    return data?.producto_id ?? null
+  }
+
+  /**
+   * Registra o actualiza la relación alias -> producto.
+   */
+  async guardarAliasProducto(
+    ferreteriaId: string,
+    productoId: string,
+    alias: string,
+    confianza = 1.0
+  ): Promise<void> {
+    const aliasNormalizado = alias.trim()
+    if (!aliasNormalizado) return
+
+    const { error } = await this.supabase
+      .from('alias_productos')
+      .upsert({
+        ferreteria_id: ferreteriaId,
+        producto_id: productoId,
+        alias: aliasNormalizado,
+        confianza,
+      }, {
+        onConflict: 'ferreteria_id,alias'
+      })
+
+    if (error) {
+      console.error('[ComprasRepository] Error al guardar alias de producto:', error.message)
+    }
+  }
+
+  /**
+   * Obtiene todos los alias registrados para una ferretería.
+   */
+  async listarAliasProductos(ferreteriaId: string): Promise<{ alias: string; producto_id: string }[]> {
+    const { data, error } = await this.supabase
+      .from('alias_productos')
+      .select('alias, producto_id')
+      .eq('ferreteria_id', ferreteriaId)
+
+    if (error) {
+      console.error('[ComprasRepository] Error al listar alias de productos:', error.message)
+      return []
+    }
+
+    return data ?? []
+  }
 }

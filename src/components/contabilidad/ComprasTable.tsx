@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Search } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Search, Sparkles } from 'lucide-react'
 import { formatPEN } from '@/lib/utils'
+import SmartPurchaseCapture from './SmartPurchaseCapture'
 
 interface Compra {
   id: string
@@ -28,6 +29,7 @@ export default function ComprasTable({ comprasIniciales }: Props) {
   const [filtroTipo, setFiltroTipo] = useState('todos')
   const [filtroEstado, setFiltroEstado] = useState('todos')
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
+  const [showSmartCapture, setShowSmartCapture] = useState(false)
 
   const filtered = compras.filter((c) => {
     const query = busqueda.toLowerCase().trim()
@@ -71,6 +73,10 @@ export default function ComprasTable({ comprasIniciales }: Props) {
     }
   }
 
+  if (showSmartCapture) {
+    return <SmartPurchaseCapture onClose={() => setShowSmartCapture(false)} />
+  }
+
   return (
     <div className="space-y-4">
       {/* Filtros */}
@@ -104,6 +110,12 @@ export default function ComprasTable({ comprasIniciales }: Props) {
           <option value="recibida">Recibidas</option>
           <option value="anulada">Anuladas</option>
         </select>
+        <button
+          onClick={() => setShowSmartCapture(true)}
+          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+        >
+          <Sparkles className="w-4 h-4" /> Captura Inteligente
+        </button>
         <Link
           href="/dashboard/contabilidad/compras/new"
           className="px-4 py-2 bg-zinc-950 hover:bg-zinc-900 text-white text-sm font-semibold rounded-xl transition"
