@@ -150,10 +150,11 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
     setLoadingMsg('Subiendo imágenes y extrayendo texto con IA...')
 
     try {
+      const timezoneOffset = new Date().getTimezoneOffset()
       const res = await fetch('/api/compras/ai-extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imagenes: base64Images })
+        body: JSON.stringify({ imagenes: base64Images, timezoneOffset })
       })
 
       if (!res.ok) {
@@ -337,7 +338,8 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
           categoria: it.categoria,
           stock_minimo: it.stock_minimo,
           es_formal: it.es_formal
-        }))
+        })),
+        imagenes: base64Images
       }
 
       const res = await fetch('/api/compras/ai-save', {

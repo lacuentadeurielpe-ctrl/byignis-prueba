@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { RepositoryManager } from '@/lib/db'
+import { subirImagenComprobante } from '@/lib/storage/supabase-storage'
 
 interface ItemConfirmado {
   descripcion_factura: string // descripción original leída por IA
@@ -29,6 +30,7 @@ interface CompraConfirmadaBody {
   notas?: string | null
   items: ItemConfirmado[]
   recibir_inmediatamente: boolean
+  imagenes?: { base64: string; mimeType: string }[]
 }
 
 // POST /api/compras/ai-save
@@ -41,10 +43,23 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json() as CompraConfirmadaBody
-    const { items, recibir_inmediatamente } = body
+    const { items, recibir_inmediatamente, imagenes } = body
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: 'No se enviaron ítems para guardar' }, { status: 400 })
+    }
+
+    // 0. Subir imágenes en paralelo si existen
+    const urlsImagenes = []
+    if (imagenes && imagenes.length > 0) {
+      const promesasSubida = imagenes.map(img => 
+        subirImagenComprobante(img.base64, img.mimeType, session.ferreteriaId)
+      )
+      const resultados = await Promise.allSettled(promesasSubida)
+      resultados.forEach(res => {
+        if (res.status === 'fulfilled') urlsImagenes.push(res.value)
+        else console.error('Falló la subida de una imagen:', res.reason)
+      })
     }
 
     // 1. Resolver Proveedor (Buscar por nombre de razón social)
@@ -207,6 +222,14 @@ export async function POST(request: Request) {
       compraInput,
       itemsProcesados
     )
+
+    // 5. Vincular las imágenes subidas al registro de compra (ya que repository aún no las soporta en el crear)
+    if (urlsImagenes.length > 0) {
+      await supabase
+        .from('compras')
+        .update({ imagenes_adjuntas: urlsImagenes })
+        .eq('id', (compra as any).id)
+    }
 
     return NextResponse.json({
       success: true,
