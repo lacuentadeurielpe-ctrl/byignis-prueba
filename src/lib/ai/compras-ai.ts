@@ -61,7 +61,6 @@ export async function extraerCompraDeImagenes(
 
   let apiResponse
   try {
-    // Para llaves V2 (Docbuilder) debemos usar el cliente genérico y Extraction con el ID del modelo personalizado.
     apiResponse = await mindeeClient.enqueueAndGetResult(
       mindee.product.Extraction,
       inputSource,
@@ -72,18 +71,12 @@ export async function extraerCompraDeImagenes(
     throw new Error('Error al conectar con Mindee API: ' + error.message)
   }
 
-  // En V2 Extraction, los campos vienen en un diccionario genérico en la propiedad inference.prediction.fields
-  // Dependiendo de la versión exacta de la librería V5, la ruta puede ser ligeramente diferente, 
-  // pero usaremos una búsqueda segura.
   const documentRes = (apiResponse as any).document || (apiResponse as any).inference?.document || (apiResponse as any)
   const prediction = documentRes?.inference?.prediction || documentRes?.prediction || {}
   const fields = prediction.fields || prediction
 
-  // Función de ayuda para extraer texto limpio de diferentes estructuras que devuelve V2 Extraction
-  const getValue = (key1: string, key2?: string) => {
-    let raw = fields[key1]
-    if (!raw && key2) raw = fields[key2]
-    
+  const getValue = (key: string) => {
+    let raw = fields[key]
     if (!raw) return null
     if (typeof raw === 'string' || typeof raw === 'number') return raw
     if (raw.value !== undefined) return raw.value
@@ -92,11 +85,19 @@ export async function extraerCompraDeImagenes(
   }
 
   // 1. Extraer Cabecera
-  const supplierName = getValue('Supplier Name', 'supplier_name')
-  let rucEmisor = getValue('Supplier Company Registrations', 'supplier_company_registrations') || getValue('Supplier RUC', 'supplier_ruc') || null
+  const supplierName = getValue('supplier_name')
+  
+  // RUC es una lista de objetos con "number" y "type"
+  const rucField = fields['supplier_company_registration']
+  let rucEmisor: string | null = null
+  if (Array.isArray(rucField)) {
+    const reg = rucField.find((r: any) => r.number?.value || r.number || r.value)
+    rucEmisor = reg ? (reg.number?.value || reg.number?.content || reg.number || reg.value) : null
+  } else if (rucField) {
+    rucEmisor = rucField.number?.value || rucField.number || rucField.value || rucField
+  }
   
   if (rucEmisor && typeof rucEmisor === 'string') {
-    // Extraer solo dígitos en caso de que venga con formato
     const digits = rucEmisor.replace(/\D/g, '')
     rucEmisor = digits.length === 11 ? digits : rucEmisor
   }
@@ -106,8 +107,8 @@ export async function extraerCompraDeImagenes(
     advertencias.push('El RUC detectado era el de nuestra ferretería. Se omitió para el proveedor.')
   }
 
-  const invoiceNumber = getValue('Invoice Number', 'invoice_number')
-  const invoiceDate = getValue('Invoice Date', 'invoice_date') || getValue('Date', 'date')
+  const invoiceNumber = getValue('invoice_number')
+  const invoiceDate = getValue('date')
   const tipoDocumentoDetectado = 'factura'
   const esFormal = !!rucEmisor
 
@@ -117,9 +118,9 @@ export async function extraerCompraDeImagenes(
     return isNaN(num) ? null : num
   }
 
-  const totalNeto = parseNum(getValue('Total Amount', 'total_amount'))
-  const igvAmount = parseNum(getValue('Total Tax', 'total_tax'))
-  const totalBruto = totalNeto !== null && igvAmount !== null ? totalNeto - igvAmount : parseNum(getValue('Total Net', 'total_net'))
+  const totalNeto = parseNum(getValue('total_amount'))
+  const igvAmount = parseNum(getValue('total_tax'))
+  const totalBruto = parseNum(getValue('total_net')) || (totalNeto !== null && igvAmount !== null ? totalNeto - igvAmount : null)
 
   const cabecera = {
     tipo_documento:      (esFormal ? tipoDocumentoDetectado : 'nota_venta') as ResultadoExtracionCompra['tipo_documento'],
@@ -134,25 +135,25 @@ export async function extraerCompraDeImagenes(
   }
 
   // 2. Extraer Líneas de Productos
-  // V2 Extraction devuelve las tablas en fields['Line Items'] como array de arrays o dicts
-  const lineItemsField = fields['Line Items'] || fields['line_items']
+  const lineItemsField = fields['line_items']
   const lineItemsRaw = Array.isArray(lineItemsField) ? lineItemsField : (lineItemsField?.values || lineItemsField?.elements || [])
   
   const items: ItemCompraExtraido[] = lineItemsRaw.map((line: any) => {
-    // line puede ser un objeto plano si es un dict, o tener .fields si es una sub-estructura
-    const lineFields = line.fields || line
-    
-    const extractVal = (k1: string, k2?: string) => {
-      let raw = lineFields[k1]
-      if (!raw && k2) raw = lineFields[k2]
+    // Si la línea es un string directamente (fallo de formato), la descartamos o la tratamos como descripción
+    if (typeof line === 'string') {
+      return null
+    }
+
+    const extractVal = (k: string) => {
+      let raw = line[k] || line.fields?.[k]
       if (!raw) return null
       return raw.value !== undefined ? raw.value : (raw.content !== undefined ? raw.content : raw)
     }
 
-    const desc = extractVal('Description', 'description')
-    const qty = parseNum(extractVal('Quantity', 'quantity'))
-    const price = parseNum(extractVal('Unit Price', 'unit_price'))
-    const total = parseNum(extractVal('Total Amount', 'total_amount'))
+    const desc = extractVal('description')
+    const qty = parseNum(extractVal('quantity'))
+    const price = parseNum(extractVal('unit_price'))
+    const total = parseNum(extractVal('total_price'))
     
     return {
       descripcion:            desc ? String(desc).trim() : 'Producto sin nombre',
@@ -165,7 +166,7 @@ export async function extraerCompraDeImagenes(
       precio_compra_unitario: price,
       subtotal:               total,
     }
-  }).filter((item: ItemCompraExtraido) => item.descripcion !== 'Producto sin nombre' || item.cantidad !== null)
+  }).filter((item: any) => item !== null && (item.descripcion !== 'Producto sin nombre' || item.cantidad !== null)) as ItemCompraExtraido[]
 
   if (items.length === 0) {
     advertencias.push('La IA no detectó ninguna línea de producto o la tabla no coincide con el esquema.')
