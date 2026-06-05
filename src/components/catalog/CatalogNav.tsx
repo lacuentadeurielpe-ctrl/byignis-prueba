@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 
 const TABS = [
   { href: '/dashboard/catalog',              label: 'Productos',      icon: Package,   exact: true },
-  { href: '/dashboard/catalog/agente',       label: 'Asistente IA',   icon: Bot,       badge: '✦' },
+  { href: '/dashboard/catalog/scanner',      label: 'Escanear Factura', icon: Bot,       badge: 'IA' },
   { href: '/dashboard/catalog/reabastecer',  label: 'Reabastecer',    icon: ClipboardList },
   { href: '/dashboard/catalog/upload',       label: 'Importar',       icon: Upload },
 ]

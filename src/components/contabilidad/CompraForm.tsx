@@ -290,7 +290,7 @@ export default function CompraForm() {
       })
 
       if (res.ok) {
-        router.push('/dashboard/finanzas?tab=contabilidad')
+        router.push('/dashboard/contabilidad/compras')
         router.refresh()
       } else {
         const err = await res.json()
@@ -310,7 +310,7 @@ export default function CompraForm() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => router.push('/dashboard/finanzas?tab=contabilidad')}
+            onClick={() => router.push('/dashboard/contabilidad/compras')}
             className="w-9 h-9 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-xl flex items-center justify-center transition"
           >
             <ArrowLeft className="w-4 h-4 text-zinc-600" />
@@ -686,7 +686,7 @@ export default function CompraForm() {
           <div className="flex items-center justify-between pt-2">
             <button
               type="button"
-              onClick={() => router.push('/dashboard/finanzas?tab=contabilidad')}
+              onClick={() => router.push('/dashboard/contabilidad/compras')}
               className="text-sm text-zinc-500 hover:text-zinc-700 font-medium transition"
             >
               Volver

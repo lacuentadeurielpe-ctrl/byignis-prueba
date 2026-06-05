@@ -332,7 +332,7 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
         throw new Error(err.error || 'Error al guardar la compra')
       }
 
-      router.push('/dashboard/finanzas?tab=contabilidad')
+      router.push('/dashboard/contabilidad/compras')
       router.refresh()
       onClose()
     } catch (err: any) {

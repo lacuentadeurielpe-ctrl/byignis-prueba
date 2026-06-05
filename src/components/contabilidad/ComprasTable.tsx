@@ -2,9 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Search, Sparkles } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Search, Sparkles, FileSpreadsheet, Download } from 'lucide-react'
 import { formatPEN } from '@/lib/utils'
 import SmartPurchaseCapture from './SmartPurchaseCapture'
+import * as XLSX from 'xlsx'
+import { generarPLE81Compras } from '@/lib/export/sunat-ple'
 
 interface Compra {
   id: string
@@ -44,6 +46,35 @@ export default function ComprasTable({ comprasIniciales }: Props) {
 
     return matchBusqueda && matchTipo && matchEstado
   })
+
+  const exportarExcel = () => {
+    const data = filtered.map(c => ({
+      'Código': c.numero_compra,
+      'Tipo': c.tipo === 'formal' ? 'Formal' : c.tipo === 'informal' ? 'Informal' : 'Mixta',
+      'Fecha Factura': c.fecha_factura ? new Date(c.fecha_factura).toLocaleDateString('es-PE') : '',
+      'N° Factura': c.numero_factura || '',
+      'Proveedor': c.proveedor_nombre || 'Sin proveedor',
+      'Total (S/)': Number(c.total_neto).toFixed(2),
+      'Estado': c.estado === 'recibida' ? 'Recibida' : c.estado === 'anulada' ? 'Anulada' : 'Borrador'
+    }))
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Registro de Compras')
+    XLSX.writeFile(wb, 'Registro_Compras.xlsx')
+  }
+
+  const exportarPLE = () => {
+    const d = new Date()
+    const periodo = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`
+    const txt = generarPLE81Compras(filtered, periodo)
+    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `LE20555555555${periodo}00080100001111.txt` // Formato genérico PLE
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   async function cambiarEstado(id: string, accion: 'confirmar' | 'anular') {
     if (accion === 'anular' && !confirm('¿Estás seguro de que deseas anular esta compra? Esto revertirá los cambios en el stock.')) {
@@ -116,11 +147,23 @@ export default function ComprasTable({ comprasIniciales }: Props) {
         >
           <Sparkles className="w-4 h-4" /> Captura Inteligente
         </button>
+        <button
+          onClick={exportarExcel}
+          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+        >
+          <FileSpreadsheet className="w-4 h-4" /> Exportar Excel
+        </button>
+        <button
+          onClick={exportarPLE}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+        >
+          <Download className="w-4 h-4" /> Exportar PLE (SUNAT)
+        </button>
         <Link
-          href="/dashboard/contabilidad/compras/new"
+          href="/dashboard/catalog/scanner"
           className="px-4 py-2 bg-zinc-950 hover:bg-zinc-900 text-white text-sm font-semibold rounded-xl transition"
         >
-          + Nueva Compra
+          Ir al Escáner
         </Link>
       </div>
 
