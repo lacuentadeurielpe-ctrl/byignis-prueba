@@ -7,7 +7,6 @@
  *   3. No se requiere cortar la imagen ni usar prompts frágiles.
  */
 
-import type * as mindeeTypes from 'mindee'
 import { normalizarUnidad } from '@/lib/constantes/unidades'
 
 // ── Interfaces públicas (mantienen compatibilidad 100%) ─────────────
@@ -43,7 +42,7 @@ export async function extraerCompraDeImagenes(
   imagenes: { base64: string; mimeType: string }[],
   rucComprador: string | null = null
 ): Promise<ResultadoExtracionCompra> {
-  const mindee = require('mindee')
+  const mindee = await import('mindee')
   if (imagenes.length === 0) throw new Error('No se enviaron imágenes')
 
   const apiKey = process.env.MINDEE_API_KEY
