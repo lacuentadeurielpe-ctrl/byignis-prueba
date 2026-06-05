@@ -53,11 +53,11 @@ export async function extraerCompraDeImagenes(
     throw new Error('Falta configurar la llave GOOGLE_GENERATIVE_AI_API_KEY en las variables de entorno.')
   }
 
-  console.log('[Gemini] Iniciando extracción de factura con gemini-1.5-flash...')
+  console.log('[Gemini] Iniciando extracción de factura con gemini-2.5-flash...')
 
   const genAI = new GoogleGenerativeAI(apiKey)
   const model = genAI.getGenerativeModel({ 
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash',
     generationConfig: { responseMimeType: 'application/json' }
   })
 
