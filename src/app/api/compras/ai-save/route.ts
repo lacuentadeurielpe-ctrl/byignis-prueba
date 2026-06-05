@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     // 0. Subir imágenes en paralelo si existen
-    const urlsImagenes = []
+    const urlsImagenes: string[] = []
     if (imagenes && imagenes.length > 0) {
       const promesasSubida = imagenes.map(img => 
         subirImagenComprobante(img.base64, img.mimeType, session.ferreteriaId)
