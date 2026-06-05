@@ -39,15 +39,37 @@ export interface ResultadoExtracionCompra {
 
 // ── UTILIDADES DE API ─────────────────────────────────────────────────────────
 
+function cleanBase64(base64: string): string {
+  return base64.replace(/^data:[^;]+;base64,/, '')
+}
+
+function safeParseJSON(text: string): any {
+  try {
+    return JSON.parse(text)
+  } catch (e) {
+    const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+    if (match) {
+      try { return JSON.parse(match[1]) } catch (e2) {}
+    }
+    const start = text.indexOf('{')
+    const end = text.lastIndexOf('}')
+    if (start !== -1 && end !== -1) {
+      try { return JSON.parse(text.substring(start, end + 1)) } catch (e3) {}
+    }
+    throw new Error('No se pudo parsear el JSON de la IA: ' + text)
+  }
+}
+
 async function llamarOpenAIVision(systemPrompt: string, imagenes: { base64: string; mimeType: string }[]): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY no configurada')
 
   const contentBlocks: any[] = [{ type: 'text', text: 'Analiza este documento.' }]
   imagenes.forEach((img) => {
+    const cleanB64 = cleanBase64(img.base64)
     contentBlocks.push({
       type: 'image_url',
-      image_url: { url: `data:${img.mimeType};base64,${img.base64}`, detail: 'high' },
+      image_url: { url: `data:${img.mimeType};base64,${cleanB64}`, detail: 'high' },
     })
   })
 
@@ -65,9 +87,12 @@ async function llamarOpenAIVision(systemPrompt: string, imagenes: { base64: stri
     }),
   })
 
-  if (!res.ok) throw new Error(`OpenAI Vision error ${res.status}`)
+  if (!res.ok) {
+    const errorText = await res.text()
+    throw new Error(`OpenAI Vision error ${res.status}: ${errorText}`)
+  }
   const data = await res.json()
-  return JSON.parse(data.choices[0].message.content)
+  return safeParseJSON(data.choices[0].message.content)
 }
 
 async function llamarOpenAIText(systemPrompt: string, userPrompt: string): Promise<any> {
@@ -89,7 +114,7 @@ async function llamarOpenAIText(systemPrompt: string, userPrompt: string): Promi
 
   if (!res.ok) throw new Error(`OpenAI Text error ${res.status}`)
   const data = await res.json()
-  return JSON.parse(data.choices[0].message.content)
+  return safeParseJSON(data.choices[0].message.content)
 }
 
 async function llamarClaudeVision(systemPrompt: string, imagenes: { base64: string; mimeType: string }[]): Promise<any> {
@@ -98,7 +123,8 @@ async function llamarClaudeVision(systemPrompt: string, imagenes: { base64: stri
 
   const contentBlocks: any[] = []
   imagenes.forEach((img) => {
-    contentBlocks.push({ type: 'image', source: { type: 'base64', media_type: img.mimeType, data: img.base64 } })
+    const cleanB64 = cleanBase64(img.base64)
+    contentBlocks.push({ type: 'image', source: { type: 'base64', media_type: img.mimeType, data: cleanB64 } })
   })
   contentBlocks.push({ type: 'text', text: 'Analiza esta imagen con extrema precisión.' })
 
@@ -113,9 +139,12 @@ async function llamarClaudeVision(systemPrompt: string, imagenes: { base64: stri
     }),
   })
 
-  if (!res.ok) throw new Error(`Claude Vision error ${res.status}`)
+  if (!res.ok) {
+    const errorText = await res.text()
+    throw new Error(`Claude Vision error ${res.status}: ${errorText}`)
+  }
   const data = await res.json()
-  return JSON.parse(data.content[0].text)
+  return safeParseJSON(data.content[0].text)
 }
 
 async function llamarClaudeText(systemPrompt: string, userPrompt: string): Promise<any> {
@@ -135,7 +164,7 @@ async function llamarClaudeText(systemPrompt: string, userPrompt: string): Promi
 
   if (!res.ok) throw new Error(`Claude Text error ${res.status}`)
   const data = await res.json()
-  return JSON.parse(data.content[0].text)
+  return safeParseJSON(data.content[0].text)
 }
 
 async function llamarDeepSeekText(systemPrompt: string, userPrompt: string): Promise<any> {
@@ -157,13 +186,14 @@ async function llamarDeepSeekText(systemPrompt: string, userPrompt: string): Pro
 
   if (!res.ok) throw new Error(`DeepSeek error ${res.status}`)
   const data = await res.json()
-  return JSON.parse(data.choices[0].message.content)
+  return safeParseJSON(data.choices[0].message.content)
 }
 
 // ── REBANADOR VISUAL DE IMÁGENES ──────────────────────────────────────────────
 async function sliceImage(base64: string, mimeType: string): Promise<{ base64: string, mimeType: string }[]> {
+  const cleanB64 = cleanBase64(base64)
   try {
-    const imgBuffer = Buffer.from(base64, 'base64')
+    const imgBuffer = Buffer.from(cleanB64, 'base64')
     const metadata = await sharp(imgBuffer).metadata()
     const height = metadata.height || 1000
     const width = metadata.width || 1000
@@ -185,7 +215,7 @@ async function sliceImage(base64: string, mimeType: string): Promise<{ base64: s
         .toBuffer()
         
       slices.push({
-        base64: sliceBuffer.toString('base64'),
+        base64: cleanBase64(sliceBuffer.toString('base64')),
         mimeType: mimeType
       })
       
@@ -194,7 +224,7 @@ async function sliceImage(base64: string, mimeType: string): Promise<{ base64: s
     return slices
   } catch (error) {
     console.error('[Sharp] Error rebanando imagen, fallback a imagen original', error)
-    return [{ base64, mimeType }]
+    return [{ base64: cleanB64, mimeType }]
   }
 }
 
@@ -277,11 +307,23 @@ export async function extraerCompraDeImagenes(
 
   // ── 3. TIPEADORES: Extracción Literal por Rebanadas Visuales ───────────────
   const promptTipeador = buildPromptExtractorLiteral(encabezadosMaestros)
-  const trabajadoresPromises = imageSlices.map((slice, i) => {
+  const advertencias: string[] = []
+  
+  const trabajadoresPromises = imageSlices.map(async (slice, i) => {
     console.log(`[Multi-Agent] Lanzando Tipeador Visual para rebanada ${i + 1}...`)
-    if (process.env.OPENAI_API_KEY) return llamarOpenAIVision(promptTipeador, [slice]).catch(() => ({ filas_literales: [] }))
-    if (process.env.ANTHROPIC_API_KEY) return llamarClaudeVision(promptTipeador, [slice]).catch(() => ({ filas_literales: [] }))
-    return Promise.resolve({ filas_literales: [] })
+    try {
+      if (process.env.OPENAI_API_KEY) {
+        return await llamarOpenAIVision(promptTipeador, [slice])
+      }
+      if (process.env.ANTHROPIC_API_KEY) {
+        return await llamarClaudeVision(promptTipeador, [slice])
+      }
+      return { filas_literales: [] }
+    } catch (e: any) {
+      console.error(`[Multi-Agent] Error en Tipeador rebanada ${i + 1}:`, e)
+      advertencias.push(`Error en extracción de bloque visual ${i + 1}: ${e.message}`)
+      return { filas_literales: [] }
+    }
   })
 
   const resultadosTrabajadores = await Promise.all(trabajadoresPromises)
@@ -294,7 +336,8 @@ export async function extraerCompraDeImagenes(
   })
 
   if (matrizGlobal.length === 0) {
-    return { ...cabeceraFinal, items: [], advertencias: ['No se detectó ningún producto en el documento.'] }
+    advertencias.push('No se detectó ningún producto o todas las APIs fallaron.')
+    return { ...cabeceraFinal, items: [], advertencias }
   }
 
   // ── 4. LÓGICA MATEMÁTICA: Sumas Verticales de Código ──────────────────────
@@ -369,7 +412,6 @@ export async function extraerCompraDeImagenes(
     }
   })
 
-  const advertencias: string[] = []
   if (!cabeceraFinal.ruc_emisor && esFormal) {
     advertencias.push('No se detectó RUC del proveedor (o fue confundido con el RUC del cliente).')
   }
