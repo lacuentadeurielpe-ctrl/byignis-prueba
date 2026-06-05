@@ -387,10 +387,23 @@ export async function extraerCompraDeImagenes(
 
   const resultadosTrabajadores = await Promise.all(trabajadoresPromises)
   
-  const matrizGlobal: Record<string, any>[] = []
+  const matrizGlobalCruda: Record<string, any>[] = []
   resultadosTrabajadores.forEach(res => {
     if (res && Array.isArray(res.filas_literales)) {
-      matrizGlobal.push(...res.filas_literales)
+      matrizGlobalCruda.push(...res.filas_literales)
+    }
+  })
+
+  // ── 3.5 DEDUPLICACIÓN POR SOLAPAMIENTO ───────────────────────────────────
+  // Como los cortes tienen superposición (overlap), un producto puede salir 2 veces.
+  const matrizGlobal: Record<string, any>[] = []
+  const firmasVistas = new Set<string>()
+
+  matrizGlobalCruda.forEach(fila => {
+    const firma = JSON.stringify(fila)
+    if (!firmasVistas.has(firma)) {
+      firmasVistas.add(firma)
+      matrizGlobal.push(fila)
     }
   })
 
