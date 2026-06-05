@@ -250,6 +250,25 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
     setItems((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const agregarItemManual = () => {
+    setItems((prev) => [
+      ...prev,
+      {
+        descripcion_factura: 'Ingresado manualmente',
+        cantidad: 1,
+        unidad_factura: 'UND',
+        precio_compra_unitario: 0,
+        subtotal: 0,
+        accion: 'crear',
+        producto_existente_id: null,
+        producto_existente_nombre: null,
+        score_match: 0,
+        nombre: '',
+        es_formal: cabecera.es_formal
+      }
+    ])
+  }
+
   // Enviar a guardar en DB
   const guardarCompra = async (recibirStock: boolean) => {
     setIsSaving(true)
@@ -641,9 +660,9 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
                     {/* Botón de borrado de fila */}
                     <button
                       onClick={() => eliminarItem(idx)}
-                      className="absolute top-2.5 right-2.5 p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition opacity-0 group-hover:opacity-100"
+                      className="absolute top-2.5 right-2.5 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
 
                     <div className="flex-1 space-y-3 min-w-0">
@@ -833,6 +852,16 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
                   </div>
                 )
               })}
+              
+              <div className="flex justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={agregarItemManual}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-xl transition border border-zinc-200 flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Agregar Ítem Manualmente
+                </button>
+              </div>
             </div>
 
             {/* Acciones del conciliador */}
