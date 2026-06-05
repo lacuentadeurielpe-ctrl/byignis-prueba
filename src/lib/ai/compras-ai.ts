@@ -47,7 +47,7 @@ export async function extraerCompraDeImagenes(
   const apiKey = process.env.MINDEE_API_KEY
   if (!apiKey) throw new Error('MINDEE_API_KEY no está configurada en .env')
 
-  const mindeeClient = new mindee.Client({ apiKey })
+  const mindeeClient = new mindee.v1.Client({ apiKey })
   const advertencias: string[] = []
 
   console.log('[Mindee] Iniciando extracción de factura con Invoice V4...')
@@ -68,8 +68,8 @@ export async function extraerCompraDeImagenes(
 
   let apiResponse
   try {
-    // @ts-ignore: Mindee v5 types are strictly expecting BaseProduct which InvoiceV4 extends but TS fails to resolve
-    apiResponse = await mindeeClient.enqueueAndGetResult(mindee.v1.product.InvoiceV4, inputSource, {})
+    // Usamos el cliente V1 que soporta clases concretas como InvoiceV4 nativamente en Mindee SDK v5
+    apiResponse = await mindeeClient.parse(mindee.v1.product.invoice.InvoiceV4, inputSource)
   } catch (error: any) {
     console.error('[Mindee] Error de API:', error)
     throw new Error('Error al conectar con Mindee API: ' + error.message)
