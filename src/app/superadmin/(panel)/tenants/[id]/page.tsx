@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import TenantActions from './TenantActions'
 
-export const revalidate = 0
+export const dynamic = 'force-dynamic'
 
 async function getTenantDetail(id: string) {
   const admin = createAdminClient()

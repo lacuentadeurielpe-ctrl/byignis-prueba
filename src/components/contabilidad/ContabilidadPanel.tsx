@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { FileText, Download, RefreshCw, CheckCircle, BookOpen } from 'lucide-react'
 import type { LibroContable } from '@/types/database'
 
@@ -80,6 +81,22 @@ export default function ContabilidadPanel({ libros: librosIniciales, ferreteriaI
 
   return (
     <div className="space-y-6">
+      {/* Módulo de Compras (Contabilidad) */}
+      <div className="bg-zinc-950 text-white rounded-2xl border border-zinc-800 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-md">
+        <div className="space-y-1">
+          <h2 className="text-base font-bold tracking-tight">Registro de Compras</h2>
+          <p className="text-xs text-zinc-400">
+            Administra tus facturas de proveedores, compras informales y control de stock de mercadería.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/contabilidad/compras"
+          className="px-4 py-2.5 bg-white hover:bg-zinc-100 text-zinc-950 text-xs font-bold rounded-xl transition text-center shadow-sm shrink-0"
+        >
+          Ver Registro de Compras →
+        </Link>
+      </div>
+
       {/* Selector de periodo + botón generar */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-4">Generar Registro de Ventas</h2>

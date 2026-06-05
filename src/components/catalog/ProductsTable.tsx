@@ -150,7 +150,7 @@ export default function ProductsTable({ productos: initialProductos, categorias:
   }
 
   const productosFiltrados = productos.filter((p) => {
-    const matchBusqueda = matchesFuzzy(`${p.nombre} ${p.descripcion ?? ''} ${p.marca ?? ''} ${p.proveedor ?? ''} ${p.codigo_barras ?? ''}`, busqueda)
+    const matchBusqueda = matchesFuzzy(`${p.nombre} ${p.descripcion ?? ''} ${p.marca ?? ''} ${p.proveedor ?? ''} ${p.codigo_barras ?? ''} ${p.codigo_interno ?? ''}`, busqueda)
     const matchCategoria = categoriaFiltro === 'todas' || p.categoria_id === categoriaFiltro
     const matchActivo = !soloActivos || p.activo
     const esBajoStock = p.stock_minimo !== null ? p.stock <= p.stock_minimo : p.stock === 0
@@ -261,6 +261,7 @@ export default function ProductsTable({ productos: initialProductos, categorias:
                   <div className="flex items-start justify-between p-4 pb-3">
                     <div className="flex-1 min-w-0 pr-3">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-mono text-xs font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-lg shrink-0" title="Código Interno">{producto.codigo_interno}</span>
                         <span className="font-bold text-zinc-900 text-base leading-tight">{producto.nombre}</span>
                         <button onClick={() => toggleActivo(producto)} disabled={loadingToggle === producto.id} className="shrink-0">
                           {loadingToggle === producto.id
@@ -338,6 +339,7 @@ export default function ProductsTable({ productos: initialProductos, categorias:
             <table className="w-full">
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50">
+                  <th className="text-left px-4 py-3 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider w-28">Código</th>
                   <th className="text-left px-4 py-3 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Producto</th>
                   <th className="text-left px-4 py-3 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Categoría</th>
                   <th className="text-right px-4 py-3 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Precio</th>
@@ -351,6 +353,18 @@ export default function ProductsTable({ productos: initialProductos, categorias:
               <tbody className="divide-y divide-zinc-50">
                 {productosFiltrados.map((producto) => (
                   <tr key={producto.id} className="hover:bg-zinc-50/60 transition">
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-500 font-semibold select-all">
+                      <span
+                        className="bg-zinc-50 border border-zinc-100 px-2 py-1 rounded-lg hover:bg-zinc-100 transition cursor-pointer flex items-center gap-1.5 w-fit"
+                        title="Click para copiar"
+                        onClick={() => {
+                          navigator.clipboard.writeText(producto.codigo_interno)
+                        }}
+                      >
+                        {producto.codigo_interno}
+                        <Copy className="w-3 h-3 text-zinc-400 shrink-0" />
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">

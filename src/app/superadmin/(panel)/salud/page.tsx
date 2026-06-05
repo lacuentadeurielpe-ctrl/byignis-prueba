@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { checkAllApis } from '@/lib/api-health'
 import ResolverIncidencia from './ResolverIncidencia'
 
-export const revalidate = 0
+export const dynamic = 'force-dynamic'
 
 async function getIncidencias() {
   const admin = createAdminClient()

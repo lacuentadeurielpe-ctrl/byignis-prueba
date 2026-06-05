@@ -45,7 +45,7 @@ export class CatalogRepository {
   async obtenerProductoConStock(ferreteriaId: string, productoId: string): Promise<any | null> {
     const { data, error } = await this.supabase
       .from('productos')
-      .select('id, nombre, unidad, stock, precio_base')
+      .select('id, nombre, unidad, stock, precio_base, codigo_interno')
       .eq('id', productoId)
       .eq('ferreteria_id', ferreteriaId)
       .eq('activo', true)
@@ -146,6 +146,25 @@ export class CatalogRepository {
       .single()
 
     if (error) throw error
+    return data
+  }
+
+  /**
+   * Obtiene un producto por su código interno y ferretería.
+   */
+  async obtenerProductoPorCodigo(ferreteriaId: string, codigoInterno: string): Promise<Producto | null> {
+    const { data, error } = await this.supabase
+      .from('productos')
+      .select('*, categorias(id,nombre), reglas_descuento(*)')
+      .eq('ferreteria_id', ferreteriaId)
+      .eq('codigo_interno', codigoInterno)
+      .eq('activo', true)
+      .maybeSingle()
+
+    if (error) {
+      console.error('[CatalogRepository] Error al obtener producto por codigo_interno:', error.message)
+      return null
+    }
     return data
   }
 }

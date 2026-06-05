@@ -289,6 +289,31 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
               )}
             </div>
 
+            {isEdit && producto?.codigo_interno && (
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Código Interno <span className="text-xs text-zinc-400 font-normal">(autogenerado, inmutable)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={producto.codigo_interno}
+                    readOnly
+                    className="flex-1 px-3 py-2.5 rounded-xl border border-zinc-100 bg-zinc-50 text-sm text-zinc-500 font-mono focus:outline-none cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(producto.codigo_interno)
+                    }}
+                    className="flex items-center justify-center w-11 h-[42px] bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl transition"
+                    title="Copiar código interno"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="col-span-2">
               <label className="block text-sm font-medium text-zinc-700 mb-1">
                 Código de Barras / SKU <span className="text-xs text-zinc-400 font-normal">(opcional)</span>

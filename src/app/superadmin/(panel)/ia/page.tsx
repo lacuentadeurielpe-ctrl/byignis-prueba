@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { inicioDiaLima } from '@/lib/tiempo'
 import { COSTO_CREDITOS, MODELO_POR_TAREA } from '@/types/database'
 
-export const revalidate = 60
+export const dynamic = 'force-dynamic'
 
 async function getIAStats() {
   const admin = createAdminClient()

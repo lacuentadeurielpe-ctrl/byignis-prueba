@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { inicioDiaLima } from '@/lib/tiempo'
 
-export const revalidate = 120
+export const dynamic = 'force-dynamic'
 
 const MOTIVO_LABEL: Record<string, string> = {
   plan_mensual:   'Plan mensual',

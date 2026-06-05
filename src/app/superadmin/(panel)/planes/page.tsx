@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import PlanesManager from './PlanesManager'
 
-export const revalidate = 0
+export const dynamic = 'force-dynamic'
 
 async function getPlanes() {
   const admin = createAdminClient()

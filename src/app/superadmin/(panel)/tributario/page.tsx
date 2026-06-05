@@ -5,7 +5,7 @@ import { getSuperadminSession } from '@/lib/auth/superadmin'
 import { createAdminClient } from '@/lib/supabase/admin'
 import TributarioPanel from '@/components/superadmin/TributarioPanel'
 
-export const revalidate = 0
+export const dynamic = 'force-dynamic'
 
 async function getTributarioStats() {
   const admin = createAdminClient()

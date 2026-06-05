@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { inicioDiaLima } from '@/lib/tiempo'
 import { formatPEN } from '@/lib/utils'
 
-export const revalidate = 60 // refrescar cada minuto
+export const dynamic = 'force-dynamic'
 
 async function getStats() {
   const admin = createAdminClient()

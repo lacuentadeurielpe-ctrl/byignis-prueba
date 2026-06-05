@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export const revalidate = 30
+export const dynamic = 'force-dynamic'
 
 async function getTenants() {
   const admin = createAdminClient()
