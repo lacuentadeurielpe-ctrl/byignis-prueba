@@ -1,8 +1,8 @@
 import { normalizarUnidad } from '@/lib/constantes/unidades'
 import {
   buildPromptOrquestadorCabecera,
-  buildPromptExtractorFragmento,
-  buildPromptEnsambladorMatematico
+  buildPromptExtractorLiteral,
+  buildPromptDetectiveColumnas
 } from './prompts/compras-prompts'
 
 const OPENAI_BASE = 'https://api.openai.com/v1'
@@ -196,19 +196,6 @@ async function llamarDeepSeekText(systemPrompt: string, userPrompt: string): Pro
   return JSON.parse(data.choices[0].message.content)
 }
 
-// Envoltorio de Agente Genérico de Texto
-async function llamarAgenteTexto(promptSistema: string, promptUsuario: string): Promise<any> {
-  if (process.env.OPENAI_API_KEY) return llamarOpenAIText(promptSistema, promptUsuario)
-  if (process.env.ANTHROPIC_API_KEY) return llamarClaudeText(promptSistema, promptUsuario)
-  if (process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_CATALOG_API_KEY) return llamarDeepSeekText(promptSistema, promptUsuario)
-  throw new Error('No hay proveedor de IA configurado para Texto')
-}
-
-// ── MOTOR MULTI-AGENTE ────────────────────────────────────────────────────────
-
-/**
- * Fragmenta un texto largo en bloques de líneas (ej. 20 líneas por bloque con solapamiento opcional).
- */
 function chunkText(text: string, linesPerChunk = 25): string[] {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
   const chunks: string[] = []
@@ -224,7 +211,7 @@ export async function extraerCompraDeImagenes(
 ): Promise<ResultadoExtracionCompra> {
   if (imagenes.length === 0) throw new Error('No se enviaron imágenes')
 
-  // 1. Ejecutar OCR y Orquestador de Cabecera en paralelo para ganar tiempo
+  // ── 1. ORQUESTADOR: Cabecera y OCR ──────────────────────────────────────────
   console.log('[Multi-Agent] Iniciando OCR y Orquestador Cabecera...')
   const promptCabecera = buildPromptOrquestadorCabecera(rucComprador)
   
@@ -236,68 +223,18 @@ export async function extraerCompraDeImagenes(
   } else if (process.env.ANTHROPIC_API_KEY) {
     cabeceraPromise = llamarClaudeVision(promptCabecera, imagenes)
   } else {
-    // Fallback: usar DeepSeek con el resultado del OCR
     cabeceraPromise = ocrPromise.then(textos => llamarDeepSeekText(promptCabecera, textos.join('\n')))
   }
 
   const [textosOcr, cabeceraExtraida] = await Promise.all([ocrPromise, cabeceraPromise])
   const textoCompleto = textosOcr.join('\n\n--- PAGINA ---\n\n')
 
-  // 2. Fragmentación del documento
-  console.log('[Multi-Agent] Fragmentando texto OCR...')
-  const bloques = chunkText(textoCompleto, 25)
-  console.log(`[Multi-Agent] Creados ${bloques.length} bloques de trabajo.`)
-
-  // 3. Agentes Extractores (Trabajadores de Fragmentos) en paralelo
-  const promptExtractor = buildPromptExtractorFragmento()
-  const trabajadoresPromises = bloques.map((bloque, i) => {
-    console.log(`[Multi-Agent] Lanzando Agente Extractor para bloque ${i + 1}...`)
-    const userPrompt = `Analiza el siguiente bloque de texto y extrae su tabla de productos:\n\n${bloque}`
-    return llamarAgenteTexto(promptExtractor, userPrompt)
-      .catch(e => {
-        console.error(`[Multi-Agent] Error en trabajador ${i + 1}:`, e)
-        return { items: [] } // Si un trabajador falla, devolvemos vacío para no romper todo
-      })
-  })
-
-  const resultadosTrabajadores = await Promise.all(trabajadoresPromises)
-  
-  // 4. Agrupar resultados de trabajadores
-  const itemsCrudosCombinados: any[] = []
-  resultadosTrabajadores.forEach(res => {
-    if (res && Array.isArray(res.items)) {
-      itemsCrudosCombinados.push(...res.items)
-    }
-  })
-
-  // 5. Agente Ensamblador Matemático
-  console.log(`[Multi-Agent] Lanzando Agente Ensamblador con ${itemsCrudosCombinados.length} items crudos...`)
-  const promptEnsamblador = buildPromptEnsambladorMatematico()
-  const ensambladorUserPrompt = JSON.stringify({
-    cabecera_detectada: cabeceraExtraida,
-    items_crudos_extraidos_por_trabajadores: itemsCrudosCombinados
-  }, null, 2)
-
-  let datosEnsamblados = { items_ensamblados: [], analisis_global: {} }
-  if (itemsCrudosCombinados.length > 0) {
-    try {
-      datosEnsamblados = await llamarAgenteTexto(promptEnsamblador, ensambladorUserPrompt)
-    } catch (e) {
-      console.error('[Multi-Agent] Error en Agente Ensamblador:', e)
-    }
-  } else {
-    console.warn('[Multi-Agent] No se extrajeron items crudos. Omitiendo ensamblador.')
-  }
-
-  // ── NORMALIZACIÓN Y RESULTADO FINAL ───────────────────────────────────────
-  
   const tipoDoc = cabeceraExtraida.tipo_documento ?? 'desconocido'
   const esFormal = ['factura', 'boleta'].includes(tipoDoc)
-
   const cabeceraFinal = {
     tipo_documento: tipoDoc,
     es_formal: esFormal,
-    ruc_emisor: cabeceraExtraida.ruc_emisor ? String(cabeceraExtraida.ruc_emisor).replace(/\\D/g, '') : null,
+    ruc_emisor: cabeceraExtraida.ruc_emisor ? String(cabeceraExtraida.ruc_emisor).replace(/\D/g, '') : null,
     razon_social_emisor: cabeceraExtraida.razon_social_emisor?.trim() || null,
     numero_factura: cabeceraExtraida.numero_factura?.trim() || null,
     fecha_factura: cabeceraExtraida.fecha_factura || null,
@@ -306,24 +243,112 @@ export async function extraerCompraDeImagenes(
     total_neto: typeof cabeceraExtraida.total_neto === 'number' ? cabeceraExtraida.total_neto : null,
   }
 
-  const itemsFinales: ItemCompraExtraido[] = (datosEnsamblados.items_ensamblados ?? []).map((item: any) => ({
-    descripcion: item.descripcion?.trim() || 'Producto sin nombre',
-    cantidad: typeof item.cantidad === 'number' && item.cantidad > 0 ? item.cantidad : null,
-    unidad: item.unidad ? normalizarUnidad(item.unidad) : 'NIU',
-    valor_unitario: null, // Estos ya fueron reconciliados por el ensamblador
-    precio_unitario: null,
-    subtotal_linea: null,
-    total_linea: null,
-    precio_compra_unitario: typeof item.precio_compra_unitario === 'number' ? item.precio_compra_unitario : null,
-    subtotal: typeof item.subtotal === 'number' ? item.subtotal : null,
-  }))
+  // ── 2. TIPEADORES: Extracción Literal por Bloques ───────────────────────────
+  console.log('[Multi-Agent] Fragmentando texto OCR...')
+  const bloques = chunkText(textoCompleto, 25)
+  console.log(`[Multi-Agent] Creados ${bloques.length} bloques de trabajo.`)
+
+  const promptTipeador = buildPromptExtractorLiteral()
+  const trabajadoresPromises = bloques.map((bloque, i) => {
+    console.log(`[Multi-Agent] Lanzando Tipeador para bloque ${i + 1}...`)
+    const userPrompt = `Transcribe este bloque de texto manteniendo las llaves literales de las columnas que infieras:\n\n${bloque}`
+    
+    if (process.env.OPENAI_API_KEY) return llamarOpenAIText(promptTipeador, userPrompt).catch(() => ({ filas_literales: [] }))
+    if (process.env.ANTHROPIC_API_KEY) return llamarClaudeText(promptTipeador, userPrompt).catch(() => ({ filas_literales: [] }))
+    return llamarDeepSeekText(promptTipeador, userPrompt).catch(() => ({ filas_literales: [] }))
+  })
+
+  const resultadosTrabajadores = await Promise.all(trabajadoresPromises)
+  
+  // Unificar matriz global
+  const matrizGlobal: Record<string, any>[] = []
+  resultadosTrabajadores.forEach(res => {
+    if (res && Array.isArray(res.filas_literales)) {
+      matrizGlobal.push(...res.filas_literales)
+    }
+  })
+
+  if (matrizGlobal.length === 0) {
+    return { ...cabeceraFinal, items: [], advertencias: ['No se detectó ningún producto en el documento.'] }
+  }
+
+  // ── 3. LÓGICA MATEMÁTICA: Sumas Verticales de Código ──────────────────────
+  const sumasColumnas: Record<string, number> = {}
+  matrizGlobal.forEach(fila => {
+    Object.keys(fila).forEach(key => {
+      const val = fila[key]
+      if (typeof val === 'number') {
+        sumasColumnas[key] = (sumasColumnas[key] || 0) + val
+      } else if (typeof val === 'string') {
+        // Tratar de convertir a número si es parseable
+        const parsed = parseFloat(val.replace(/[^\d.-]/g, ''))
+        if (!isNaN(parsed)) {
+          sumasColumnas[key] = (sumasColumnas[key] || 0) + parsed
+          fila[key] = parsed // Normalizamos la matriz en sitio
+        }
+      }
+    })
+  })
+
+  // Buscar una fila de muestra que tenga números para la prueba horizontal
+  const filaMuestra = matrizGlobal.find(fila => {
+    const values = Object.values(fila)
+    return values.filter(v => typeof v === 'number').length >= 2
+  }) || matrizGlobal[0]
+
+  // ── 4. DETECTIVE: Validación Horizontal y Vertical ────────────────────────
+  console.log('[Multi-Agent] Lanzando Agente Detective Matemático...')
+  const promptDetective = buildPromptDetectiveColumnas()
+  const detectiveUserPrompt = JSON.stringify({
+    fila_muestra: filaMuestra,
+    sumas_columnas: sumasColumnas,
+    total_neto_factura: cabeceraFinal.total_neto ?? cabeceraFinal.total_bruto ?? null
+  }, null, 2)
+
+  let veredicto: any = { veredicto_mapeo: {} }
+  try {
+    if (process.env.OPENAI_API_KEY) {
+      veredicto = await llamarOpenAIText(promptDetective, detectiveUserPrompt)
+    } else if (process.env.ANTHROPIC_API_KEY) {
+      veredicto = await llamarClaudeText(promptDetective, detectiveUserPrompt)
+    } else {
+      veredicto = await llamarDeepSeekText(promptDetective, detectiveUserPrompt)
+    }
+    console.log('[Multi-Agent] Conclusión del Detective:', veredicto.conclusiones_logicas)
+  } catch (e) {
+    console.error('[Multi-Agent] Error en Detective:', e)
+  }
+
+  // ── 5. MAPEO FINAL Y RESULTADOS ───────────────────────────────────────────
+  const mapa = veredicto.veredicto_mapeo || {}
+  
+  const itemsFinales: ItemCompraExtraido[] = matrizGlobal.map(fila => {
+    return {
+      descripcion: mapa.llave_literal_descripcion && fila[mapa.llave_literal_descripcion] 
+        ? String(fila[mapa.llave_literal_descripcion]) 
+        : 'Producto sin nombre',
+      cantidad: mapa.llave_literal_cantidad && typeof fila[mapa.llave_literal_cantidad] === 'number' 
+        ? fila[mapa.llave_literal_cantidad] 
+        : null,
+      unidad: mapa.llave_literal_unidad && fila[mapa.llave_literal_unidad] 
+        ? normalizarUnidad(String(fila[mapa.llave_literal_unidad])) 
+        : 'NIU',
+      valor_unitario: null, 
+      precio_unitario: null,
+      subtotal_linea: null,
+      total_linea: null,
+      precio_compra_unitario: mapa.llave_literal_precio_compra_unitario && typeof fila[mapa.llave_literal_precio_compra_unitario] === 'number'
+        ? fila[mapa.llave_literal_precio_compra_unitario]
+        : null,
+      subtotal: mapa.llave_literal_subtotal && typeof fila[mapa.llave_literal_subtotal] === 'number'
+        ? fila[mapa.llave_literal_subtotal]
+        : null,
+    }
+  })
 
   const advertencias: string[] = []
   if (!cabeceraFinal.ruc_emisor && esFormal) {
     advertencias.push('No se detectó RUC del proveedor (o fue confundido con el RUC del cliente).')
-  }
-  if ((datosEnsamblados.analisis_global as any)?.advertencia_general) {
-    advertencias.push((datosEnsamblados.analisis_global as any).advertencia_general)
   }
 
   return {
