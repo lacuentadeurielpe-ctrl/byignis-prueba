@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getSessionInfo } from '@/lib/auth/roles'
-import CompraForm from '@/components/contabilidad/CompraForm'
+import ScannerClient from './ScannerClient'
 import CatalogNav from '@/components/catalog/CatalogNav'
 import { Bot } from 'lucide-react'
 
@@ -28,7 +28,7 @@ export default async function CatalogScannerPage() {
       </div>
 
       <div className="flex-1 mt-2">
-        <CompraForm />
+        <ScannerClient />
       </div>
     </div>
   )
