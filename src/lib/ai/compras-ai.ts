@@ -1,5 +1,5 @@
 import { normalizarUnidad } from '@/lib/constantes/unidades'
-import { buildPromptCabecera, buildPromptItems } from './prompts/compras-prompts'
+import { buildPromptVisionConsolidado, buildPromptParserTextoItems } from './prompts/compras-prompts'
 
 const OPENAI_BASE = 'https://api.openai.com/v1'
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1'
@@ -69,7 +69,7 @@ async function ocrImagen(base64: string, mimeType: string): Promise<string> {
   }
 }
 
-// Llamar a OpenAI GPT-4o-mini con imágenes
+// Llamar a OpenAI GPT-4o-mini con imágenes (Paso 1)
 async function llamarOpenAIVision(
   systemPrompt: string,
   imagenes: { base64: string; mimeType: string }[]
@@ -119,7 +119,42 @@ async function llamarOpenAIVision(
   return JSON.parse(content)
 }
 
-// Llamar a Claude con imágenes (Anthropic)
+// Llamar a OpenAI GPT-4o-mini con texto plano (Paso 2)
+async function llamarOpenAIText(
+  systemPrompt: string,
+  userPrompt: string
+): Promise<any> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY no configurada')
+
+  const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+  })
+
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(`OpenAI Text error ${res.status}: ${txt}`)
+  }
+
+  const data = await res.json()
+  const content = data.choices?.[0]?.message?.content
+  if (!content) throw new Error('Respuesta de OpenAI vacía')
+  return JSON.parse(content)
+}
+
+// Llamar a Claude con imágenes (Anthropic - Paso 1)
 async function llamarClaudeVision(
   systemPrompt: string,
   imagenes: { base64: string; mimeType: string }[]
@@ -130,7 +165,6 @@ async function llamarClaudeVision(
   const contentBlocks: any[] = []
 
   imagenes.forEach((img) => {
-    // Anthropic requiere extraer la base64 sin el prefijo data:
     contentBlocks.push({
       type: 'image',
       source: {
@@ -174,7 +208,43 @@ async function llamarClaudeVision(
   return JSON.parse(text)
 }
 
-// Fallback: Llamar a DeepSeek con texto extraído de OCR
+// Llamar a Claude con texto plano (Anthropic - Paso 2)
+async function llamarClaudeText(
+  systemPrompt: string,
+  userPrompt: string
+): Promise<any> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY no configurada')
+
+  const res = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+  })
+
+  if (!res.ok) {
+    const txt = await res.text()
+    throw new Error(`Claude Text error ${res.status}: ${txt}`)
+  }
+
+  const data = await res.json()
+  const text = data.content?.[0]?.text ?? ''
+  if (!text) throw new Error('Respuesta de Claude vacía')
+  return JSON.parse(text)
+}
+
+// Fallback: Llamar a DeepSeek con texto
 async function llamarDeepSeekText(
   systemPrompt: string,
   textoOCR: string
@@ -193,7 +263,7 @@ async function llamarDeepSeekText(
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Analiza esta transcripción de compra obtenida por OCR:\n\n"${textoOCR}"` },
+        { role: 'user', content: textoOCR },
       ],
     }),
   })
@@ -210,7 +280,9 @@ async function llamarDeepSeekText(
 }
 
 /**
- * Procesa imágenes de compra en paralelo utilizando el proveedor de IA disponible.
+ * Procesa imágenes de compra en dos pasos (híbrido visión-texto).
+ * Paso 1: Visión de cabecera y transcripción horizontal de filas.
+ * Paso 2: Análisis textual y estructuración de ítems.
  */
 export async function extraerCompraDeImagenes(
   imagenes: { base64: string; mimeType: string }[],
@@ -224,31 +296,20 @@ export async function extraerCompraDeImagenes(
   const anthropicKey = process.env.ANTHROPIC_API_KEY
   const deepseekKey = process.env.DEEPSEEK_CATALOG_API_KEY ?? process.env.DEEPSEEK_API_KEY
 
-  const promptCabecera = buildPromptCabecera(rucComprador)
-  const promptItems = buildPromptItems()
+  const promptVision = buildPromptVisionConsolidado(rucComprador)
+  const promptParser = buildPromptParserTextoItems()
 
-  let cabeceraRaw: any = null
-  let itemsRaw: any = null
+  let visionRaw: any = null
 
+  // ── PASO 1: EXTRAER CABECERA Y TRANSCRIPCION DE FILAS (VISION / OCR) ───────
   if (openAiKey) {
-    console.log('[ComprasAI] Utilizando OpenAI GPT-4o-mini Vision')
-    const [c, i] = await Promise.all([
-      llamarOpenAIVision(promptCabecera, imagenes),
-      llamarOpenAIVision(promptItems, imagenes),
-    ])
-    cabeceraRaw = c
-    itemsRaw = i
+    console.log('[ComprasAI] Paso 1 - OpenAI Vision (Cabecera + Renglones)')
+    visionRaw = await llamarOpenAIVision(promptVision, imagenes)
   } else if (anthropicKey) {
-    console.log('[ComprasAI] Utilizando Anthropic Claude Vision')
-    const [c, i] = await Promise.all([
-      llamarClaudeVision(promptCabecera, imagenes),
-      llamarClaudeVision(promptItems, imagenes),
-    ])
-    cabeceraRaw = c
-    itemsRaw = i
+    console.log('[ComprasAI] Paso 1 - Claude Vision (Cabecera + Renglones)')
+    visionRaw = await llamarClaudeVision(promptVision, imagenes)
   } else if (deepseekKey) {
-    console.log('[ComprasAI] Utilizando fallback OCR + DeepSeek Chat')
-    // Ejecutar OCR en paralelo para todas las imágenes
+    console.log('[ComprasAI] Paso 1 - Fallback OCR + DeepSeek Chat (Cabecera + Renglones)')
     const ocrPromises = imagenes.map((img) => ocrImagen(img.base64, img.mimeType))
     const textos = await Promise.all(ocrPromises)
     const textoCompleto = textos.join('\n\n--- PAGINA ---\n\n')
@@ -256,34 +317,49 @@ export async function extraerCompraDeImagenes(
     if (!textoCompleto.trim()) {
       throw new Error('El OCR no pudo extraer ningún texto de las imágenes')
     }
-
-    const [c, i] = await Promise.all([
-      llamarDeepSeekText(promptCabecera, textoCompleto),
-      llamarDeepSeekText(promptItems, textoCompleto),
-    ])
-    cabeceraRaw = c
-    itemsRaw = i
+    visionRaw = await llamarDeepSeekText(promptVision, textoCompleto)
   } else {
     throw new Error('No se configuró ninguna API Key válida (OpenAI, Anthropic, o DeepSeek).')
   }
 
-  // ── Normalización de Resultados de Cabecera ────────────────────────────────
-  const tipoDoc = cabeceraRaw.tipo_documento ?? 'desconocido'
+  // ── PASO 2: PARSEAR RENGLONES DE TABLA A JSON ESTRUCTURADO (TEXTO) ──────────
+  const lineasTabla: string[] = visionRaw.lineas_tabla ?? []
+  let itemsRaw: any = { items: [] }
+
+  if (lineasTabla.length > 0) {
+    const userPrompt = JSON.stringify({ lineas_tabla: lineasTabla })
+    
+    if (openAiKey) {
+      console.log('[ComprasAI] Paso 2 - OpenAI Text (Estructurando items)')
+      itemsRaw = await llamarOpenAIText(promptParser, userPrompt)
+    } else if (anthropicKey) {
+      console.log('[ComprasAI] Paso 2 - Claude Text (Estructurando items)')
+      itemsRaw = await llamarClaudeText(promptParser, userPrompt)
+    } else if (deepseekKey) {
+      console.log('[ComprasAI] Paso 2 - DeepSeek Text (Estructurando items)')
+      itemsRaw = await llamarDeepSeekText(promptParser, userPrompt)
+    }
+  } else {
+    console.log('[ComprasAI] Paso 2 - Omitido, no se extrajeron líneas de tabla en el Paso 1.')
+  }
+
+  // ── NORMALIZACIÓN DE RESULTADOS DE CABECERA ────────────────────────────────
+  const tipoDoc = visionRaw.tipo_documento ?? 'desconocido'
   const esFormal = ['factura', 'boleta'].includes(tipoDoc)
 
   const cabecera = {
     tipo_documento: tipoDoc,
     es_formal: esFormal,
-    ruc_emisor: cabeceraRaw.ruc_emisor ? String(cabeceraRaw.ruc_emisor).replace(/\D/g, '') : null,
-    razon_social_emisor: cabeceraRaw.razon_social_emisor?.trim() || null,
-    numero_factura: cabeceraRaw.numero_factura?.trim() || null,
-    fecha_factura: cabeceraRaw.fecha_factura || null,
-    total_bruto: typeof cabeceraRaw.total_bruto === 'number' ? cabeceraRaw.total_bruto : null,
-    igv: typeof cabeceraRaw.igv === 'number' ? cabeceraRaw.igv : null,
-    total_neto: typeof cabeceraRaw.total_neto === 'number' ? cabeceraRaw.total_neto : null,
+    ruc_emisor: visionRaw.ruc_emisor ? String(visionRaw.ruc_emisor).replace(/\D/g, '') : null,
+    razon_social_emisor: visionRaw.razon_social_emisor?.trim() || null,
+    numero_factura: visionRaw.numero_factura?.trim() || null,
+    fecha_factura: visionRaw.fecha_factura || null,
+    total_bruto: typeof visionRaw.total_bruto === 'number' ? visionRaw.total_bruto : null,
+    igv: typeof visionRaw.igv === 'number' ? visionRaw.igv : null,
+    total_neto: typeof visionRaw.total_neto === 'number' ? visionRaw.total_neto : null,
   }
 
-  // ── Normalización de Ítems ─────────────────────────────────────────────────
+  // ── NORMALIZACIÓN DE ÍTEMS ─────────────────────────────────────────────────
   const items: ItemCompraExtraido[] = (itemsRaw.items ?? []).map((item: any) => {
     const unidadNormalizada = item.unidad ? normalizarUnidad(item.unidad) : 'NIU'
     return {
@@ -299,7 +375,7 @@ export async function extraerCompraDeImagenes(
     }
   })
 
-  // ── Validación de Cabecera ─────────────────────────────────────────────────
+  // ── VALIDACIÓN DE CABECERA ─────────────────────────────────────────────────
   const advertencias: string[] = []
 
   // Validar si faltan datos en la cabecera

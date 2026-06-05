@@ -5,16 +5,16 @@ const UNIDADES_PARA_PROMPT = UNIDADES_SUNAT
   .join(', ')
 
 /**
- * Construye el prompt de sistema para el agente de cabecera, inyectando el RUC del comprador (ferretería)
- * para evitar confusiones de facturación.
+ * Construye el prompt de sistema para el agente de visión consolidado.
+ * Extrae la cabecera del documento y las filas de productos de forma plana (líneas de texto).
  */
-export function buildPromptCabecera(rucComprador: string | null): string {
+export function buildPromptVisionConsolidado(rucComprador: string | null): string {
   const rucCompradorInstruccion = rucComprador
     ? `EL RUC DEL COMPRADOR (NOSOTROS) ES: "${rucComprador}". Tu objetivo es extraer el RUC del EMISOR/PROVEEDOR (Vendedor). Por lo tanto, el campo ruc_emisor DEBE SER DIFERENTE A "${rucComprador}". Si ves el RUC "${rucComprador}" en el documento, es el RUC del adquiriente/cliente, por lo que NO debes colocarlo en ruc_emisor.`
     : 'Tu objetivo es extraer el RUC del emisor/proveedor (vendedor) que emite la factura o boleta.'
 
   return `Eres un agente contable experto en ferreterías peruanas.
-Tu objetivo es analizar la/s imagen/es de una compra (factura, boleta, nota de venta) y clasificar el tipo de documento y extraer los metadatos de cabecera.
+Tu objetivo es analizar la/s imagen/es de una compra (factura, boleta, nota de venta) y clasificar el tipo de documento, extraer los metadatos de cabecera y transcribir las filas de la tabla de productos de forma plana.
 
 Responde ÚNICAMENTE con JSON válido con esta estructura:
 {
@@ -25,7 +25,11 @@ Responde ÚNICAMENTE con JSON válido con esta estructura:
   "fecha_factura": "fecha en formato YYYY-MM-DD o null",
   "total_bruto": número base imponible (subtotal antes de IGV si es factura formal, de lo contrario total) o null,
   "igv": número de IGV extraído o calculado (18% si es factura formal, de lo contrario 0) o null,
-  "total_neto": número del monto total a pagar o null
+  "total_neto": número del monto total a pagar o null,
+  "lineas_tabla": [
+    "transcripción exacta de la línea 1 de la tabla de productos",
+    "transcripción exacta de la línea 2 de la tabla de productos"
+  ]
 }
 
 Reglas:
@@ -33,21 +37,22 @@ Reglas:
 2. Si es una Factura, extrae o calcula el total_bruto (Base Imponible) e igv (18% de total_bruto).
 3. Si es Boleta o Nota de Venta, total_neto es igual a total_bruto, y el igv debe ser 0.
 4. Responde en soles peruanos (S/).
-5. ${rucCompradorInstruccion}`
+5. ${rucCompradorInstruccion}
+6. En "lineas_tabla", debes colocar una lista de cadenas de texto. Cada cadena debe transcribir horizontalmente TODO el contenido de una fila de la tabla de productos (incluyendo cantidad, descripción, códigos, precios unitarios y totales de fila). No dejes fuera ningún ítem. Transcribe fielmente lo que ves en la imagen de izquierda a derecha. Si hay múltiples páginas, junta todas las filas en este único arreglo.`
 }
 
 /**
- * Construye el prompt de sistema para el agente de extracción de ítems.
+ * Construye el prompt de sistema para el agente de texto que parsea las líneas de tabla en JSON.
  */
-export function buildPromptItems(): string {
-  return `Eres un agente de inventario experto en ferreterías peruanas.
-Tu objetivo es analizar la/s imagen/es de la compra y extraer la lista completa de ítems comprados.
+export function buildPromptParserTextoItems(): string {
+  return `Eres un agente de inventario experto en ferreterías peruanas y estructuración de datos.
+Tu objetivo es analizar una lista de renglones/líneas transcritas de una tabla de compras y estructurar cada fila en un formato JSON limpio y estandarizado.
 
 Responde ÚNICAMENTE con JSON válido con esta estructura:
 {
   "items": [
     {
-      "descripcion": "nombre o descripción del producto comprado",
+      "descripcion": "nombre o descripción limpia del producto comprado",
       "cantidad": número de unidades compradas (entero o decimal) o null,
       "unidad": "código SUNAT de la unidad de medida (ver lista) o null",
       
@@ -60,7 +65,7 @@ Responde ÚNICAMENTE con JSON válido con esta estructura:
       "total_linea": número del precio de venta total de la línea (con IGV) o null,
       
       // Campos heredados para compatibilidad
-      "precio_compra_unitario": número estimado del costo unitario de compra (con o sin IGV) o null,
+      "precio_compra_unitario": número estimado del costo unitario de compra o null,
       "subtotal": número estimado del total de la línea o null
     }
   ]
@@ -69,13 +74,11 @@ Responde ÚNICAMENTE con JSON válido con esta estructura:
 UNIDADES VÁLIDAS (Usa EXACTAMENTE el código SUNAT):
 ${UNIDADES_PARA_PROMPT}
 
-Reglas e Información de Contexto:
-1. Extrae todos los ítems legibles del documento.
-2. Mapea la unidad al código SUNAT. Por ejemplo: "unidad", "und", "pza", "tubo", "balde" -> NIU; "caja" -> BX; "bolsa" -> BG; "rollo" -> ROL; "metro" -> MTR; "kilo", "kg" -> KGM.
-3. Terminología común en comprobantes peruanos (para guiar tu extracción):
-   - "Valor de Venta" o "V. Venta" en las filas de la tabla suele representar el subtotal de la línea antes de impuestos (cantidad x valor unitario). Mapealo a "subtotal_linea".
-   - "Precio de Venta" o "P. Venta" o "Importe" en las filas suele representar el total de la línea incluyendo impuestos (cantidad x precio unitario). Mapealo a "total_linea".
-   - "Valor Unitario" o "V/U" o "Precio Unit. sin IGV" es el costo unitario antes de impuestos. Mapealo a "valor_unitario".
-   - "Precio Unitario" o "P/U" o "Precio Unit. con IGV" es el costo unitario incluyendo impuestos. Mapealo a "precio_unitario".
-4. Si algunas de estas columnas no están presentes o legibles en el comprobante, simplemente colócalas como null. No fuerces cálculos complejos que puedan inducir a error; el sistema se encargará de resolver los valores faltantes matemáticamente.`
+Reglas de Negocio:
+1. Analiza cada línea de texto plano de forma independiente.
+2. Extrae las variables numéricas prestando atención a la posición de las columnas lógicas implicadas:
+   - Identifica si un precio es unitario (un valor bajo cerca de la descripción o cantidad) o de línea (un valor alto, resultado de cantidad x unitario).
+   - Intenta deducir si el precio está grabado antes de impuestos (a menudo denominado "Valor Unitario", "V.U.", "sin IGV", "V. Venta") o con impuestos ("Precio Unitario", "P.U.", "con IGV", "Importe", "Total").
+3. Si no es claro o falta algún campo, colócalo como null. No inventes cálculos; el reconciliador matemático se encargará de completarlos.
+4. Mapea la unidad al código SUNAT. Por ejemplo: "unidad", "und", "pza", "tubo", "balde" -> NIU; "caja" -> BX; "bolsa" -> BG; "rollo" -> ROL; "metro" -> MTR; "kilo", "kg" -> KGM.`
 }
