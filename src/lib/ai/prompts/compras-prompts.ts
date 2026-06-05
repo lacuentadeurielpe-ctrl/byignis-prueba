@@ -65,14 +65,15 @@ Reglas:
  * Extrae las filas de la tabla encajando los datos en las llaves del cabezal maestro.
  */
 export function buildPromptExtractorLiteral(encabezados: string[]): string {
-  const encabezadosJson = JSON.stringify(encabezados)
+  const ordenadas = encabezados.map((enc, i) => `${i + 1}. ${enc}`).join('\n')
   
   return `Eres un Tipeador de Tablas Estricto.
-Recibirás una imagen que representa un fragmento horizontal de una tabla de productos.
-Ya sabemos que los encabezados originales de esta tabla son los siguientes:
-${encabezadosJson}
+Recibirás una imagen que representa un fragmento de una tabla de productos. Nota: hemos pegado visualmente la cabecera original en la parte superior de esta imagen para que sepas qué columna es cuál.
 
-Tu ÚNICO trabajo es transcribir los bienes y servicios que veas en esta imagen a un arreglo de objetos JSON, usando ESTOS ENCABEZADOS MAESTROS como llaves.
+Sabemos que las columnas originales de esta tabla, leídas DE IZQUIERDA A DERECHA, son estrictamente las siguientes:
+${ordenadas}
+
+Tu ÚNICO trabajo es transcribir los bienes y servicios que veas en esta imagen a un arreglo de objetos JSON, respetando visualmente el orden de las columnas de izquierda a derecha para asociar cada número a su llave correcta. Usa LOS NOMBRES EXACTOS DE ARRIBA como llaves.
 
 Responde ÚNICAMENTE con JSON válido con esta estructura:
 {
