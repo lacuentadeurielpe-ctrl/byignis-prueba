@@ -46,7 +46,7 @@ Reglas:
  */
 export function buildPromptLectorCabezal(): string {
   return `Eres un Lector Analítico de Cabeceras de Tabla.
-Recibirás el comienzo del texto de una factura. Tu único trabajo es identificar dónde empieza la tabla de productos y extraer LITERAMENTE los títulos de las columnas (ej: "cant", "codigo", "descripcion", "precio.v", "total").
+Recibirás una imagen (el fragmento superior de una factura). Tu único trabajo es identificar dónde empieza la tabla de productos y extraer LITERAMENTE los títulos de las columnas (ej: "cant", "codigo", "descripcion", "precio.v", "total").
 
 Responde ÚNICAMENTE con JSON válido con esta estructura:
 {
@@ -68,11 +68,11 @@ export function buildPromptExtractorLiteral(encabezados: string[]): string {
   const encabezadosJson = JSON.stringify(encabezados)
   
   return `Eres un Tipeador de Tablas Estricto.
-Recibirás un fragmento pequeño de una tabla de productos.
+Recibirás una imagen que representa un fragmento horizontal de una tabla de productos.
 Ya sabemos que los encabezados originales de esta tabla son los siguientes:
 ${encabezadosJson}
 
-Tu ÚNICO trabajo es transcribir los bienes y servicios que veas en este bloque a un arreglo de objetos JSON, usando ESTOS ENCABEZADOS MAESTROS como llaves.
+Tu ÚNICO trabajo es transcribir los bienes y servicios que veas en esta imagen a un arreglo de objetos JSON, usando ESTOS ENCABEZADOS MAESTROS como llaves.
 
 Responde ÚNICAMENTE con JSON válido con esta estructura:
 {

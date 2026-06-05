@@ -1,4 +1,5 @@
 import { normalizarUnidad } from '@/lib/constantes/unidades'
+import sharp from 'sharp'
 import {
   buildPromptOrquestadorCabecera,
   buildPromptLectorCabezal,
@@ -37,44 +38,6 @@ export interface ResultadoExtracionCompra {
 }
 
 // ── UTILIDADES DE API ─────────────────────────────────────────────────────────
-
-async function ocrImagen(base64: string, mimeType: string): Promise<string> {
-  const apiKey = process.env.OCR_SPACE_API_KEY ?? 'helloworld'
-  try {
-    const body = new URLSearchParams({
-      base64Image: `data:${mimeType};base64,${base64}`,
-      language: 'spa',
-      isOverlayRequired: 'false',
-      detectOrientation: 'true',
-      scale: 'true',
-      isTable: 'true',
-      OCREngine: '1',
-    })
-
-    const res = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      headers: {
-        'apikey': apiKey,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-    })
-
-    if (!res.ok) throw new Error(`OCR error status ${res.status}`)
-    const data = await res.json()
-    if (data.IsErroredOnProcessing) {
-      throw new Error(data.ErrorMessage?.[0] ?? 'Error procesando OCR')
-    }
-
-    return (data.ParsedResults ?? [])
-      .map((r: any) => r.ParsedText)
-      .join('\n')
-      .trim()
-  } catch (e) {
-    console.error('[OCR fallback]', e)
-    return ''
-  }
-}
 
 async function llamarOpenAIVision(systemPrompt: string, imagenes: { base64: string; mimeType: string }[]): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY
@@ -137,7 +100,7 @@ async function llamarClaudeVision(systemPrompt: string, imagenes: { base64: stri
   imagenes.forEach((img) => {
     contentBlocks.push({ type: 'image', source: { type: 'base64', media_type: img.mimeType, data: img.base64 } })
   })
-  contentBlocks.push({ type: 'text', text: 'Analiza esta compra.' })
+  contentBlocks.push({ type: 'text', text: 'Analiza esta imagen con extrema precisión.' })
 
   const res = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
     method: 'POST',
@@ -197,13 +160,42 @@ async function llamarDeepSeekText(systemPrompt: string, userPrompt: string): Pro
   return JSON.parse(data.choices[0].message.content)
 }
 
-function chunkText(text: string, linesPerChunk = 25): string[] {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
-  const chunks: string[] = []
-  for (let i = 0; i < lines.length; i += linesPerChunk) {
-    chunks.push(lines.slice(i, i + linesPerChunk).join('\n'))
+// ── REBANADOR VISUAL DE IMÁGENES ──────────────────────────────────────────────
+async function sliceImage(base64: string, mimeType: string): Promise<{ base64: string, mimeType: string }[]> {
+  try {
+    const imgBuffer = Buffer.from(base64, 'base64')
+    const metadata = await sharp(imgBuffer).metadata()
+    const height = metadata.height || 1000
+    const width = metadata.width || 1000
+
+    const MAX_SLICE_HEIGHT = 1500
+    const OVERLAP = 300
+
+    if (height <= MAX_SLICE_HEIGHT) {
+      return [{ base64, mimeType }]
+    }
+
+    const slices: { base64: string, mimeType: string }[] = []
+    for (let y = 0; y < height; y += (MAX_SLICE_HEIGHT - OVERLAP)) {
+      let h = MAX_SLICE_HEIGHT
+      if (y + h > height) h = height - y
+      
+      const sliceBuffer = await sharp(imgBuffer)
+        .extract({ left: 0, top: y, width, height: h })
+        .toBuffer()
+        
+      slices.push({
+        base64: sliceBuffer.toString('base64'),
+        mimeType: mimeType
+      })
+      
+      if (y + h >= height) break
+    }
+    return slices
+  } catch (error) {
+    console.error('[Sharp] Error rebanando imagen, fallback a imagen original', error)
+    return [{ base64, mimeType }]
   }
-  return chunks
 }
 
 function parseLocalCurrency(val: string): number {
@@ -231,23 +223,23 @@ export async function extraerCompraDeImagenes(
 ): Promise<ResultadoExtracionCompra> {
   if (imagenes.length === 0) throw new Error('No se enviaron imágenes')
 
-  // ── 1. ORQUESTADOR: Cabecera y OCR ──────────────────────────────────────────
-  console.log('[Multi-Agent] Iniciando OCR y Orquestador Cabecera...')
+  // Rebanar imágenes largas
+  console.log('[Multi-Agent] Rebanando imágenes gigantes...')
+  const rebanadasPromises = imagenes.map(img => sliceImage(img.base64, img.mimeType))
+  const rebanadasArrays = await Promise.all(rebanadasPromises)
+  const imageSlices = rebanadasArrays.flat()
+  console.log(`[Multi-Agent] Se generaron ${imageSlices.length} rebanadas visuales.`)
+
+  // ── 1. ORQUESTADOR: Cabecera ──────────────────────────────────────────────
+  console.log('[Multi-Agent] Extrayendo metadatos de cabecera...')
   const promptCabecera = buildPromptOrquestadorCabecera(rucComprador)
   
-  const ocrPromise = Promise.all(imagenes.map(img => ocrImagen(img.base64, img.mimeType)))
-  
-  let cabeceraPromise: Promise<any>
+  let cabeceraExtraida: any = {}
   if (process.env.OPENAI_API_KEY) {
-    cabeceraPromise = llamarOpenAIVision(promptCabecera, imagenes)
+    cabeceraExtraida = await llamarOpenAIVision(promptCabecera, imagenes) // pasamos originales para cabecera global
   } else if (process.env.ANTHROPIC_API_KEY) {
-    cabeceraPromise = llamarClaudeVision(promptCabecera, imagenes)
-  } else {
-    cabeceraPromise = ocrPromise.then(textos => llamarDeepSeekText(promptCabecera, textos.join('\n')))
+    cabeceraExtraida = await llamarClaudeVision(promptCabecera, imagenes)
   }
-
-  const [textosOcr, cabeceraExtraida] = await Promise.all([ocrPromise, cabeceraPromise])
-  const textoCompleto = textosOcr.join('\n\n--- PAGINA ---\n\n')
 
   const tipoDoc = cabeceraExtraida.tipo_documento ?? 'desconocido'
   const esFormal = ['factura', 'boleta'].includes(tipoDoc)
@@ -263,23 +255,15 @@ export async function extraerCompraDeImagenes(
     total_neto: typeof cabeceraExtraida.total_neto === 'number' ? cabeceraExtraida.total_neto : null,
   }
 
-  // ── 2. TIPEADORES: Extracción Literal por Bloques ───────────────────────────
-  console.log('[Multi-Agent] Fragmentando texto OCR...')
-  const bloques = chunkText(textoCompleto, 25)
-  console.log(`[Multi-Agent] Creados ${bloques.length} bloques de trabajo.`)
-
-  console.log('[Multi-Agent] Leyendo cabeceras maestras de la tabla...')
+  // ── 2. LECTOR DE CABEZAL MAESTRO ──────────────────────────────────────────
+  console.log('[Multi-Agent] Leyendo cabeceras maestras visuales de la tabla...')
   const promptLectorCabezal = buildPromptLectorCabezal()
-  const bloqueCabecera = bloques.length > 0 ? (bloques[0] + '\n' + (bloques[1] || '')) : ''
-  
   let cabezal: any = { encabezados_maestros: [] }
   try {
     if (process.env.OPENAI_API_KEY) {
-      cabezal = await llamarOpenAIText(promptLectorCabezal, bloqueCabecera)
+      cabezal = await llamarOpenAIVision(promptLectorCabezal, [imageSlices[0]])
     } else if (process.env.ANTHROPIC_API_KEY) {
-      cabezal = await llamarClaudeText(promptLectorCabezal, bloqueCabecera)
-    } else {
-      cabezal = await llamarDeepSeekText(promptLectorCabezal, bloqueCabecera)
+      cabezal = await llamarClaudeVision(promptLectorCabezal, [imageSlices[0]])
     }
   } catch (e) {
     console.error('[Multi-Agent] Error en Lector Cabezal:', e)
@@ -287,23 +271,21 @@ export async function extraerCompraDeImagenes(
 
   const encabezadosMaestros = Array.isArray(cabezal.encabezados_maestros) && cabezal.encabezados_maestros.length > 0 
     ? cabezal.encabezados_maestros 
-    : ['columna_1', 'columna_2', 'columna_3', 'columna_4']
+    : ['codigo', 'descripcion', 'cantidad', 'precio_unitario', 'total']
     
   console.log('[Multi-Agent] Encabezados Maestros Detectados:', encabezadosMaestros)
 
+  // ── 3. TIPEADORES: Extracción Literal por Rebanadas Visuales ───────────────
   const promptTipeador = buildPromptExtractorLiteral(encabezadosMaestros)
-  const trabajadoresPromises = bloques.map((bloque, i) => {
-    console.log(`[Multi-Agent] Lanzando Tipeador para bloque ${i + 1}...`)
-    const userPrompt = `Transcribe este bloque de texto manteniendo las llaves literales de las columnas que infieras:\n\n${bloque}`
-    
-    if (process.env.OPENAI_API_KEY) return llamarOpenAIText(promptTipeador, userPrompt).catch(() => ({ filas_literales: [] }))
-    if (process.env.ANTHROPIC_API_KEY) return llamarClaudeText(promptTipeador, userPrompt).catch(() => ({ filas_literales: [] }))
-    return llamarDeepSeekText(promptTipeador, userPrompt).catch(() => ({ filas_literales: [] }))
+  const trabajadoresPromises = imageSlices.map((slice, i) => {
+    console.log(`[Multi-Agent] Lanzando Tipeador Visual para rebanada ${i + 1}...`)
+    if (process.env.OPENAI_API_KEY) return llamarOpenAIVision(promptTipeador, [slice]).catch(() => ({ filas_literales: [] }))
+    if (process.env.ANTHROPIC_API_KEY) return llamarClaudeVision(promptTipeador, [slice]).catch(() => ({ filas_literales: [] }))
+    return Promise.resolve({ filas_literales: [] })
   })
 
   const resultadosTrabajadores = await Promise.all(trabajadoresPromises)
   
-  // Unificar matriz global
   const matrizGlobal: Record<string, any>[] = []
   resultadosTrabajadores.forEach(res => {
     if (res && Array.isArray(res.filas_literales)) {
@@ -315,7 +297,7 @@ export async function extraerCompraDeImagenes(
     return { ...cabeceraFinal, items: [], advertencias: ['No se detectó ningún producto en el documento.'] }
   }
 
-  // ── 3. LÓGICA MATEMÁTICA: Sumas Verticales de Código ──────────────────────
+  // ── 4. LÓGICA MATEMÁTICA: Sumas Verticales de Código ──────────────────────
   const sumasColumnas: Record<string, number> = {}
   matrizGlobal.forEach(fila => {
     Object.keys(fila).forEach(key => {
@@ -332,13 +314,12 @@ export async function extraerCompraDeImagenes(
     })
   })
 
-  // Buscar una fila de muestra que tenga números para la prueba horizontal
   const filaMuestra = matrizGlobal.find(fila => {
     const values = Object.values(fila)
     return values.filter(v => typeof v === 'number').length >= 2
   }) || matrizGlobal[0]
 
-  // ── 4. DETECTIVE: Validación Horizontal y Vertical ────────────────────────
+  // ── 5. DETECTIVE: Validación Horizontal y Vertical ────────────────────────
   console.log('[Multi-Agent] Lanzando Agente Detective Matemático...')
   const promptDetective = buildPromptDetectiveColumnas()
   const detectiveUserPrompt = JSON.stringify({
@@ -361,7 +342,7 @@ export async function extraerCompraDeImagenes(
     console.error('[Multi-Agent] Error en Detective:', e)
   }
 
-  // ── 5. MAPEO FINAL Y RESULTADOS ───────────────────────────────────────────
+  // ── 6. MAPEO FINAL Y RESULTADOS ───────────────────────────────────────────
   const mapa = veredicto.veredicto_mapeo || {}
   
   const itemsFinales: ItemCompraExtraido[] = matrizGlobal.map(fila => {
