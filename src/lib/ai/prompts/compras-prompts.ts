@@ -100,6 +100,7 @@ Responde ÚNICAMENTE con JSON válido con esta estructura:
 
 Reglas:
 1. En "veredicto_mapeo", escribe las llaves EXACTAMENTE como vienen escritas en "fila_muestra".
-2. Si un valor no existe o es imposible deducirlo, pon null en el veredicto.
-3. El precio unitario de compra REAL es aquel que, multiplicado por la cantidad, se acerca al subtotal. Ignora columnas de "precio al público".`
+2. REGLA DE ORO SEMÁNTICA: Observa muy bien el NOMBRE literal de la llave. Si una llave se llama "codigo", "cod", "sku", JAMÁS la confundas con "cantidad", no importa si la matemática coincide por casualidad. Si hay una llave llamada "cant", "cantidad" o "cto", ESA debe ser la cantidad casi con total seguridad.
+3. Si un valor no existe o es imposible deducirlo, pon null en el veredicto.
+4. El precio unitario de compra REAL es aquel que, multiplicado por la cantidad, se acerca al subtotal. Ignora columnas de "precio al público".`
 }
