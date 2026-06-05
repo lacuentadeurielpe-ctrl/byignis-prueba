@@ -72,10 +72,11 @@ ${UNIDADES_PARA_PROMPT}
 
 Reglas de Negocio:
 1. Extrae los datos TAL CUAL figuran en el fragmento.
-2. No intentes adivinar datos faltantes. Si falta la cantidad o el precio, pon null.
-3. No intentes sumar o multiplicar, eso lo hará el Agente Ensamblador.
-4. Mapea la unidad al código SUNAT. Por ejemplo: "unidad", "und", "pza", "tubo" -> NIU; "caja" -> BX; "bolsa" -> BG; "rollo" -> ROL; "metro" -> MTR; "kilo", "kg" -> KGM.
-5. Es posible que en tu fragmento haya 0 productos, en ese caso devuelve "items": [].`
+2. REGLA DE ORO: IGNORA y OMITE cualquier línea que sea "IGV", "I.G.V.", "Impuestos", "Total", "Subtotal", "Vuelto", "Efectivo", "Visa", "Mastercard", números de cuenta bancaria o RUCs. ¡Solo extrae BIENES o SERVICIOS reales que se estén comprando! Si extraes un impuesto o un total como producto, arruinarás la contabilidad.
+3. No intentes adivinar datos faltantes. Si falta la cantidad o el precio, pon null.
+4. No intentes sumar o multiplicar, eso lo hará el Agente Ensamblador.
+5. Mapea la unidad al código SUNAT. Por ejemplo: "unidad", "und", "pza", "tubo" -> NIU; "caja" -> BX; "bolsa" -> BG; "rollo" -> ROL; "metro" -> MTR; "kilo", "kg" -> KGM.
+6. Es posible que en tu fragmento haya 0 productos (por ejemplo, si solo contiene la firma o totales), en ese caso devuelve "items": [].`
 }
 
 /**
@@ -110,7 +111,9 @@ Responde ÚNICAMENTE con JSON válido con esta estructura:
 }
 
 Reglas:
-1. Si un producto tiene un precio muy alto marcado como "precio de venta sugerido", IGNÓRALO para los cálculos. Tu "precio_compra_unitario" debe derivarse de lo que realmente pagó el cliente (ej. dividiendo el total_linea entre cantidad).
-2. Asegúrate de que no queden datos basura o nulos en cantidades. Si falta cantidad, intenta deducirla dividiendo total / unitario (si es exacto).
-3. Limpia la descripción de cualquier texto residual de otros renglones.`
+1. ELIMINA sin piedad cualquier ítem que sea claramente un impuesto (ej. "IGV 18%"), un subtotal, un total, un descuento, o un medio de pago. A veces los extractores se confunden y ponen "IGV" con cantidad 18 y precio enorme, lo cual genera cifras irreales.
+2. Si un producto tiene un precio muy alto marcado como "precio de venta sugerido", IGNÓRALO para los cálculos de costo. Tu "precio_compra_unitario" debe derivarse de lo que realmente pagó el cliente (ej. dividiendo el total_linea entre cantidad).
+3. Asegúrate de que no queden datos basura o nulos en cantidades. Si falta cantidad, intenta deducirla dividiendo total / unitario (si es exacto).
+4. Limpia la descripción de cualquier texto residual de otros renglones.
+5. Si detectas un ítem donde cantidad * precio da un subtotal monstruosamente mayor al total neto de la cabecera, es un error de lectura: corrígelo o elimínalo.`
 }

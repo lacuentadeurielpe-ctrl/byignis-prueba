@@ -46,7 +46,8 @@ async function ocrImagen(base64: string, mimeType: string): Promise<string> {
       isOverlayRequired: 'false',
       detectOrientation: 'true',
       scale: 'true',
-      OCREngine: '2',
+      isTable: 'true',
+      OCREngine: '1',
     })
 
     const res = await fetch('https://api.ocr.space/parse/image', {
