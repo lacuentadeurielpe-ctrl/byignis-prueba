@@ -65,11 +65,12 @@ export async function extraerCompraDeImagenes(
   const ext = imgData.mimeType === 'application/pdf' ? 'pdf' : 
               imgData.mimeType.includes('png') ? 'png' : 'jpg'
   
-  const inputSource = mindeeClient.docFromBase64(cleanB64, `factura.${ext}`)
+  const inputSource = new mindee.Base64Input({ inputString: cleanB64, filename: `factura.${ext}` })
 
   let apiResponse
   try {
-    apiResponse = await mindeeClient.parse(mindee.product.InvoiceV4, inputSource)
+    // @ts-ignore: Mindee v5 types are strictly expecting BaseProduct which InvoiceV4 extends but TS fails to resolve
+    apiResponse = await mindeeClient.enqueueAndGetResult(mindee.v1.product.InvoiceV4, inputSource, {})
   } catch (error: any) {
     console.error('[Mindee] Error de API:', error)
     throw new Error('Error al conectar con Mindee API: ' + error.message)
@@ -125,7 +126,7 @@ export async function extraerCompraDeImagenes(
       precio_compra_unitario: price,
       subtotal:               total,
     }
-  }).filter((item) => item.descripcion !== 'Producto sin nombre' || item.cantidad !== null)
+  }).filter((item: ItemCompraExtraido) => item.descripcion !== 'Producto sin nombre' || item.cantidad !== null)
 
   if (items.length === 0) {
     advertencias.push('Mindee no detectó ninguna línea de producto en este comprobante.')
