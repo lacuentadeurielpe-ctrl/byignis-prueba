@@ -35,6 +35,7 @@ interface ItemExtraccion {
   producto_existente_id: string | null
   producto_existente_nombre: string | null
   score_match: number
+  sugerencias?: Array<{ id: string; nombre: string; score: number }>
   
   // Campos editables por el usuario
   nombre: string // nombre del producto final
@@ -671,7 +672,7 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
                       {/* Configuración de Vinculación */}
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                         {/* Selector de Producto o Editor de Nombre */}
-                        <div className="sm:col-span-8">
+                        <div className="sm:col-span-8 space-y-1.5">
                           <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-wider mb-0.5">Vincular a catálogo</label>
                           <select
                             value={it.producto_existente_id || ''}
@@ -685,6 +686,23 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
                               </option>
                             ))}
                           </select>
+
+                          {/* Sugerencias Rápidas de Matching */}
+                          {isNuevo && it.sugerencias && it.sugerencias.length > 0 && (
+                            <div className="text-[9px] text-zinc-500 flex flex-wrap gap-1 items-center bg-zinc-50 p-1.5 rounded-lg border border-zinc-150">
+                              <span className="font-semibold text-zinc-400">¿Vincular a existente?:</span>
+                              {it.sugerencias.map((sug) => (
+                                <button
+                                  key={sug.id}
+                                  type="button"
+                                  onClick={() => actualizarItem(idx, { producto_existente_id: sug.id })}
+                                  className="px-1.5 py-0.5 bg-white hover:bg-zinc-100 text-zinc-700 rounded border border-zinc-200 transition font-medium"
+                                >
+                                  {sug.nombre} ({sug.score}%)
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         {/* Nombre del Producto Final (Editable) */}

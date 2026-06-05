@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { extraerCompraDeImagenes } from '@/lib/ai/compras-ai'
-import { buscarMatchProducto } from '@/lib/matching/product-matcher'
+import { filtrarRucProveedor } from '@/lib/matching/ruc-filter'
+import { reconciliarPreciosEImpuestos } from '@/lib/matching/math-reconciler'
+import { aplicarUmbralMatching } from '@/lib/matching/threshold-rules'
 
 export interface ItemParaReconciliar {
   descripcion_factura: string
@@ -16,6 +18,7 @@ export interface ItemParaReconciliar {
   producto_existente_id: string | null
   producto_existente_nombre: string | null
   score_match: number
+  sugerencias: Array<{ id: string; nombre: string; score: number }>
 }
 
 export interface RespuestaAIExtractCompras {
@@ -49,17 +52,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Debe proporcionar al menos una imagen' }, { status: 400 })
     }
 
-    // 1. Extraer datos con IA (Vision o Fallback OCR + Text)
-    const extraccion = await extraerCompraDeImagenes(imagenes)
+    // 1. Obtener RUC de la ferretería activa (comprador)
+    const { data: ferreteria } = await supabase
+      .from('ferreterias')
+      .select('ruc')
+      .eq('id', session.ferreteriaId)
+      .single()
 
-    // 2. Cargar catálogo de productos activos
+    const rucComprador = ferreteria?.ruc || null
+
+    // 2. Extraer datos con IA, inyectando RUC comprador como contexto negativo
+    const extraccion = await extraerCompraDeImagenes(imagenes, rucComprador)
+
+    // 3. Filtrar RUC del proveedor
+    const rucFiltrado = filtrarRucProveedor(extraccion.ruc_emisor, rucComprador)
+
+    // 4. Reconciliación matemática de precios, cantidades e IGV
+    const reconciliacion = reconciliarPreciosEImpuestos(extraccion, extraccion.items)
+
+    // 5. Cargar catálogo de productos activos para matching local
     const { data: productosCatalog } = await supabase
       .from('productos')
       .select('id, nombre, codigo_interno, unidad, precio_base, precio_compra, stock')
       .eq('ferreteria_id', session.ferreteriaId)
       .eq('activo', true)
 
-    // 3. Cargar alias históricos de matching
+    // 6. Cargar alias históricos de matching
     const { data: aliasHistoricos } = await supabase
       .from('alias_productos')
       .select('alias, producto_id')
@@ -80,37 +98,30 @@ export async function POST(request: Request) {
       producto_id: a.producto_id,
     }))
 
-    // 4. Ejecutar matching para cada ítem
-    const itemsProcesados: ItemParaReconciliar[] = extraccion.items.map((item) => {
-      const desc = item.descripcion || 'Producto sin descripción'
-      const match = buscarMatchProducto(desc, catalogo, alias)
-
-      return {
-        descripcion_factura: desc,
-        cantidad: item.cantidad ?? 1,
-        unidad_factura: item.unidad ?? 'NIU',
-        precio_compra_unitario: item.precio_compra_unitario ?? 0,
-        subtotal: item.subtotal ?? 0,
-        
-        accion: match.accion,
-        producto_existente_id: match.producto_existente_id,
-        producto_existente_nombre: match.producto_existente_nombre,
-        score_match: match.score,
-      }
+    // 7. Aplicar umbral de severidad de matching (>= 75%) y obtener sugerencias
+    const itemsProcesados: ItemParaReconciliar[] = reconciliacion.items.map((item) => {
+      return aplicarUmbralMatching(item, catalogo, alias)
     })
 
+    // Consolidar todas las advertencias generadas en el pipeline
+    const todasAdvertencias = [
+      ...(rucFiltrado.advertencia ? [rucFiltrado.advertencia] : []),
+      ...reconciliacion.advertencias,
+      ...extraccion.advertencias
+    ]
+
     const respuesta: RespuestaAIExtractCompras = {
-      tipo_documento: extraccion.tipo_documento,
-      es_formal: extraccion.es_formal,
-      ruc_proveedor: extraccion.ruc_emisor,
+      tipo_documento: reconciliacion.cabecera.tipo_documento,
+      es_formal: reconciliacion.cabecera.es_formal,
+      ruc_proveedor: rucFiltrado.ruc,
       razon_social_proveedor: extraccion.razon_social_emisor,
       numero_factura: extraccion.numero_factura,
       fecha_factura: extraccion.fecha_factura,
-      total_bruto: extraccion.total_bruto ?? 0,
-      igv: extraccion.igv ?? 0,
-      total_neto: extraccion.total_neto ?? 0,
+      total_bruto: reconciliacion.cabecera.total_bruto,
+      igv: reconciliacion.cabecera.igv,
+      total_neto: reconciliacion.cabecera.total_neto,
       items: itemsProcesados,
-      advertencias: extraccion.advertencias,
+      advertencias: todasAdvertencias,
     }
 
     return NextResponse.json(respuesta)
