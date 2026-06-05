@@ -1,131 +1,113 @@
+/**
+ * compras-prompts.ts — Prompts para extracción de facturas de compra (v3)
+ *
+ * Solo dos prompts:
+ *   1. buildPromptCabecera      — extrae metadatos del documento (RUC, número, total...)
+ *   2. buildPromptExtraccionCompleta — extrae la tabla de productos de una imagen
+ *                                     que YA contiene visualmente los encabezados de columna.
+ */
+
 import { UNIDADES_SUNAT } from '@/lib/constantes/unidades'
 
-const UNIDADES_PARA_PROMPT = UNIDADES_SUNAT
-  .map((u) => `${u.code} (${u.label})`)
+const UNIDADES_LISTA = UNIDADES_SUNAT
+  .map(u => `${u.code} (${u.label})`)
   .join(', ')
 
+// ─────────────────────────────────────────────────────────────────────────────
 /**
- * AGENTE 1: Orquestador / Cabecera
- * Extrae los metadatos principales del documento usando visión o texto.
+ * Prompt 1: Cabecera del documento
+ * Extrae SOLO los metadatos del comprobante, sin tocar la tabla de productos.
  */
-export function buildPromptOrquestadorCabecera(rucComprador: string | null): string {
-  const rucCompradorInstruccion = rucComprador
-    ? `LÓGICA INVERSA DE RUC CRÍTICA:
-EL RUC DEL COMPRADOR (NOSOTROS) ES: "${rucComprador}". 
-Tu objetivo es extraer el RUC del EMISOR/PROVEEDOR (Vendedor). 
-Por lo tanto, el campo ruc_emisor DEBE SER DIFERENTE A "${rucComprador}". 
-Si ves el RUC "${rucComprador}" en el documento, es el RUC del adquiriente/cliente, por lo que NO debes colocarlo en ruc_emisor. Busca el otro RUC que pertenezca al proveedor.`
-    : 'Tu objetivo es extraer el RUC del emisor/proveedor (vendedor) que emite la factura o boleta.'
+export function buildPromptCabecera(rucComprador: string | null): string {
+  const rucInstruccion = rucComprador
+    ? `ATENCIÓN — RUC DEL COMPRADOR (nosotros): "${rucComprador}".
+El campo ruc_emisor debe contener el RUC del PROVEEDOR (quien vende), que es DIFERENTE a "${rucComprador}".
+Si ves "${rucComprador}" en el documento, ese es el RUC del cliente/adquiriente — ignóralo para ruc_emisor.`
+    : 'Extrae el RUC del emisor/proveedor (quien emite el comprobante).'
 
-  return `Eres un agente contable Orquestador experto en ferreterías peruanas.
-Tu objetivo es analizar un documento de compra (factura, boleta, nota de venta) y extraer únicamente los metadatos de la cabecera. NO te preocupes por los productos o la tabla.
+  return `Eres un asistente contable experto en documentos tributarios peruanos (facturas, boletas, notas de venta).
+Tu ÚNICA tarea es extraer los metadatos de la CABECERA del documento — NO leas la tabla de productos.
 
-Responde ÚNICAMENTE con JSON válido con esta estructura:
+${rucInstruccion}
+
+Responde SOLO con este JSON (sin texto adicional):
 {
   "tipo_documento": "factura" | "boleta" | "nota_venta" | "ticket" | "desconocido",
-  "ruc_emisor": "RUC de 11 dígitos del proveedor o null si no existe",
-  "razon_social_emisor": "nombre o razón social del proveedor o null",
-  "numero_factura": "número de serie-correlativo del comprobante o null",
-  "fecha_factura": "fecha en formato YYYY-MM-DD o null",
-  "total_bruto": número base imponible (subtotal antes de IGV si es factura formal, de lo contrario total) o null,
-  "igv": número de IGV extraído o calculado (18% si es factura formal, de lo contrario 0) o null,
-  "total_neto": número del monto total a pagar o null
+  "ruc_emisor": "RUC de 11 dígitos del proveedor, o null",
+  "razon_social_emisor": "Nombre o razón social del proveedor, o null",
+  "numero_factura": "Número serie-correlativo (ej: F001-00012345), o null",
+  "fecha_factura": "Fecha en formato YYYY-MM-DD, o null",
+  "total_bruto": <número: base imponible antes de IGV si es factura, o total si es boleta/nota, o null>,
+  "igv": <número: importe del IGV si es factura, 0 si es boleta/nota, o null>,
+  "total_neto": <número: importe total a pagar, o null>
 }
 
 Reglas:
-1. "factura" y "boleta" son formales. "nota_venta" y "ticket" son informales.
-2. Si es una Factura, extrae o calcula el total_bruto (Base Imponible) e igv (18% de total_bruto).
-3. Si es Boleta o Nota de Venta, total_neto es igual a total_bruto, y el igv debe ser 0.
-4. Responde en soles peruanos (S/).
-5. ${rucCompradorInstruccion}`
+- "factura" y "boleta" son documentos formales con RUC.
+- "nota_venta" y "ticket" son informales (sin RUC válido).
+- Todos los montos en soles (S/).`
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 /**
- * AGENTE 1.5: Lector del Cabezal Maestro
- * Extrae explícitamente los nombres de las columnas que la tabla usa.
+ * Prompt 2: Extracción de ítems de la tabla de productos
+ *
+ * La imagen SIEMPRE contiene visualmente los encabezados de columna
+ * (porque aplicamos stitching de cabecera antes de enviar).
+ * El modelo debe leer los encabezados de la propia imagen y extraer filas.
  */
-export function buildPromptLectorCabezal(): string {
-  return `Eres un Lector Analítico de Cabeceras de Tabla.
-Recibirás una imagen (el fragmento superior de una factura). Tu único trabajo es identificar dónde empieza la tabla de productos y extraer LITERAMENTE los títulos de las columnas (ej: "cant", "codigo", "descripcion", "precio.v", "total").
+export function buildPromptExtraccionCompleta(): string {
+  return `Eres un extractor experto de tablas de facturas de compra peruanas (ferreterías, distribuidoras, etc.).
 
-Responde ÚNICAMENTE con JSON válido con esta estructura:
+La imagen que recibirás muestra UNA SECCIÓN de la tabla de productos de una factura.
+La imagen SIEMPRE incluye los encabezados de columna en la parte superior (aunque sea repetida).
+
+TU TAREA:
+Leer la imagen fila por fila y extraer CADA PRODUCTO con los siguientes campos:
+
 {
-  "encabezados_maestros": ["titulo_columna_1", "titulo_columna_2", "..."]
-}
-
-Reglas:
-1. Copia los nombres EXACTOS que ves en la imagen/texto (ignorando mayúsculas/minúsculas).
-2. Si el OCR juntó dos nombres, sepáralos lógicamente si pertenecen a columnas distintas.
-3. El orden del arreglo debe respetar el orden de las columnas de izquierda a derecha.
-4. Si no hay tabla en este texto, devuelve [].`
-}
-
-/**
- * AGENTE 2: Tipeador Literal — Lee fila por fila con orden de columnas explícito en texto.
- */
-export function buildPromptExtractorLiteral(encabezados: string[]): string {
-  const tabla = encabezados
-    .map((enc, i) => `  Posición ${i + 1} (de izquierda a derecha) → clave JSON: "${enc}"`)
-    .join('\n')
-
-  return `Eres un extractor experto de tablas de facturas peruanas.
-
-Recibirás una imagen de un FRAGMENTO de una tabla de productos. Este fragmento puede o no tener la fila de títulos visible. No importa: ya sabemos el orden exacto de las columnas.
-
-═══ ORDEN DE COLUMNAS (de izquierda a derecha) ═══
-${tabla}
-═══════════════════════════════════════════════════
-
-INSTRUCCIONES:
-1. Lee la imagen FILA POR FILA de arriba hacia abajo. Cada fila horizontal = un producto diferente.
-2. Para cada fila de producto, lee los valores de IZQUIERDA A DERECHA y asígnalos a las claves JSON según el orden de columnas indicado arriba.
-3. La columna de descripción suele ser la más ancha y contiene texto (nombre del producto). SIEMPRE léela completa, no la omitas.
-4. Si un valor es numérico (cantidad, precio, total), ponlo como número. Si es texto (descripción, código), como string.
-5. OMITE filas que sean totales, subtotales, IGV, descuentos, firmas o líneas en blanco.
-6. Si el fragmento no contiene productos, devuelve "filas_literales": [].
-7. NO repitas productos que ya vienen de un corte anterior. Solo extrae lo que ves en ESTA imagen.
-
-Responde ÚNICAMENTE con JSON válido:
-{
-  "filas_literales": [
-    { "clave1": valor1, "clave2": valor2, ... }
+  "items": [
+    {
+      "descripcion":            "<texto completo del nombre/descripción del producto>",
+      "cantidad":               <número>,
+      "unidad":                 "<código de unidad: NIU, KGM, MTR, etc.>",
+      "valor_unitario":         <número o null — precio sin IGV por unidad>,
+      "precio_unitario":        <número o null — precio con IGV por unidad>,
+      "precio_compra_unitario": <número o null — el precio de compra real por unidad>,
+      "subtotal":               <número o null — importe total de esa línea>
+    }
   ]
-}`
 }
 
-/**
- * AGENTE 3: Detective de Columnas (Doble Validación)
- * Aplica lógica matemática a las sumas y a una fila de muestra para dar el veredicto semántico.
- */
+REGLAS CRÍTICAS:
+1. Lee los encabezados de la imagen para saber qué columna es qué. NO asumas un orden fijo.
+2. "descripcion" es la columna de texto más ancha — contiene el nombre completo del producto (ej: "NIPLE BRONCE 1/2\\"  X 2\\""). NUNCA la dejes vacía si hay texto en esa celda.
+3. "cantidad" es la cantidad comprada (generalmente un número entero pequeño como 5, 12, 100). NO confundas el código del producto (6 dígitos como "006341") con la cantidad.
+4. El campo "código" o "cod" de la factura es un identificador interno del proveedor — NO es la cantidad.
+5. Para "precio_compra_unitario" usa el precio unitario real de compra (valor neto o precio de venta, según lo que tenga la factura).
+6. Para "subtotal" usa el importe total de la línea (cantidad × precio unitario).
+7. OMITE filas de totales, subtotales, IGV, descuentos globales, firmas o líneas vacías.
+8. Si un campo no existe en la imagen, devuelve null para ese campo.
+9. La unidad debe ser un código SUNAT estándar: ${UNIDADES_LISTA}. Si no puedes determinarla, usa "NIU".
+
+IMPORTANTE: Responde SOLO con el JSON. Sin explicaciones.`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Los siguientes exports se mantienen por compatibilidad con otros archivos
+// que puedan importarlos, aunque ya no se usan en compras-ai.ts v3.
+export function buildPromptOrquestadorCabecera(rucComprador: string | null): string {
+  return buildPromptCabecera(rucComprador)
+}
+
+export function buildPromptLectorCabezal(): string {
+  return '{"encabezados_maestros": []}'  // No usado en v3
+}
+
+export function buildPromptExtractorLiteral(encabezados: string[]): string {
+  return buildPromptExtraccionCompleta()  // Redirige al nuevo prompt
+}
+
 export function buildPromptDetectiveColumnas(): string {
-  return `Eres el Agente Detective Matemático.
-Se te entregará una base de datos ciega (una tabla anónima de productos). Necesitamos que descubras el verdadero significado de las columnas matemáticas.
-
-Se te proporcionará:
-1. "fila_muestra": Una fila al azar de la tabla, con datos literales extraídos.
-2. "sumas_columnas": La sumatoria real de cada columna numérica a lo largo de TODA la tabla completa (miles de ítems posibles).
-3. "total_neto_factura": El precio total que el cliente pagó en la factura.
-
-Tu objetivo es hacer la DOBLE VERIFICACIÓN:
-Paso 1: Validación Horizontal (Fila). Toma los números de "fila_muestra". Intenta multiplicarlos entre sí. Por ejemplo, si col_x * col_y = col_z, entonces concluye que col_z es un subtotal, y que col_x e col_y son la cantidad y el precio unitario.
-Paso 2: Validación Vertical (Suma Global). Toma tu candidato a "subtotal" (col_z). Revisa el valor de "sumas_columnas" para col_z. ¿Es aproximadamente igual o muy cercano a "total_neto_factura" (o total_bruto)? Si es así, CONFIRMA que col_z es definitivamente el total_linea.
-Paso 3: Si hay una columna que tenga precios pero cuya multiplicación no cuadre, probablemente sea un "precio sugerido de venta al público". Identifícalo para descartarlo.
-
-Responde ÚNICAMENTE con JSON válido con esta estructura:
-{
-  "conclusiones_logicas": "Texto breve explicando tus pruebas matemáticas (ej: 'ColA(12) * ColB(15) = ColC(180). La suma total de ColC es 1000, que coincide con la factura. Por ende, ColA es Cantidad y ColC es Total.')",
-  "veredicto_mapeo": {
-    "llave_literal_descripcion": "nombre exacto de la llave que contiene la descripcion o null",
-    "llave_literal_cantidad": "nombre exacto de la llave que contiene la cantidad o null",
-    "llave_literal_unidad": "nombre exacto de la llave que contiene la unidad de medida (cajas, kg, etc) o null",
-    "llave_literal_precio_compra_unitario": "nombre exacto de la llave que contiene el precio unitario REAL de compra (no de venta) o null",
-    "llave_literal_subtotal": "nombre exacto de la llave que contiene el importe total del producto o null"
-  }
-}
-
-Reglas:
-1. En "veredicto_mapeo", escribe las llaves EXACTAMENTE como vienen escritas en "fila_muestra".
-2. REGLA DE ORO SEMÁNTICA: Observa muy bien el NOMBRE literal de la llave. Si una llave se llama "codigo", "cod", "sku", JAMÁS la confundas con "cantidad", no importa si la matemática coincide por casualidad. Si hay una llave llamada "cant", "cantidad" o "cto", ESA debe ser la cantidad casi con total seguridad.
-3. Si un valor no existe o es imposible deducirlo, pon null en el veredicto.
-4. El precio unitario de compra REAL es aquel que, multiplicado por la cantidad, se acerca al subtotal. Ignora columnas de "precio al público".`
+  return '{"veredicto_mapeo": {}}'  // No usado en v3
 }
