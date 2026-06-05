@@ -36,13 +36,12 @@ export interface ResultadoExtracionCompra {
   advertencias:        string[]
 }
 
-// ── Extractor principal ───────────────────────────────────────────────────────
+import * as mindee from 'mindee'
 
 export async function extraerCompraDeImagenes(
   imagenes: { base64: string; mimeType: string }[],
   rucComprador: string | null = null
 ): Promise<ResultadoExtracionCompra> {
-  const mindee = await import('mindee')
   if (imagenes.length === 0) throw new Error('No se enviaron imágenes')
 
   const apiKey = process.env.MINDEE_API_KEY
