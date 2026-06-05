@@ -83,16 +83,16 @@ export async function extraerCompraDeImagenes(
       "razon_social": "El nombre o razón social del proveedor",
       "numero_documento": "El número de serie y correlativo (ej. F001-12345 o B001-987)",
       "fecha_emision": "La fecha de emisión en formato YYYY-MM-DD",
-      "es_formal": true si detectas un RUC válido de 11 dígitos y parece una Factura/Boleta formal, false si es una nota de venta sin RUC,
-      "total_bruto": el valor subtotal o valor de venta (el monto antes de aplicar el IGV),
-      "igv": el monto exacto del impuesto IGV (usualmente 18% en Perú),
-      "total_neto": el importe total final a pagar (incluyendo impuestos),
+      "es_formal": "booleano, true si detectas un RUC válido de 11 dígitos y parece una Factura formal, false si es una nota de venta sin RUC",
+      "total_bruto": "número float, el valor subtotal o valor de venta (el monto antes de aplicar el IGV)",
+      "igv": "número float, el monto exacto del impuesto IGV (usualmente 18% en Perú)",
+      "total_neto": "número float, el importe total final a pagar (incluyendo impuestos)",
       "productos": [
         {
           "descripcion": "Nombre detallado del producto, incluyendo marca y medidas",
-          "cantidad": cantidad numérica de unidades,
-          "precio_unitario": PRECIO CON IGV INCLUIDO. Si la tabla de la factura muestra 'Valor Unitario' (sin IGV), multiplícalo por 1.18 para obtener el precio_unitario,
-          "subtotal": EL TOTAL DE LA LÍNEA CON IGV INCLUIDO. Si la tabla muestra importe sin IGV, multiplícalo por 1.18
+          "cantidad": "número float, cantidad numérica de unidades",
+          "precio_unitario": "número float, PRECIO CON IGV INCLUIDO. Si la tabla muestra 'Valor Unitario' (sin IGV), multiplícalo por 1.18",
+          "subtotal": "número float, TOTAL DE LA LÍNEA CON IGV INCLUIDO. Si la tabla muestra importe sin IGV, multiplícalo por 1.18"
         }
       ]
     }
