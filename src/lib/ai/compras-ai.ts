@@ -189,63 +189,8 @@ async function llamarDeepSeekText(systemPrompt: string, userPrompt: string): Pro
   return safeParseJSON(data.choices[0].message.content)
 }
 
-// ── REBANADOR VISUAL DE IMÁGENES ──────────────────────────────────────────────
-/**
- * Extrae solo la franja delgada de títulos de columnas (ej: "Cant | Descripción | Precio...")
- * Pide a la IA que identifique hasta qué píxel de altura termina esa fila de títulos.
- */
-async function extraerFranjaHeader(
-  imgBuffer: Buffer,
-  width: number
-): Promise<{ franja: Buffer; alturaFranja: number }> {
-  // Tomamos solo el primer 25% de la imagen para buscar los títulos (máx 400px)
-  const { data: metadata2 } = await sharp(imgBuffer).metadata().then(m => ({ data: m }))
-  const totalHeight = metadata2.height || 1000
-  const scanHeight = Math.min(Math.round(totalHeight * 0.25), 400)
-
-  const scanBuffer = await sharp(imgBuffer)
-    .extract({ left: 0, top: 0, width, height: scanHeight })
-    .toBuffer()
-  const scanB64 = scanBuffer.toString('base64')
-
-  // Prompt para detectar únicamente la fila de títulos
-  const promptDetectorHeader = `Eres un analizador de diseño de tablas.
-Se te envía el fragmento SUPERIOR de una factura. Tu único objetivo es determinar en qué píxel (de altura, contando desde arriba) termina la FILA DE TÍTULOS de la tabla de productos (la fila que dice cosas como "Cant.", "Descripción", "Precio", "Total", etc.).
-Ignora la cabecera del negocio (logo, dirección, número de factura). Solo enfocate en la fila de títulos de la tabla.
-Responde SOLO con JSON: { "titulo_fila_fin_px": <número entero de píxeles> }`
-
-  let finPx = 120 // fallback por defecto
-  try {
-    let respHeader: any
-    if (process.env.OPENAI_API_KEY) {
-      respHeader = await llamarOpenAIVision(promptDetectorHeader, [{ base64: scanB64, mimeType: 'image/png' }])
-    } else if (process.env.ANTHROPIC_API_KEY) {
-      respHeader = await llamarClaudeVision(promptDetectorHeader, [{ base64: scanB64, mimeType: 'image/png' }])
-    }
-    if (respHeader?.titulo_fila_fin_px && typeof respHeader.titulo_fila_fin_px === 'number') {
-      finPx = Math.min(Math.max(respHeader.titulo_fila_fin_px, 40), scanHeight)
-    }
-  } catch (e) {
-    console.warn('[Sharp] No se pudo detectar fin del header, usando fallback de 120px', e)
-  }
-
-  const franja = await sharp(imgBuffer)
-    .extract({ left: 0, top: 0, width, height: finPx })
-    .toBuffer()
-
-  console.log(`[Sharp] Franja de títulos extraida: ${finPx}px de alto.`)
-  return { franja, alturaFranja: finPx }
-}
-
-/**
- * Rebana la imagen solo por altura y pega la franja de títulos a todas las rebanadas que no sean la primera.
- */
-async function sliceImage(
-  base64: string,
-  mimeType: string,
-  franjaBuffer: Buffer | null,
-  alturaFranja: number
-): Promise<{ base64: string; mimeType: string }[]> {
+// ── REBANADOR VISUAL DE IMÁGENES (Solo altura, sin modificar) ─────────────
+async function sliceImage(base64: string, mimeType: string): Promise<{ base64: string; mimeType: string }[]> {
   const cleanB64 = cleanBase64(base64)
   try {
     const imgBuffer = Buffer.from(cleanB64, 'base64')
@@ -261,34 +206,13 @@ async function sliceImage(
     }
 
     const slices: { base64: string; mimeType: string }[] = []
-    let sliceIndex = 0
     for (let y = 0; y < height; y += (MAX_SLICE_HEIGHT - OVERLAP)) {
       let h = MAX_SLICE_HEIGHT
       if (y + h > height) h = height - y
-
-      const rawSlice = await sharp(imgBuffer)
+      const sliceBuffer = await sharp(imgBuffer)
         .extract({ left: 0, top: y, width, height: h })
         .toBuffer()
-
-      if (sliceIndex === 0 || !franjaBuffer) {
-        // Primera rebanada: ya tiene sus títulos originales en la parte superior
-        slices.push({ base64: cleanBase64(rawSlice.toString('base64')), mimeType })
-      } else {
-        // Rebanadas siguientes: pegar SOLO la franja delgada de títulos arriba
-        const totalH = alturaFranja + h
-        const compositeBuffer = await sharp({
-          create: { width, height: totalH, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
-        })
-          .composite([
-            { input: franjaBuffer, top: 0, left: 0 },
-            { input: rawSlice, top: alturaFranja, left: 0 },
-          ])
-          .png()
-          .toBuffer()
-        slices.push({ base64: cleanBase64(compositeBuffer.toString('base64')), mimeType: 'image/png' })
-      }
-
-      sliceIndex++
+      slices.push({ base64: cleanBase64(sliceBuffer.toString('base64')), mimeType })
       if (y + h >= height) break
     }
     return slices
@@ -323,27 +247,9 @@ export async function extraerCompraDeImagenes(
 ): Promise<ResultadoExtracionCompra> {
   if (imagenes.length === 0) throw new Error('No se enviaron imágenes')
 
-  // ── 0. DETECTAR Y EXTRAER LA FRANJA DE TÍTULOS (Thin Header) ──────────────
-  console.log('[Multi-Agent] Detectando franja de títulos de tabla...')
-  let franjaBuffer: Buffer | null = null
-  let alturaFranja = 120
-
-  try {
-    const firstImgBuffer = Buffer.from(cleanBase64(imagenes[0].base64), 'base64')
-    const firstMeta = await sharp(firstImgBuffer).metadata()
-    const firstWidth = firstMeta.width || 1000
-    const resultado = await extraerFranjaHeader(firstImgBuffer, firstWidth)
-    franjaBuffer = resultado.franja
-    alturaFranja = resultado.alturaFranja
-  } catch (e) {
-    console.error('[Sharp] Error extrayendo franja, se procederá sin stitching', e)
-  }
-
-  // Rebanar imágenes largas e inyectar la franja de títulos delgada
-  console.log('[Multi-Agent] Rebanando imágenes e inyectando franja de títulos...')
-  const rebanadasPromises = imagenes.map(img =>
-    sliceImage(img.base64, img.mimeType, franjaBuffer, alturaFranja)
-  )
+  // Rebanar imágenes largas solo por altura (sin modificar el ancho ni pegar nada)
+  console.log('[Multi-Agent] Rebanando imágenes...')
+  const rebanadasPromises = imagenes.map(img => sliceImage(img.base64, img.mimeType))
   const rebanadasArrays = await Promise.all(rebanadasPromises)
   const imageSlices = rebanadasArrays.flat()
   console.log(`[Multi-Agent] Se generaron ${imageSlices.length} rebanadas visuales.`)

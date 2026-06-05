@@ -61,38 +61,36 @@ Reglas:
 }
 
 /**
- * AGENTE 2: Tipeador Literal (Constructor por Partes con Cabezal Inyectado)
- * Extrae las filas de la tabla encajando los datos en las llaves del cabezal maestro.
+ * AGENTE 2: Tipeador Literal — Lee fila por fila con orden de columnas explícito en texto.
  */
 export function buildPromptExtractorLiteral(encabezados: string[]): string {
-  const ordenadas = encabezados.map((enc, i) => `Columna ${i + 1}: "${enc}"`).join('\n')
-  
-  return `Eres un Tipeador de Tablas Estricto con Razonamiento Espacial.
-Recibirás una imagen que representa un pedazo de una tabla de productos. 
-ATENCIÓN: Es posible que esta imagen no tenga los títulos de las columnas impresos porque es un corte de la mitad inferior de la factura. ¡No te asustes! 
+  const tabla = encabezados
+    .map((enc, i) => `  Posición ${i + 1} (de izquierda a derecha) → clave JSON: "${enc}"`)
+    .join('\n')
 
-Por lógica de posición (de IZQUIERDA a DERECHA), las columnas son estrictamente estas:
-${ordenadas}
+  return `Eres un extractor experto de tablas de facturas peruanas.
 
-Tu ÚNICO trabajo es transcribir los bienes y servicios que veas en esta imagen a un arreglo de objetos JSON, usando tu deducción visual: el primer número a la izquierda es la Columna 1, el texto al medio es la Columna 3, etc. 
-Usa los nombres exactos que están entre comillas arriba como las llaves de tu JSON (ejemplo: si dice Columna 1: "codigo", usa "codigo"). No incluyas la palabra 'Columna'.
+Recibirás una imagen de un FRAGMENTO de una tabla de productos. Este fragmento puede o no tener la fila de títulos visible. No importa: ya sabemos el orden exacto de las columnas.
 
-Responde ÚNICAMENTE con JSON válido con esta estructura:
+═══ ORDEN DE COLUMNAS (de izquierda a derecha) ═══
+${tabla}
+═══════════════════════════════════════════════════
+
+INSTRUCCIONES:
+1. Lee la imagen FILA POR FILA de arriba hacia abajo. Cada fila horizontal = un producto diferente.
+2. Para cada fila de producto, lee los valores de IZQUIERDA A DERECHA y asígnalos a las claves JSON según el orden de columnas indicado arriba.
+3. La columna de descripción suele ser la más ancha y contiene texto (nombre del producto). SIEMPRE léela completa, no la omitas.
+4. Si un valor es numérico (cantidad, precio, total), ponlo como número. Si es texto (descripción, código), como string.
+5. OMITE filas que sean totales, subtotales, IGV, descuentos, firmas o líneas en blanco.
+6. Si el fragmento no contiene productos, devuelve "filas_literales": [].
+7. NO repitas productos que ya vienen de un corte anterior. Solo extrae lo que ves en ESTA imagen.
+
+Responde ÚNICAMENTE con JSON válido:
 {
   "filas_literales": [
-    {
-      "encabezado_maestro_1": "valor extraído del bloque que corresponde a esta columna",
-      "encabezado_maestro_2": 123.45
-    }
+    { "clave1": valor1, "clave2": valor2, ... }
   ]
-}
-
-Reglas:
-1. Tienes PROHIBIDO inventar llaves nuevas. Solo puedes usar las llaves provistas en el arreglo de encabezados maestros. Si ves datos que no encajan o faltan, asócialos lógicamente a su encabezado o pon null.
-2. REGLA DE ORO: NO INVENTES DATOS NI PRODUCTOS QUE NO ESTÉN EN TU FRAGMENTO. NO CALCULAS NADA. Solo copia lo que ves.
-3. Si un valor es numérico, ponlo como número. Si es texto, como string.
-4. IGNORA y OMITE por completo cualquier fila que no sea un producto o servicio (ej. omite líneas de "Total a pagar", "IGV 18%", "Descuentos", firmas, etc.). Si extraes un impuesto como producto, el sistema fallará gravemente.
-5. Si en el bloque no hay productos (solo hay basura o totales), devuelve "filas_literales": [].`
+}`
 }
 
 /**
