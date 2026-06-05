@@ -75,7 +75,7 @@ export async function extraerCompraDeImagenes(
   // En V2 Extraction, los campos vienen en un diccionario genérico en la propiedad inference.prediction.fields
   // Dependiendo de la versión exacta de la librería V5, la ruta puede ser ligeramente diferente, 
   // pero usaremos una búsqueda segura.
-  const documentRes = apiResponse.document || apiResponse.inference?.document || (apiResponse as any)
+  const documentRes = (apiResponse as any).document || (apiResponse as any).inference?.document || (apiResponse as any)
   const prediction = documentRes?.inference?.prediction || documentRes?.prediction || {}
   const fields = prediction.fields || prediction
 
