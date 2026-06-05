@@ -102,7 +102,7 @@ export async function POST(request: Request) {
     const respuesta: RespuestaAIExtractCompras = {
       tipo_documento: extraccion.tipo_documento,
       es_formal: extraccion.es_formal,
-      ruc_proveedor: extraccion.ruc_proveedor,
+      ruc_proveedor: extraccion.ruc_emisor,
       razon_social_proveedor: extraccion.razon_social_emisor,
       numero_factura: extraccion.numero_factura,
       fecha_factura: extraccion.fecha_factura,
