@@ -1,6 +1,7 @@
 import { normalizarUnidad } from '@/lib/constantes/unidades'
 import {
   buildPromptOrquestadorCabecera,
+  buildPromptLectorCabezal,
   buildPromptExtractorLiteral,
   buildPromptDetectiveColumnas
 } from './prompts/compras-prompts'
@@ -267,7 +268,30 @@ export async function extraerCompraDeImagenes(
   const bloques = chunkText(textoCompleto, 25)
   console.log(`[Multi-Agent] Creados ${bloques.length} bloques de trabajo.`)
 
-  const promptTipeador = buildPromptExtractorLiteral()
+  console.log('[Multi-Agent] Leyendo cabeceras maestras de la tabla...')
+  const promptLectorCabezal = buildPromptLectorCabezal()
+  const bloqueCabecera = bloques.length > 0 ? (bloques[0] + '\n' + (bloques[1] || '')) : ''
+  
+  let cabezal: any = { encabezados_maestros: [] }
+  try {
+    if (process.env.OPENAI_API_KEY) {
+      cabezal = await llamarOpenAIText(promptLectorCabezal, bloqueCabecera)
+    } else if (process.env.ANTHROPIC_API_KEY) {
+      cabezal = await llamarClaudeText(promptLectorCabezal, bloqueCabecera)
+    } else {
+      cabezal = await llamarDeepSeekText(promptLectorCabezal, bloqueCabecera)
+    }
+  } catch (e) {
+    console.error('[Multi-Agent] Error en Lector Cabezal:', e)
+  }
+
+  const encabezadosMaestros = Array.isArray(cabezal.encabezados_maestros) && cabezal.encabezados_maestros.length > 0 
+    ? cabezal.encabezados_maestros 
+    : ['columna_1', 'columna_2', 'columna_3', 'columna_4']
+    
+  console.log('[Multi-Agent] Encabezados Maestros Detectados:', encabezadosMaestros)
+
+  const promptTipeador = buildPromptExtractorLiteral(encabezadosMaestros)
   const trabajadoresPromises = bloques.map((bloque, i) => {
     console.log(`[Multi-Agent] Lanzando Tipeador para bloque ${i + 1}...`)
     const userPrompt = `Transcribe este bloque de texto manteniendo las llaves literales de las columnas que infieras:\n\n${bloque}`

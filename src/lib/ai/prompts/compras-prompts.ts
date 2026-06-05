@@ -41,31 +41,55 @@ Reglas:
 }
 
 /**
- * AGENTE 2: Tipeador Literal (Constructor por Partes)
- * Extrae las filas de la tabla respetando los encabezados originales.
+ * AGENTE 1.5: Lector del Cabezal Maestro
+ * Extrae explícitamente los nombres de las columnas que la tabla usa.
  */
-export function buildPromptExtractorLiteral(): string {
+export function buildPromptLectorCabezal(): string {
+  return `Eres un Lector Analítico de Cabeceras de Tabla.
+Recibirás el comienzo del texto de una factura. Tu único trabajo es identificar dónde empieza la tabla de productos y extraer LITERAMENTE los títulos de las columnas (ej: "cant", "codigo", "descripcion", "precio.v", "total").
+
+Responde ÚNICAMENTE con JSON válido con esta estructura:
+{
+  "encabezados_maestros": ["titulo_columna_1", "titulo_columna_2", "..."]
+}
+
+Reglas:
+1. Copia los nombres EXACTOS que ves en la imagen/texto (ignorando mayúsculas/minúsculas).
+2. Si el OCR juntó dos nombres, sepáralos lógicamente si pertenecen a columnas distintas.
+3. El orden del arreglo debe respetar el orden de las columnas de izquierda a derecha.
+4. Si no hay tabla en este texto, devuelve [].`
+}
+
+/**
+ * AGENTE 2: Tipeador Literal (Constructor por Partes con Cabezal Inyectado)
+ * Extrae las filas de la tabla encajando los datos en las llaves del cabezal maestro.
+ */
+export function buildPromptExtractorLiteral(encabezados: string[]): string {
+  const encabezadosJson = JSON.stringify(encabezados)
+  
   return `Eres un Tipeador de Tablas Estricto.
 Recibirás un fragmento pequeño de una tabla de productos.
-Tu ÚNICO trabajo es transcribir los bienes y servicios que veas en ese bloque a un arreglo de objetos JSON.
+Ya sabemos que los encabezados originales de esta tabla son los siguientes:
+${encabezadosJson}
+
+Tu ÚNICO trabajo es transcribir los bienes y servicios que veas en este bloque a un arreglo de objetos JSON, usando ESTOS ENCABEZADOS MAESTROS como llaves.
 
 Responde ÚNICAMENTE con JSON válido con esta estructura:
 {
   "filas_literales": [
     {
-      "nombre_columna_1_segun_imagen": "valor",
-      "nombre_columna_2_segun_imagen": 123.45
+      "encabezado_maestro_1": "valor extraído del bloque que corresponde a esta columna",
+      "encabezado_maestro_2": 123.45
     }
   ]
 }
 
 Reglas:
-1. Usa como "llaves" (keys) los NOMBRES LITERALES de las columnas que infieras del texto (Ej: "cant", "descripcion", "precio.u", "precio.v", "total").
-2. Si el fragmento no contiene encabezados explícitos, infiere llaves consistentes (ej. "col1", "col2") o usa los nombres lógicos que parezcan tener los números.
-3. REGLA DE ORO: NO INVENTES DATOS. NO CALCULAS NADA. Solo copia lo que ves.
-4. Si un valor es numérico, ponlo como número. Si es texto, como string.
-5. IGNORA y OMITE por completo cualquier fila que no sea un producto o servicio (ej. omite líneas de "Total a pagar", "IGV 18%", "Descuentos", "Vuelto", firmas, etc.). Si extraes un impuesto como producto, el sistema fallará gravemente.
-6. Si en el bloque no hay productos (solo hay basura o totales), devuelve "filas_literales": [].`
+1. Tienes PROHIBIDO inventar llaves nuevas. Solo puedes usar las llaves provistas en el arreglo de encabezados maestros. Si ves datos que no encajan o faltan, asócialos lógicamente a su encabezado o pon null.
+2. REGLA DE ORO: NO INVENTES DATOS NI PRODUCTOS QUE NO ESTÉN EN TU FRAGMENTO. NO CALCULAS NADA. Solo copia lo que ves.
+3. Si un valor es numérico, ponlo como número. Si es texto, como string.
+4. IGNORA y OMITE por completo cualquier fila que no sea un producto o servicio (ej. omite líneas de "Total a pagar", "IGV 18%", "Descuentos", firmas, etc.). Si extraes un impuesto como producto, el sistema fallará gravemente.
+5. Si en el bloque no hay productos (solo hay basura o totales), devuelve "filas_literales": [].`
 }
 
 /**
