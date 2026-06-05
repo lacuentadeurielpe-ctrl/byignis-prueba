@@ -75,9 +75,15 @@ export async function extraerCompraDeImagenes(
   const prediction = documentRes?.inference?.prediction || documentRes?.prediction || {}
   const fields = prediction.fields || prediction
 
-  const getValue = (key: string) => {
-    let raw = fields[key]
-    if (!raw) return null
+  // Inject raw keys into warnings if nothing was found, for debugging
+  const foundKeys = Object.keys(fields)
+
+  const getValue = (key1: string, key2?: string, key3?: string) => {
+    let raw = fields[key1]
+    if (raw === undefined && key2) raw = fields[key2]
+    if (raw === undefined && key3) raw = fields[key3]
+
+    if (raw === undefined || raw === null) return null
     if (typeof raw === 'string' || typeof raw === 'number') return raw
     if (raw.value !== undefined) return raw.value
     if (raw.content !== undefined) return raw.content
@@ -85,14 +91,15 @@ export async function extraerCompraDeImagenes(
   }
 
   // 1. Extraer Cabecera
-  const supplierName = getValue('supplier_name')
+  const supplierName = getValue('supplier_name', 'Supplier Name', 'supplierName')
   
-  // RUC es una lista de objetos con "number" y "type"
-  const rucField = fields['supplier_company_registration']
+  // RUC
+  const rucField = fields['supplier_company_registration'] || fields['Supplier Company Registrations'] || fields['Supplier Registration']
   let rucEmisor: string | null = null
-  if (Array.isArray(rucField)) {
-    const reg = rucField.find((r: any) => r.number?.value || r.number || r.value)
-    rucEmisor = reg ? (reg.number?.value || reg.number?.content || reg.number || reg.value) : null
+  const rucArray = Array.isArray(rucField) ? rucField : (rucField?.values || rucField?.elements)
+  if (Array.isArray(rucArray)) {
+    const reg = rucArray.find((r: any) => r && (r.number?.value || r.number || r.value || typeof r === 'string'))
+    rucEmisor = reg ? (reg.number?.value || reg.number?.content || reg.number || reg.value || reg) : null
   } else if (rucField) {
     rucEmisor = rucField.number?.value || rucField.number || rucField.value || rucField
   }
@@ -107,8 +114,8 @@ export async function extraerCompraDeImagenes(
     advertencias.push('El RUC detectado era el de nuestra ferretería. Se omitió para el proveedor.')
   }
 
-  const invoiceNumber = getValue('invoice_number')
-  const invoiceDate = getValue('date')
+  const invoiceNumber = getValue('invoice_number', 'Invoice Number', 'invoiceNumber')
+  const invoiceDate = getValue('date', 'Invoice Date', 'date_issue')
   const tipoDocumentoDetectado = 'factura'
   const esFormal = !!rucEmisor
 
@@ -118,9 +125,9 @@ export async function extraerCompraDeImagenes(
     return isNaN(num) ? null : num
   }
 
-  const totalNeto = parseNum(getValue('total_amount'))
-  const igvAmount = parseNum(getValue('total_tax'))
-  const totalBruto = parseNum(getValue('total_net')) || (totalNeto !== null && igvAmount !== null ? totalNeto - igvAmount : null)
+  const totalNeto = parseNum(getValue('total_amount', 'Total Amount', 'totalAmount'))
+  const igvAmount = parseNum(getValue('total_tax', 'Total Tax', 'totalTax'))
+  const totalBruto = parseNum(getValue('total_net', 'Total Net', 'totalNet')) || (totalNeto !== null && igvAmount !== null ? totalNeto - igvAmount : null)
 
   const cabecera = {
     tipo_documento:      (esFormal ? tipoDocumentoDetectado : 'nota_venta') as ResultadoExtracionCompra['tipo_documento'],
@@ -135,25 +142,23 @@ export async function extraerCompraDeImagenes(
   }
 
   // 2. Extraer Líneas de Productos
-  const lineItemsField = fields['line_items']
+  const lineItemsField = fields['line_items'] || fields['Line Items'] || fields['lineItems'] || fields['items']
   const lineItemsRaw = Array.isArray(lineItemsField) ? lineItemsField : (lineItemsField?.values || lineItemsField?.elements || [])
   
   const items: ItemCompraExtraido[] = lineItemsRaw.map((line: any) => {
-    // Si la línea es un string directamente (fallo de formato), la descartamos o la tratamos como descripción
-    if (typeof line === 'string') {
-      return null
-    }
+    if (!line || typeof line === 'string') return null
 
-    const extractVal = (k: string) => {
-      let raw = line[k] || line.fields?.[k]
-      if (!raw) return null
+    const extractVal = (k1: string, k2?: string) => {
+      let raw = line[k1] || line.fields?.[k1]
+      if (raw === undefined && k2) raw = line[k2] || line.fields?.[k2]
+      if (raw === undefined || raw === null) return null
       return raw.value !== undefined ? raw.value : (raw.content !== undefined ? raw.content : raw)
     }
 
-    const desc = extractVal('description')
-    const qty = parseNum(extractVal('quantity'))
-    const price = parseNum(extractVal('unit_price'))
-    const total = parseNum(extractVal('total_price'))
+    const desc = extractVal('description', 'Description')
+    const qty = parseNum(extractVal('quantity', 'Quantity'))
+    const price = parseNum(extractVal('unit_price', 'Unit Price'))
+    const total = parseNum(extractVal('total_price', 'Total Price')) || parseNum(extractVal('total_amount', 'Total Amount'))
     
     return {
       descripcion:            desc ? String(desc).trim() : 'Producto sin nombre',
@@ -174,6 +179,11 @@ export async function extraerCompraDeImagenes(
 
   if (!cabecera.ruc_emisor && esFormal) {
     advertencias.push('No se detectó RUC válido del proveedor.')
+  }
+
+  // Debugging fields if critical data is missing
+  if (!cabecera.ruc_emisor || items.length === 0 || cabecera.total_neto === null) {
+    advertencias.push(`DEBUG KEYS: ${foundKeys.join(', ')}`)
   }
 
   console.log(`[Mindee V2] Éxito. RUC: ${cabecera.ruc_emisor}, Items: ${items.length}, Total: ${cabecera.total_neto}`)
