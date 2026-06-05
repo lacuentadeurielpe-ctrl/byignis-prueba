@@ -75,8 +75,8 @@ export async function extraerCompraDeImagenes(
   })
 
   const prompt = `
-    Eres un experto contable procesando facturas y boletas en Perú.
-    Extrae la siguiente información de las imágenes proporcionadas y devuélvela ESTRICTAMENTE en formato JSON usando esta estructura exacta (si no encuentras un valor, pon null, para números usa floats):
+    Eres un experto contable procesando facturas y boletas de ferreterías en Perú.
+    Extrae la siguiente información de las imágenes proporcionadas y devuélvela ESTRICTAMENTE en formato JSON usando esta estructura exacta (si no encuentras un valor, pon null, para números usa floats sin comillas):
 
     {
       "ruc_proveedor": "El número de RUC de 11 dígitos del proveedor que emite el documento",
@@ -84,23 +84,24 @@ export async function extraerCompraDeImagenes(
       "numero_documento": "El número de serie y correlativo (ej. F001-12345 o B001-987)",
       "fecha_emision": "La fecha de emisión en formato YYYY-MM-DD",
       "es_formal": true si detectas un RUC válido de 11 dígitos y parece una Factura/Boleta formal, false si es una nota de venta sin RUC,
-      "total_bruto": el valor de venta total (antes de impuestos) si está especificado explícitamente, sino null,
-      "igv": el monto del impuesto IGV si está especificado,
+      "total_bruto": el valor subtotal o valor de venta (el monto antes de aplicar el IGV),
+      "igv": el monto exacto del impuesto IGV (usualmente 18% en Perú),
       "total_neto": el importe total final a pagar (incluyendo impuestos),
       "productos": [
         {
-          "descripcion": "Nombre detallado del producto o servicio",
-          "cantidad": cantidad numérica,
-          "precio_unitario": el precio de compra unitario,
-          "subtotal": el precio total por esa línea (cantidad * precio_unitario)
+          "descripcion": "Nombre detallado del producto, incluyendo marca y medidas",
+          "cantidad": cantidad numérica de unidades,
+          "precio_unitario": PRECIO CON IGV INCLUIDO. Si la tabla de la factura muestra 'Valor Unitario' (sin IGV), multiplícalo por 1.18 para obtener el precio_unitario,
+          "subtotal": EL TOTAL DE LA LÍNEA CON IGV INCLUIDO. Si la tabla muestra importe sin IGV, multiplícalo por 1.18
         }
       ]
     }
 
-    Reglas adicionales:
-    - Asegúrate de limpiar los números (remueve símbolos de moneda como S/ o comas de miles, solo deja el punto decimal).
-    - El RUC de nuestra empresa (comprador) es ${rucComprador || 'desconocido'}, así que el ruc_proveedor DEBE SER DIFERENTE a este.
-    - Para los productos, extrae TODAS las líneas de la tabla de detalle. Si hay muchas líneas, extráelas todas. No inventes datos.
+    REGLAS CRÍTICAS DE EXTRACCIÓN:
+    1. Limpia los números (quita símbolos de moneda S/, comas de miles, solo deja el punto decimal).
+    2. El RUC de nuestra empresa (comprador) es ${rucComprador || 'desconocido'}, así que el ruc_proveedor DEBE SER DIFERENTE a este.
+    3. Para los productos: Es MUY COMÚN que las facturas en Perú detallen los ítems SIN IGV (Valor Unitario e Importe de línea). Tu trabajo es asegurar que el "precio_unitario" y el "subtotal" de cada producto en el JSON FINAL SÍ INCLUYAN EL IGV. Si la factura desglosa el IGV al final, haz el cálculo (multiplicar x 1.18) en cada ítem para que la suma matemática de todos los "subtotal" de los productos sea aproximadamente igual al "total_neto".
+    4. Extrae TODAS las filas sin saltarte absolutamente ninguna. No resumas.
   `
 
   let jsonResult: any = null
