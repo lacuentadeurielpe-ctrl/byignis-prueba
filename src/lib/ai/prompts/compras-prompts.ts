@@ -48,10 +48,20 @@ Responde ÚNICAMENTE con JSON válido con esta estructura:
   "items": [
     {
       "descripcion": "nombre o descripción del producto comprado",
-      "cantidad": número de unidades compradas (entero o decimal),
+      "cantidad": número de unidades compradas (entero o decimal) o null,
       "unidad": "código SUNAT de la unidad de medida (ver lista) o null",
-      "precio_compra_unitario": número del costo unitario de compra o null,
-      "subtotal": número cantidad * precio_compra_unitario o null
+      
+      // Montos unitarios (si figuran de forma explícita, de lo contrario null)
+      "valor_unitario": número del valor unitario sin IGV o null,
+      "precio_unitario": número del precio unitario con IGV o null,
+      
+      // Montos de línea/totales de fila (si figuran de forma explícita, de lo contrario null)
+      "subtotal_linea": número del valor de venta total de la línea (ex-IGV) o null,
+      "total_linea": número del precio de venta total de la línea (con IGV) o null,
+      
+      // Campos heredados para compatibilidad
+      "precio_compra_unitario": número estimado del costo unitario de compra (con o sin IGV) o null,
+      "subtotal": número estimado del total de la línea o null
     }
   ]
 }
@@ -59,8 +69,13 @@ Responde ÚNICAMENTE con JSON válido con esta estructura:
 UNIDADES VÁLIDAS (Usa EXACTAMENTE el código SUNAT):
 ${UNIDADES_PARA_PROMPT}
 
-Reglas:
+Reglas e Información de Contexto:
 1. Extrae todos los ítems legibles del documento.
 2. Mapea la unidad al código SUNAT. Por ejemplo: "unidad", "und", "pza", "tubo", "balde" -> NIU; "caja" -> BX; "bolsa" -> BG; "rollo" -> ROL; "metro" -> MTR; "kilo", "kg" -> KGM.
-3. Si no viene el precio unitario pero sí cantidad y subtotal, calcúlalo: subtotal / cantidad.`
+3. Terminología común en comprobantes peruanos (para guiar tu extracción):
+   - "Valor de Venta" o "V. Venta" en las filas de la tabla suele representar el subtotal de la línea antes de impuestos (cantidad x valor unitario). Mapealo a "subtotal_linea".
+   - "Precio de Venta" o "P. Venta" o "Importe" en las filas suele representar el total de la línea incluyendo impuestos (cantidad x precio unitario). Mapealo a "total_linea".
+   - "Valor Unitario" o "V/U" o "Precio Unit. sin IGV" es el costo unitario antes de impuestos. Mapealo a "valor_unitario".
+   - "Precio Unitario" o "P/U" o "Precio Unit. con IGV" es el costo unitario incluyendo impuestos. Mapealo a "precio_unitario".
+4. Si algunas de estas columnas no están presentes o legibles en el comprobante, simplemente colócalas como null. No fuerces cálculos complejos que puedan inducir a error; el sistema se encargará de resolver los valores faltantes matemáticamente.`
 }

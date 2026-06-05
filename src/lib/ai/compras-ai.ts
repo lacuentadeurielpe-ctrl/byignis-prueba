@@ -9,6 +9,10 @@ export interface ItemCompraExtraido {
   descripcion: string | null
   cantidad: number | null
   unidad: string | null // Código SUNAT o null
+  valor_unitario: number | null
+  precio_unitario: number | null
+  subtotal_linea: number | null
+  total_linea: number | null
   precio_compra_unitario: number | null
   subtotal: number | null
 }
@@ -284,14 +288,18 @@ export async function extraerCompraDeImagenes(
     const unidadNormalizada = item.unidad ? normalizarUnidad(item.unidad) : 'NIU'
     return {
       descripcion: item.descripcion?.trim() || 'Producto sin nombre',
-      cantidad: typeof item.cantidad === 'number' && item.cantidad > 0 ? item.cantidad : 1,
+      cantidad: typeof item.cantidad === 'number' && item.cantidad > 0 ? item.cantidad : null,
       unidad: unidadNormalizada,
-      precio_compra_unitario: typeof item.precio_compra_unitario === 'number' ? item.precio_compra_unitario : 0,
-      subtotal: typeof item.subtotal === 'number' ? item.subtotal : 0,
+      valor_unitario: typeof item.valor_unitario === 'number' ? item.valor_unitario : null,
+      precio_unitario: typeof item.precio_unitario === 'number' ? item.precio_unitario : null,
+      subtotal_linea: typeof item.subtotal_linea === 'number' ? item.subtotal_linea : null,
+      total_linea: typeof item.total_linea === 'number' ? item.total_linea : null,
+      precio_compra_unitario: typeof item.precio_compra_unitario === 'number' ? item.precio_compra_unitario : null,
+      subtotal: typeof item.subtotal === 'number' ? item.subtotal : null,
     }
   })
 
-  // ── Validación Cruzada e Alertas ───────────────────────────────────────────
+  // ── Validación de Cabecera ─────────────────────────────────────────────────
   const advertencias: string[] = []
 
   // Validar si faltan datos en la cabecera
@@ -303,30 +311,6 @@ export async function extraerCompraDeImagenes(
   }
   if (!cabecera.fecha_factura) {
     advertencias.push('Fecha de emisión ausente, se usará la fecha de hoy.')
-  }
-
-  // Validar precios e importes
-  let sumaSubtotales = 0
-  let itemsSinPrecio = 0
-
-  items.forEach((item) => {
-    if (item.precio_compra_unitario === 0 || item.subtotal === 0) {
-      itemsSinPrecio++
-    }
-    sumaSubtotales += item.subtotal || 0
-  })
-
-  if (itemsSinPrecio > 0) {
-    advertencias.push(`Detectamos ${itemsSinPrecio} ítems sin precio de compra. Deberás completarlos manualmente.`)
-  }
-
-  if (cabecera.total_neto && sumaSubtotales > 0) {
-    const diferencia = Math.abs(cabecera.total_neto - sumaSubtotales)
-    if (diferencia > 0.5) {
-      advertencias.push(
-        `Discrepancia en importes: El total extraído es S/. ${cabecera.total_neto.toFixed(2)}, pero la suma de los ítems es S/. ${sumaSubtotales.toFixed(2)}.`
-      )
-    }
   }
 
   return {
