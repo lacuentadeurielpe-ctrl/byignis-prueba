@@ -9,6 +9,8 @@
 
 import { normalizarUnidad } from '@/lib/constantes/unidades'
 
+import { GoogleGenerativeAI } from '@google/generative-ai'
+
 // ── Interfaces públicas (mantienen compatibilidad 100%) ─────────────
 export interface ItemCompraExtraido {
   descripcion:             string | null
@@ -36,157 +38,124 @@ export interface ResultadoExtracionCompra {
   advertencias:        string[]
 }
 
-import * as mindee from 'mindee'
-
 export async function extraerCompraDeImagenes(
   imagenes: { base64: string; mimeType: string }[],
-  rucComprador: string | null = null
+  rucComprador?: string | null
 ): Promise<ResultadoExtracionCompra> {
-  if (imagenes.length === 0) throw new Error('No se enviaron imágenes')
-
-  const apiKey = process.env.MINDEE_API_KEY
-  if (!apiKey) throw new Error('MINDEE_API_KEY no está configurada en .env')
-
-  const mindeeClient = new mindee.Client({ apiKey })
   const advertencias: string[] = []
 
-  console.log('[Mindee] Iniciando extracción de factura con modelo personalizado V2...')
+  if (imagenes.length === 0) {
+    throw new Error('No se enviaron imágenes para analizar.')
+  }
 
-  const imgData = imagenes[0]
-  const cleanB64 = imgData.base64.replace(/^data:[^;]+;base64,/, '')
-  const ext = imgData.mimeType === 'application/pdf' ? 'pdf' : 
-              imgData.mimeType.includes('png') ? 'png' : 'jpg'
-  
-  const inputSource = new mindee.Base64Input({ inputString: cleanB64, filename: `factura.${ext}` })
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) {
+    throw new Error('Falta configurar la llave GOOGLE_GENERATIVE_AI_API_KEY en las variables de entorno.')
+  }
 
-  let apiResponse
+  console.log('[Gemini] Iniciando extracción de factura con gemini-1.5-flash...')
+
+  const genAI = new GoogleGenerativeAI(apiKey)
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-1.5-flash',
+    generationConfig: { responseMimeType: 'application/json' }
+  })
+
+  const imageParts = imagenes.map(img => {
+    const base64Data = img.base64.replace(/^data:[^;]+;base64,/, '')
+    const mimeType = img.mimeType === 'application/pdf' ? 'application/pdf' : 
+                     img.mimeType.includes('png') ? 'image/png' : 'image/jpeg'
+    
+    return {
+      inlineData: {
+        data: base64Data,
+        mimeType
+      }
+    }
+  })
+
+  const prompt = `
+    Eres un experto contable procesando facturas y boletas en Perú.
+    Extrae la siguiente información de las imágenes proporcionadas y devuélvela ESTRICTAMENTE en formato JSON usando esta estructura exacta (si no encuentras un valor, pon null, para números usa floats):
+
+    {
+      "ruc_proveedor": "El número de RUC de 11 dígitos del proveedor que emite el documento",
+      "razon_social": "El nombre o razón social del proveedor",
+      "numero_documento": "El número de serie y correlativo (ej. F001-12345 o B001-987)",
+      "fecha_emision": "La fecha de emisión en formato YYYY-MM-DD",
+      "es_formal": true si detectas un RUC válido de 11 dígitos y parece una Factura/Boleta formal, false si es una nota de venta sin RUC,
+      "total_bruto": el valor de venta total (antes de impuestos) si está especificado explícitamente, sino null,
+      "igv": el monto del impuesto IGV si está especificado,
+      "total_neto": el importe total final a pagar (incluyendo impuestos),
+      "productos": [
+        {
+          "descripcion": "Nombre detallado del producto o servicio",
+          "cantidad": cantidad numérica,
+          "precio_unitario": el precio de compra unitario,
+          "subtotal": el precio total por esa línea (cantidad * precio_unitario)
+        }
+      ]
+    }
+
+    Reglas adicionales:
+    - Asegúrate de limpiar los números (remueve símbolos de moneda como S/ o comas de miles, solo deja el punto decimal).
+    - El RUC de nuestra empresa (comprador) es ${rucComprador || 'desconocido'}, así que el ruc_proveedor DEBE SER DIFERENTE a este.
+    - Para los productos, extrae TODAS las líneas de la tabla de detalle. Si hay muchas líneas, extráelas todas. No inventes datos.
+  `
+
+  let jsonResult: any = null
+
   try {
-    apiResponse = await mindeeClient.enqueueAndGetResult(
-      mindee.product.Extraction,
-      inputSource,
-      { modelId: '8ce28e2f-df16-48a9-a805-bba38150f597' }
-    )
+    const result = await model.generateContent([prompt, ...imageParts])
+    const textResponse = result.response.text()
+    const cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim()
+    jsonResult = JSON.parse(cleanJson)
   } catch (error: any) {
-    console.error('[Mindee] Error de API:', error)
-    throw new Error('Error al conectar con Mindee API: ' + error.message)
+    console.error('[Gemini] Error al comunicarse con Gemini:', error)
+    throw new Error('Error al analizar la imagen con IA: ' + error.message)
   }
 
-  const documentRes = (apiResponse as any).document || (apiResponse as any).inference?.document || (apiResponse as any)
-  const prediction = documentRes?.inference?.prediction || documentRes?.prediction || {}
-  const fields = prediction.fields || prediction
-
-  // Inject raw keys into warnings if nothing was found, for debugging
-  const foundKeys = Object.keys(fields)
-
-  const getValue = (key1: string, key2?: string, key3?: string) => {
-    let raw = fields[key1]
-    if (raw === undefined && key2) raw = fields[key2]
-    if (raw === undefined && key3) raw = fields[key3]
-
-    if (raw === undefined || raw === null) return null
-    if (typeof raw === 'string' || typeof raw === 'number') return raw
-    if (raw.value !== undefined) return raw.value
-    if (raw.content !== undefined) return raw.content
-    return null
-  }
-
-  // 1. Extraer Cabecera
-  const supplierName = getValue('supplier_name', 'Supplier Name', 'supplierName')
-  
-  // RUC
-  const rucField = fields['supplier_company_registration'] || fields['Supplier Company Registrations'] || fields['Supplier Registration']
-  let rucEmisor: string | null = null
-  const rucArray = Array.isArray(rucField) ? rucField : (rucField?.values || rucField?.elements)
-  if (Array.isArray(rucArray)) {
-    const reg = rucArray.find((r: any) => r && (r.number?.value || r.number || r.value || typeof r === 'string'))
-    rucEmisor = reg ? (reg.number?.value || reg.number?.content || reg.number || reg.value || reg) : null
-  } else if (rucField) {
-    rucEmisor = rucField.number?.value || rucField.number || rucField.value || rucField
-  }
-  
+  let rucEmisor = jsonResult.ruc_proveedor
   if (rucEmisor && typeof rucEmisor === 'string') {
     const digits = rucEmisor.replace(/\D/g, '')
     rucEmisor = digits.length === 11 ? digits : rucEmisor
   }
 
-  if (rucEmisor && rucComprador && rucEmisor === rucComprador) {
-    rucEmisor = null
-    advertencias.push('El RUC detectado era el de nuestra ferretería. Se omitió para el proveedor.')
-  }
+  const esFormal = Boolean(jsonResult.es_formal && rucEmisor)
 
-  const invoiceNumber = getValue('invoice_number', 'Invoice Number', 'invoiceNumber')
-  const invoiceDate = getValue('date', 'Invoice Date', 'date_issue')
-  const tipoDocumentoDetectado = 'factura'
-  const esFormal = !!rucEmisor
-
-  const parseNum = (val: any) => {
-    if (val == null) return null
-    const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''))
-    return isNaN(num) ? null : num
-  }
-
-  const totalNeto = parseNum(getValue('total_amount', 'Total Amount', 'totalAmount'))
-  const igvAmount = parseNum(getValue('total_tax', 'Total Tax', 'totalTax'))
-  const totalBruto = parseNum(getValue('total_net', 'Total Net', 'totalNet')) || (totalNeto !== null && igvAmount !== null ? totalNeto - igvAmount : null)
-
-  const cabecera = {
-    tipo_documento:      (esFormal ? tipoDocumentoDetectado : 'nota_venta') as ResultadoExtracionCompra['tipo_documento'],
-    es_formal:           esFormal,
-    ruc_emisor:          rucEmisor,
-    razon_social_emisor: supplierName || null,
-    numero_factura:      invoiceNumber || null,
-    fecha_factura:       invoiceDate || null,
-    total_bruto:         totalBruto,
-    igv:                 igvAmount,
-    total_neto:          totalNeto,
-  }
-
-  // 2. Extraer Líneas de Productos
-  const lineItemsField = fields['line_items'] || fields['Line Items'] || fields['lineItems'] || fields['items']
-  const lineItemsRaw = Array.isArray(lineItemsField) ? lineItemsField : (lineItemsField?.values || lineItemsField?.elements || [])
-  
-  const items: ItemCompraExtraido[] = lineItemsRaw.map((line: any) => {
-    if (!line || typeof line === 'string') return null
-
-    const extractVal = (k1: string, k2?: string) => {
-      let raw = line[k1] || line.fields?.[k1]
-      if (raw === undefined && k2) raw = line[k2] || line.fields?.[k2]
-      if (raw === undefined || raw === null) return null
-      return raw.value !== undefined ? raw.value : (raw.content !== undefined ? raw.content : raw)
-    }
-
-    const desc = extractVal('description', 'Description')
-    const qty = parseNum(extractVal('quantity', 'Quantity'))
-    const price = parseNum(extractVal('unit_price', 'Unit Price'))
-    const total = parseNum(extractVal('total_price', 'Total Price')) || parseNum(extractVal('total_amount', 'Total Amount'))
-    
-    return {
-      descripcion:            desc ? String(desc).trim() : 'Producto sin nombre',
-      cantidad:               qty,
-      unidad:                 'NIU',
-      valor_unitario:         null,
-      precio_unitario:        null,
-      subtotal_linea:         null,
-      total_linea:            null,
-      precio_compra_unitario: price,
-      subtotal:               total,
-    }
-  }).filter((item: any) => item !== null && (item.descripcion !== 'Producto sin nombre' || item.cantidad !== null)) as ItemCompraExtraido[]
+  const items: ItemCompraExtraido[] = (jsonResult.productos || []).map((p: any) => ({
+    descripcion: p.descripcion ? String(p.descripcion).trim() : 'Producto sin nombre',
+    cantidad: typeof p.cantidad === 'number' ? p.cantidad : parseFloat(p.cantidad) || null,
+    unidad: 'NIU',
+    valor_unitario: null,
+    precio_unitario: null,
+    subtotal_linea: null,
+    total_linea: null,
+    precio_compra_unitario: typeof p.precio_unitario === 'number' ? p.precio_unitario : parseFloat(p.precio_unitario) || null,
+    subtotal: typeof p.subtotal === 'number' ? p.subtotal : parseFloat(p.subtotal) || null,
+  })).filter((item: ItemCompraExtraido) => item.descripcion !== 'Producto sin nombre' || item.cantidad !== null)
 
   if (items.length === 0) {
-    advertencias.push('La IA no detectó ninguna línea de producto o la tabla no coincide con el esquema.')
+    advertencias.push('La IA no detectó ninguna línea de producto en la imagen proporcionada.')
   }
 
-  if (!cabecera.ruc_emisor && esFormal) {
-    advertencias.push('No se detectó RUC válido del proveedor.')
+  if (!rucEmisor && jsonResult.es_formal) {
+    advertencias.push('El documento parece formal pero no se pudo leer el RUC del proveedor.')
   }
 
-  // Debugging fields if critical data is missing
-  if (!cabecera.ruc_emisor || items.length === 0 || cabecera.total_neto === null) {
-    advertencias.push(`DEBUG KEYS: ${foundKeys.join(', ')}`)
+  const cabecera = {
+    tipo_documento:      (esFormal ? 'factura' : 'nota_venta') as ResultadoExtracionCompra['tipo_documento'],
+    es_formal:           esFormal,
+    ruc_emisor:          rucEmisor || null,
+    razon_social_emisor: jsonResult.razon_social || null,
+    numero_factura:      jsonResult.numero_documento || null,
+    fecha_factura:       jsonResult.fecha_emision || null,
+    total_bruto:         typeof jsonResult.total_bruto === 'number' ? jsonResult.total_bruto : parseFloat(jsonResult.total_bruto) || null,
+    igv:                 typeof jsonResult.igv === 'number' ? jsonResult.igv : parseFloat(jsonResult.igv) || null,
+    total_neto:          typeof jsonResult.total_neto === 'number' ? jsonResult.total_neto : parseFloat(jsonResult.total_neto) || null,
   }
 
-  console.log(`[Mindee V2] Éxito. RUC: ${cabecera.ruc_emisor}, Items: ${items.length}, Total: ${cabecera.total_neto}`)
+  console.log(`[Gemini V1] Éxito. RUC: ${cabecera.ruc_emisor}, Items: ${items.length}, Total: ${cabecera.total_neto}`)
 
   return { ...cabecera, items, advertencias }
 }

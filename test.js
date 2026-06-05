@@ -1,0 +1,1 @@
+const mindee = require('mindee'); console.log(mindee.product.InvoiceV4?.parametersClass); console.log(mindee.product.invoice?.InvoiceV4?.parametersClass); console.log(mindee.product.InvoiceSplitterV1?.parametersClass);  
