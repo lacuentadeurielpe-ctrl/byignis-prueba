@@ -15,12 +15,15 @@ import sharp from 'sharp'
 import { buildPromptExtraccionCompleta, buildPromptCabecera } from './prompts/compras-prompts'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
-const OPENAI_BASE   = 'https://api.openai.com/v1'
+const OPENAI_BASE    = 'https://api.openai.com/v1'
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1'
 
-// Altura máxima de cada rebanada ANTES de anclar la cabecera
-const MAX_SLICE_H   = 1400   // px — suficientemente alto para capturar ~15-20 filas
-const HEADER_H      = 220    // px — zona de cabecera que se reutiliza en cada rebanada
+// ↓ 700px ≈ 12-15 filas de producto → el modelo no se satura
+const MAX_SLICE_H = 700   // px por rebanada de contenido (sin contar cabecera)
+const HEADER_H    = 250   // px de cabecera visual anclada en cada rebanada
+
+// Tokens máximos de respuesta — 8 192 evita truncado en facturas largas
+const MAX_TOKENS_VISION = 8192
 
 // ── Interfaces públicas ───────────────────────────────────────────────────────
 export interface ItemCompraExtraido {
@@ -55,15 +58,35 @@ function cleanBase64(b64: string): string {
 }
 
 function safeParseJSON(text: string): any {
-  // Intento directo
+  // 1. Intento directo
   try { return JSON.parse(text) } catch {}
-  // Eliminar code fences
-  const m = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
-  if (m) { try { return JSON.parse(m[1]) } catch {} }
-  // Extraer primer objeto/array
+
+  // 2. Eliminar code fences
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  if (fence) { try { return JSON.parse(fence[1]) } catch {} }
+
+  // 3. Extraer desde primer '{' hasta último '}'
   const s = text.indexOf('{'), e = text.lastIndexOf('}')
   if (s !== -1 && e !== -1) { try { return JSON.parse(text.slice(s, e + 1)) } catch {} }
-  throw new Error('JSON inválido de la IA: ' + text.slice(0, 200))
+
+  // 4. JSON truncado — el modelo se quedó sin tokens a mitad del array.
+  //    Cerramos el último elemento incompleto y el objeto padre.
+  if (s !== -1) {
+    let partial = text.slice(s)
+    // Eliminar última coma suelta
+    partial = partial.replace(/,\s*$/, '')
+    // Cerrar array si está abierto
+    const openBrackets = (partial.match(/\[/g) || []).length
+    const closeBrackets = (partial.match(/\]/g) || []).length
+    for (let i = 0; i < openBrackets - closeBrackets; i++) partial += ']'
+    // Cerrar objeto si está abierto
+    const openBraces = (partial.match(/\{/g) || []).length
+    const closeBraces = (partial.match(/\}/g) || []).length
+    for (let i = 0; i < openBraces - closeBraces; i++) partial += '}'
+    try { return JSON.parse(partial) } catch {}
+  }
+
+  throw new Error('JSON inválido de la IA: ' + text.slice(0, 300))
 }
 
 function toNumber(val: any): number | null {
@@ -91,7 +114,8 @@ function toNumber(val: any): number | null {
 async function callOpenAIVision(
   systemPrompt: string,
   images: { base64: string; mimeType: string }[],
-  model = 'gpt-4o'
+  model = 'gpt-4o',
+  maxTokens = MAX_TOKENS_VISION
 ): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY no configurada')
@@ -109,7 +133,7 @@ async function callOpenAIVision(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
@@ -153,7 +177,7 @@ async function callClaudeVision(
     },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 4096,
+      max_tokens: MAX_TOKENS_VISION,
       system: systemPrompt,
       messages: [{ role: 'user', content: userContent }]
     })
@@ -175,12 +199,11 @@ async function callVision(
   images: { base64: string; mimeType: string }[]
 ): Promise<any> {
   if (process.env.OPENAI_API_KEY) {
-    // Intentamos gpt-4o primero; si falla por alguna razón, gpt-4o-mini
     try {
-      return await callOpenAIVision(systemPrompt, images, 'gpt-4o')
+      return await callOpenAIVision(systemPrompt, images, 'gpt-4o', MAX_TOKENS_VISION)
     } catch (e: any) {
-      console.warn('[Vision] gpt-4o falló, intentando gpt-4o-mini:', e.message)
-      return await callOpenAIVision(systemPrompt, images, 'gpt-4o-mini')
+      console.warn('[Vision] gpt-4o falló, fallback a gpt-4o-mini:', e.message)
+      return await callOpenAIVision(systemPrompt, images, 'gpt-4o-mini', MAX_TOKENS_VISION)
     }
   }
   if (process.env.ANTHROPIC_API_KEY) {
@@ -213,48 +236,54 @@ async function sliceWithHeader(
       return [{ base64: clean, mimeType }]
     }
 
-    // Extraemos la franja de cabecera una sola vez
+    // Extraemos la franja de cabecera una sola vez — con nitidez mejorada
     const headerBuf = await sharp(buf)
       .extract({ left: 0, top: 0, width: w, height: Math.min(HEADER_H, h) })
+      .sharpen({ sigma: 1.2 })   // mejora la nitidez del texto
       .toBuffer()
 
     const slices: { base64: string; mimeType: string }[] = []
 
-    let y = 0
+    // La primera rebanada COMIENZA desde HEADER_H para no duplicar la cabecera
+    // cuando se pega abajo de la franja anclada (excepto si la imagen es corta).
+    // Lógica: siempre generamos rebanadas de SOLO el cuerpo de la tabla,
+    // y luego pegamos la cabecera encima. Así el modelo siempre ve:
+    //   [cabecera visual] + [chunk de ~15 filas]
+    let y = HEADER_H  // empezamos justo después de la cabecera
     while (y < h) {
-      const isFirst    = y === 0
       const sliceH     = Math.min(MAX_SLICE_H, h - y)
+      if (sliceH <= 0) break
+
       const contentBuf = await sharp(buf)
         .extract({ left: 0, top: y, width: w, height: sliceH })
+        .sharpen({ sigma: 1.2 })
         .toBuffer()
 
-      let finalBuf: Buffer
+      // Pegar cabecera arriba + contenido abajo
+      const finalBuf = await sharp({
+        create: {
+          width:    w,
+          height:   HEADER_H + sliceH,
+          channels: 3 as const,
+          background: { r: 255, g: 255, b: 255 }
+        }
+      })
+        .composite([
+          { input: headerBuf,  top: 0,       left: 0 },
+          { input: contentBuf, top: HEADER_H, left: 0 }
+        ])
+        .jpeg({ quality: 92 })
+        .toBuffer()
 
-      if (isFirst) {
-        // Primera rebanada: ya tiene la cabecera incluida
-        finalBuf = contentBuf
-      } else {
-        // Rebanadas siguientes: pegar cabecera arriba + contenido abajo
-        finalBuf = await sharp({
-          create: {
-            width:     w,
-            height:    HEADER_H + sliceH,
-            channels:  3 as const,
-            background: { r: 255, g: 255, b: 255 }
-          }
-        })
-          .composite([
-            { input: headerBuf,  top: 0,       left: 0 },
-            { input: contentBuf, top: HEADER_H, left: 0 }
-          ])
-          .jpeg({ quality: 90 })
-          .toBuffer()
-      }
-
-      slices.push({ base64: finalBuf.toString('base64'), mimeType })
+      slices.push({ base64: finalBuf.toString('base64'), mimeType: 'image/jpeg' })
 
       y += sliceH
-      if (y >= h) break
+    }
+
+    // Si la imagen es tan corta que no hay nada después de la cabecera
+    // (y===HEADER_H y slices está vacío), enviamos la imagen completa original.
+    if (slices.length === 0) {
+      slices.push({ base64: clean, mimeType })
     }
 
     console.log(`[Stitching] ${slices.length} rebanadas con cabecera anclada (${h}px total)`)

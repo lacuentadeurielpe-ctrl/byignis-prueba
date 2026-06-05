@@ -53,44 +53,65 @@ Reglas:
  * Prompt 2: Extracción de ítems de la tabla de productos
  *
  * La imagen SIEMPRE contiene visualmente los encabezados de columna
- * (porque aplicamos stitching de cabecera antes de enviar).
- * El modelo debe leer los encabezados de la propia imagen y extraer filas.
+ * (stitching de cabecera anclado en cada rebanada).
  */
 export function buildPromptExtraccionCompleta(): string {
-  return `Eres un extractor experto de tablas de facturas de compra peruanas (ferreterías, distribuidoras, etc.).
+  return `Eres un extractor de precisión quirúrgica para tablas de facturas de compra peruanas.
 
-La imagen que recibirás muestra UNA SECCIÓN de la tabla de productos de una factura.
-La imagen SIEMPRE incluye los encabezados de columna en la parte superior (aunque sea repetida).
+La imagen muestra UNA SECCIÓN de la tabla de productos. La FILA SUPERIOR contiene los encabezados de columna (ej: "Código", "Cant.", "Medida", "Descripción", "V.V. Unit.", "P.V. Unit.", "Importe").
 
-TU TAREA:
-Leer la imagen fila por fila y extraer CADA PRODUCTO con los siguientes campos:
+═══ INSTRUCCIONES DE LECTURA ════════════════════════════════
+
+PASO 1 — Lee los encabezados:
+Identifica visualmente qué columna corresponde a cada campo. Los nombres varían por factura:
+- Descripción: la columna más ancha con texto (nombres de productos)
+- Cantidad: columna numérica pequeña (enteros: 1, 2, 5, 10, 100...)
+- Código: identificador alfanumérico del proveedor (puede ser "006341", "AB-123", etc.)
+- Precio unitario: precio por 1 unidad
+- Importe/Total línea: cantidad × precio unitario
+
+PASO 2 — Lee fila por fila:
+Para cada fila de producto extrae los valores EXACTAMENTE como aparecen visualmente.
+
+═══ REGLAS ABSOLUTAS ════════════════════════════════════════
+
+R1. DESCRIPCIÓN: Copia el texto completo de la celda de descripción. Incluye medidas, materiales y especificaciones (ej: "CODO PVC 3/4\" x 90° PESADO", "ALAMBRE N°8 GALV. x 25KG"). NUNCA pongas null si hay texto visible.
+
+R2. CANTIDAD vs CÓDIGO: Son columnas DISTINTAS.
+    - Si una columna se llama "Cód.", "Código", "Ref." → es el CÓDIGO, NO la cantidad.
+    - Si una columna se llama "Cant.", "Ctd.", "Qty", "Cantidad" → esa es la CANTIDAD.
+    - La cantidad es casi siempre un número entero sin decimales y pequeño (rango típico: 1–500).
+    - Un código de 5+ dígitos como "006341" NUNCA es una cantidad.
+
+R3. NÚMEROS LITERALES: Copia los números EXACTAMENTE como los ves. No redondees ni recalcules.
+    - "1,234.56" → 1234.56
+    - "1.234,56" → 1234.56  (formato peruano: punto=miles, coma=decimales)
+    - "15.00" → 15.00
+    - "3" → 3
+
+R4. OMITE estas filas: totales, subtotales, "IGV 18%", descuentos globales, leyendas, firmas, líneas en blanco.
+
+R5. Si un campo no aparece en la factura, devuelve null (no inventes valores).
+
+R6. Unidad de medida: usa código SUNAT. Ejemplos: NIU (unidad), KGM (kilo), MTR (metro), BLL (balde), BX (caja), BAG (bolsa). Si no puedes determinarla → "NIU".
+
+═══ FORMATO DE RESPUESTA ════════════════════════════════════
+
+Responde ÚNICAMENTE con este JSON (sin texto adicional, sin markdown):
 
 {
   "items": [
     {
-      "descripcion":            "<texto completo del nombre/descripción del producto>",
-      "cantidad":               <número>,
-      "unidad":                 "<código de unidad: NIU, KGM, MTR, etc.>",
-      "valor_unitario":         <número o null — precio sin IGV por unidad>,
-      "precio_unitario":        <número o null — precio con IGV por unidad>,
-      "precio_compra_unitario": <número o null — el precio de compra real por unidad>,
-      "subtotal":               <número o null — importe total de esa línea>
+      "descripcion":            "<nombre completo del producto>",
+      "cantidad":               <número entero>,
+      "unidad":                 "<código SUNAT>",
+      "valor_unitario":         <precio sin IGV o null>,
+      "precio_unitario":        <precio con IGV o null>,
+      "precio_compra_unitario": <precio de compra por unidad o null>,
+      "subtotal":               <importe de la línea o null>
     }
   ]
-}
-
-REGLAS CRÍTICAS:
-1. Lee los encabezados de la imagen para saber qué columna es qué. NO asumas un orden fijo.
-2. "descripcion" es la columna de texto más ancha — contiene el nombre completo del producto (ej: "NIPLE BRONCE 1/2\\"  X 2\\""). NUNCA la dejes vacía si hay texto en esa celda.
-3. "cantidad" es la cantidad comprada (generalmente un número entero pequeño como 5, 12, 100). NO confundas el código del producto (6 dígitos como "006341") con la cantidad.
-4. El campo "código" o "cod" de la factura es un identificador interno del proveedor — NO es la cantidad.
-5. Para "precio_compra_unitario" usa el precio unitario real de compra (valor neto o precio de venta, según lo que tenga la factura).
-6. Para "subtotal" usa el importe total de la línea (cantidad × precio unitario).
-7. OMITE filas de totales, subtotales, IGV, descuentos globales, firmas o líneas vacías.
-8. Si un campo no existe en la imagen, devuelve null para ese campo.
-9. La unidad debe ser un código SUNAT estándar: ${UNIDADES_LISTA}. Si no puedes determinarla, usa "NIU".
-
-IMPORTANTE: Responde SOLO con el JSON. Sin explicaciones.`
+}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
