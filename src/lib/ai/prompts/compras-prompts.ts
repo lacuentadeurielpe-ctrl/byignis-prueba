@@ -5,16 +5,21 @@ const UNIDADES_PARA_PROMPT = UNIDADES_SUNAT
   .join(', ')
 
 /**
- * Construye el prompt de sistema para el agente de visión consolidado.
- * Extrae la cabecera del documento y las filas de productos de forma plana (líneas de texto).
+ * AGENTE 1: Orquestador / Cabecera
+ * Extrae los metadatos principales del documento usando visión o texto.
+ * Se encarga de la lógica inversa del RUC para identificar correctamente al proveedor.
  */
-export function buildPromptVisionConsolidado(rucComprador: string | null): string {
+export function buildPromptOrquestadorCabecera(rucComprador: string | null): string {
   const rucCompradorInstruccion = rucComprador
-    ? `EL RUC DEL COMPRADOR (NOSOTROS) ES: "${rucComprador}". Tu objetivo es extraer el RUC del EMISOR/PROVEEDOR (Vendedor). Por lo tanto, el campo ruc_emisor DEBE SER DIFERENTE A "${rucComprador}". Si ves el RUC "${rucComprador}" en el documento, es el RUC del adquiriente/cliente, por lo que NO debes colocarlo en ruc_emisor.`
+    ? `LÓGICA INVERSA DE RUC CRÍTICA:
+EL RUC DEL COMPRADOR (NOSOTROS) ES: "${rucComprador}". 
+Tu objetivo es extraer el RUC del EMISOR/PROVEEDOR (Vendedor). 
+Por lo tanto, el campo ruc_emisor DEBE SER DIFERENTE A "${rucComprador}". 
+Si ves el RUC "${rucComprador}" en el documento, es el RUC del adquiriente/cliente, por lo que NO debes colocarlo en ruc_emisor. Busca el otro RUC que pertenezca al proveedor.`
     : 'Tu objetivo es extraer el RUC del emisor/proveedor (vendedor) que emite la factura o boleta.'
 
-  return `Eres un agente contable experto en ferreterías peruanas.
-Tu objetivo es analizar la/s imagen/es de una compra (factura, boleta, nota de venta) y clasificar el tipo de documento, extraer los metadatos de cabecera y transcribir las filas de la tabla de productos de forma plana.
+  return `Eres un agente contable Orquestador experto en ferreterías peruanas.
+Tu objetivo es analizar un documento de compra (factura, boleta, nota de venta) y extraer únicamente los metadatos de la cabecera. NO te preocupes por los productos o la tabla, eso lo harán otros agentes.
 
 Responde ÚNICAMENTE con JSON válido con esta estructura:
 {
@@ -25,11 +30,7 @@ Responde ÚNICAMENTE con JSON válido con esta estructura:
   "fecha_factura": "fecha en formato YYYY-MM-DD o null",
   "total_bruto": número base imponible (subtotal antes de IGV si es factura formal, de lo contrario total) o null,
   "igv": número de IGV extraído o calculado (18% si es factura formal, de lo contrario 0) o null,
-  "total_neto": número del monto total a pagar o null,
-  "lineas_tabla": [
-    "transcripción exacta de la línea 1 de la tabla de productos",
-    "transcripción exacta de la línea 2 de la tabla de productos"
-  ]
+  "total_neto": número del monto total a pagar o null
 }
 
 Reglas:
@@ -37,36 +38,31 @@ Reglas:
 2. Si es una Factura, extrae o calcula el total_bruto (Base Imponible) e igv (18% de total_bruto).
 3. Si es Boleta o Nota de Venta, total_neto es igual a total_bruto, y el igv debe ser 0.
 4. Responde en soles peruanos (S/).
-5. ${rucCompradorInstruccion}
-6. En "lineas_tabla", debes colocar una lista de cadenas de texto. Cada cadena debe transcribir horizontalmente TODO el contenido de una fila de la tabla de productos (incluyendo cantidad, descripción, códigos, precios unitarios y totales de fila). No dejes fuera ningún ítem. Transcribe fielmente lo que ves en la imagen de izquierda a derecha. Si hay múltiples páginas, junta todas las filas en este único arreglo.`
+5. ${rucCompradorInstruccion}`
 }
 
 /**
- * Construye el prompt de sistema para el agente de texto que parsea las líneas de tabla en JSON.
+ * AGENTE 2: Extractor de Fragmento
+ * Analiza un bloque/fragmento de texto y extrae su propia tabla interna.
  */
-export function buildPromptParserTextoItems(): string {
-  return `Eres un agente de inventario experto en ferreterías peruanas y estructuración de datos.
-Tu objetivo es analizar una lista de renglones/líneas transcritas de una tabla de compras y estructurar cada fila en un formato JSON limpio y estandarizado.
+export function buildPromptExtractorFragmento(): string {
+  return `Eres un Agente Extractor especializado en interpretar pedazos aislados de una factura de ferretería.
+Recibirás un bloque de texto que representa UNA PARTE de una tabla de productos.
+Tu trabajo es armar una sub-tabla con los productos que encuentres en ese bloque específico. Ignora cualquier texto que no parezca un producto.
 
 Responde ÚNICAMENTE con JSON válido con esta estructura:
 {
   "items": [
     {
-      "descripcion": "nombre o descripción limpia del producto comprado",
-      "cantidad": número de unidades compradas (entero o decimal) o null,
-      "unidad": "código SUNAT de la unidad de medida (ver lista) o null",
+      "descripcion": "nombre o descripción limpia del producto",
+      "cantidad": número de unidades o null,
+      "unidad": "código SUNAT de la unidad de medida o null",
       
-      // Montos unitarios (si figuran de forma explícita, de lo contrario null)
-      "valor_unitario": número del valor unitario sin IGV o null,
-      "precio_unitario": número del precio unitario con IGV o null,
-      
-      // Montos de línea/totales de fila (si figuran de forma explícita, de lo contrario null)
-      "subtotal_linea": número del valor de venta total de la línea (ex-IGV) o null,
-      "total_linea": número del precio de venta total de la línea (con IGV) o null,
-      
-      // Campos heredados para compatibilidad
-      "precio_compra_unitario": número estimado del costo unitario de compra o null,
-      "subtotal": número estimado del total de la línea o null
+      // Montos unitarios y totales tal como aparecen literalmente, sin calcular nada
+      "valor_unitario": número del valor unitario o null,
+      "precio_unitario": número del precio unitario o null,
+      "subtotal_linea": número del valor de venta total de la línea o null,
+      "total_linea": número del precio de venta total de la línea o null
     }
   ]
 }
@@ -75,10 +71,46 @@ UNIDADES VÁLIDAS (Usa EXACTAMENTE el código SUNAT):
 ${UNIDADES_PARA_PROMPT}
 
 Reglas de Negocio:
-1. Analiza cada línea de texto plano de forma independiente.
-2. Extrae las variables numéricas prestando atención a la posición de las columnas lógicas implicadas:
-   - Identifica si un precio es unitario (un valor bajo cerca de la descripción o cantidad) o de línea (un valor alto, resultado de cantidad x unitario).
-   - Intenta deducir si el precio está grabado antes de impuestos (a menudo denominado "Valor Unitario", "V.U.", "sin IGV", "V. Venta") o con impuestos ("Precio Unitario", "P.U.", "con IGV", "Importe", "Total").
-3. Si no es claro o falta algún campo, colócalo como null. No inventes cálculos; el reconciliador matemático se encargará de completarlos.
-4. Mapea la unidad al código SUNAT. Por ejemplo: "unidad", "und", "pza", "tubo", "balde" -> NIU; "caja" -> BX; "bolsa" -> BG; "rollo" -> ROL; "metro" -> MTR; "kilo", "kg" -> KGM.`
+1. Extrae los datos TAL CUAL figuran en el fragmento.
+2. No intentes adivinar datos faltantes. Si falta la cantidad o el precio, pon null.
+3. No intentes sumar o multiplicar, eso lo hará el Agente Ensamblador.
+4. Mapea la unidad al código SUNAT. Por ejemplo: "unidad", "und", "pza", "tubo" -> NIU; "caja" -> BX; "bolsa" -> BG; "rollo" -> ROL; "metro" -> MTR; "kilo", "kg" -> KGM.
+5. Es posible que en tu fragmento haya 0 productos, en ese caso devuelve "items": [].`
+}
+
+/**
+ * AGENTE 3: Ensamblador y Reconciliador Matemático
+ * Recibe todas las sub-tablas, las unifica, valida la matemática y define el precio de compra real.
+ */
+export function buildPromptEnsambladorMatematico(): string {
+  return `Eres el Agente Ensamblador y Auditor Contable.
+Recibirás las tablas generadas por varios Agentes Extractores (que procesaron pedazos de la factura) y los metadatos globales del Orquestador.
+
+Tu objetivo es:
+1. Unificar todas las tablas en una sola, descartando productos duplicados por error de corte de fragmentos o renglones vacíos.
+2. Ejecutar validaciones matemáticas estrictas: verificar si el precio reportado es con IGV o sin IGV comprobando (cantidad * precio = total_linea).
+3. Descartar cualquier "precio sugerido de venta al público". El objetivo es hallar el PRECIO REAL DE COMPRA UNITARIO (costo de inventario) y el SUBTOTAL de compra por producto.
+
+Responde ÚNICAMENTE con JSON válido con esta estructura:
+{
+  "items_ensamblados": [
+    {
+      "descripcion": "nombre limpio del producto",
+      "cantidad": número verificado o corregido,
+      "unidad": "código SUNAT",
+      "precio_compra_unitario": número del costo real de compra de este producto,
+      "subtotal": número del costo total gastado en este producto,
+      "advertencia": "alguna inconsistencia detectada en este producto o null"
+    }
+  ],
+  "analisis_global": {
+    "suman_totales": booleano, indica si la suma de los subtotales coincide con el total neto de la cabecera,
+    "advertencia_general": "mensaje de advertencia global o null"
+  }
+}
+
+Reglas:
+1. Si un producto tiene un precio muy alto marcado como "precio de venta sugerido", IGNÓRALO para los cálculos. Tu "precio_compra_unitario" debe derivarse de lo que realmente pagó el cliente (ej. dividiendo el total_linea entre cantidad).
+2. Asegúrate de que no queden datos basura o nulos en cantidades. Si falta cantidad, intenta deducirla dividiendo total / unitario (si es exacto).
+3. Limpia la descripción de cualquier texto residual de otros renglones.`
 }

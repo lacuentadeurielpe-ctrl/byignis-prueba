@@ -1,5 +1,9 @@
 import { normalizarUnidad } from '@/lib/constantes/unidades'
-import { buildPromptVisionConsolidado, buildPromptParserTextoItems } from './prompts/compras-prompts'
+import {
+  buildPromptOrquestadorCabecera,
+  buildPromptExtractorFragmento,
+  buildPromptEnsambladorMatematico
+} from './prompts/compras-prompts'
 
 const OPENAI_BASE = 'https://api.openai.com/v1'
 const ANTHROPIC_BASE = 'https://api.anthropic.com/v1'
@@ -8,7 +12,7 @@ const DEEPSEEK_BASE = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com
 export interface ItemCompraExtraido {
   descripcion: string | null
   cantidad: number | null
-  unidad: string | null // Código SUNAT o null
+  unidad: string | null
   valor_unitario: number | null
   precio_unitario: number | null
   subtotal_linea: number | null
@@ -24,14 +28,15 @@ export interface ResultadoExtracionCompra {
   razon_social_emisor: string | null
   numero_factura: string | null
   fecha_factura: string | null
-  total_bruto: number | null // base imponible
+  total_bruto: number | null
   igv: number | null
-  total_neto: number | null // total
+  total_neto: number | null
   items: ItemCompraExtraido[]
   advertencias: string[]
 }
 
-// OCR con ocr.space como fallback para DeepSeek
+// ── UTILIDADES DE API ─────────────────────────────────────────────────────────
+
 async function ocrImagen(base64: string, mimeType: string): Promise<string> {
   const apiKey = process.env.OCR_SPACE_API_KEY ?? 'helloworld'
   try {
@@ -69,37 +74,24 @@ async function ocrImagen(base64: string, mimeType: string): Promise<string> {
   }
 }
 
-// Llamar a OpenAI GPT-4o-mini con imágenes (Paso 1)
-async function llamarOpenAIVision(
-  systemPrompt: string,
-  imagenes: { base64: string; mimeType: string }[]
-): Promise<any> {
+async function llamarOpenAIVision(systemPrompt: string, imagenes: { base64: string; mimeType: string }[]): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY no configurada')
 
-  const contentBlocks: any[] = [
-    { type: 'text', text: 'Analiza este documento de compra.' }
-  ]
-
+  const contentBlocks: any[] = [{ type: 'text', text: 'Analiza este documento.' }]
   imagenes.forEach((img) => {
     contentBlocks.push({
       type: 'image_url',
-      image_url: {
-        url: `data:${img.mimeType};base64,${img.base64}`,
-        detail: 'high',
-      },
+      image_url: { url: `data:${img.mimeType};base64,${img.base64}`, detail: 'high' },
     })
   })
 
   const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: 'gpt-4o-mini',
-      max_tokens: 2000,
+      max_tokens: 1500,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
@@ -108,31 +100,18 @@ async function llamarOpenAIVision(
     }),
   })
 
-  if (!res.ok) {
-    const txt = await res.text()
-    throw new Error(`OpenAI Vision error ${res.status}: ${txt}`)
-  }
-
+  if (!res.ok) throw new Error(`OpenAI Vision error ${res.status}`)
   const data = await res.json()
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('Respuesta de OpenAI vacía')
-  return JSON.parse(content)
+  return JSON.parse(data.choices[0].message.content)
 }
 
-// Llamar a OpenAI GPT-4o-mini con texto plano (Paso 2)
-async function llamarOpenAIText(
-  systemPrompt: string,
-  userPrompt: string
-): Promise<any> {
+async function llamarOpenAIText(systemPrompt: string, userPrompt: string): Promise<any> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new Error('OPENAI_API_KEY no configurada')
 
   const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       response_format: { type: 'json_object' },
@@ -143,255 +122,212 @@ async function llamarOpenAIText(
     }),
   })
 
-  if (!res.ok) {
-    const txt = await res.text()
-    throw new Error(`OpenAI Text error ${res.status}: ${txt}`)
-  }
-
+  if (!res.ok) throw new Error(`OpenAI Text error ${res.status}`)
   const data = await res.json()
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('Respuesta de OpenAI vacía')
-  return JSON.parse(content)
+  return JSON.parse(data.choices[0].message.content)
 }
 
-// Llamar a Claude con imágenes (Anthropic - Paso 1)
-async function llamarClaudeVision(
-  systemPrompt: string,
-  imagenes: { base64: string; mimeType: string }[]
-): Promise<any> {
+async function llamarClaudeVision(systemPrompt: string, imagenes: { base64: string; mimeType: string }[]): Promise<any> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY no configurada')
 
   const contentBlocks: any[] = []
-
   imagenes.forEach((img) => {
-    contentBlocks.push({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: img.mimeType,
-        data: img.base64,
-      },
-    })
+    contentBlocks.push({ type: 'image', source: { type: 'base64', media_type: img.mimeType, data: img.base64 } })
   })
-
-  contentBlocks.push({
-    type: 'text',
-    text: 'Analiza esta compra y devuelve el JSON estructurado según tus instrucciones de sistema.',
-  })
+  contentBlocks.push({ type: 'text', text: 'Analiza esta compra.' })
 
   const res = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 2000,
+      max_tokens: 1500,
       system: systemPrompt,
-      messages: [
-        { role: 'user', content: contentBlocks },
-      ],
+      messages: [{ role: 'user', content: contentBlocks }],
     }),
   })
 
-  if (!res.ok) {
-    const txt = await res.text()
-    throw new Error(`Claude Vision error ${res.status}: ${txt}`)
-  }
-
+  if (!res.ok) throw new Error(`Claude Vision error ${res.status}`)
   const data = await res.json()
-  const text = data.content?.[0]?.text ?? ''
-  if (!text) throw new Error('Respuesta de Claude vacía')
-  return JSON.parse(text)
+  return JSON.parse(data.content[0].text)
 }
 
-// Llamar a Claude con texto plano (Anthropic - Paso 2)
-async function llamarClaudeText(
-  systemPrompt: string,
-  userPrompt: string
-): Promise<any> {
+async function llamarClaudeText(systemPrompt: string, userPrompt: string): Promise<any> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY no configurada')
 
   const res = await fetch(`${ANTHROPIC_BASE}/v1/messages`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 2000,
+      max_tokens: 1500,
       system: systemPrompt,
-      messages: [
-        { role: 'user', content: userPrompt },
-      ],
+      messages: [{ role: 'user', content: userPrompt }],
     }),
   })
 
-  if (!res.ok) {
-    const txt = await res.text()
-    throw new Error(`Claude Text error ${res.status}: ${txt}`)
-  }
-
+  if (!res.ok) throw new Error(`Claude Text error ${res.status}`)
   const data = await res.json()
-  const text = data.content?.[0]?.text ?? ''
-  if (!text) throw new Error('Respuesta de Claude vacía')
-  return JSON.parse(text)
+  return JSON.parse(data.content[0].text)
 }
 
-// Fallback: Llamar a DeepSeek con texto
-async function llamarDeepSeekText(
-  systemPrompt: string,
-  textoOCR: string
-): Promise<any> {
+async function llamarDeepSeekText(systemPrompt: string, userPrompt: string): Promise<any> {
   const apiKey = process.env.DEEPSEEK_CATALOG_API_KEY ?? process.env.DEEPSEEK_API_KEY
-  if (!apiKey) throw new Error('No hay API key de DeepSeek configurada')
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY no configurada')
 
   const res = await fetch(`${DEEPSEEK_BASE}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: 'deepseek-chat',
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: textoOCR },
+        { role: 'user', content: userPrompt },
       ],
     }),
   })
 
-  if (!res.ok) {
-    const txt = await res.text()
-    throw new Error(`DeepSeek error ${res.status}: ${txt}`)
-  }
-
+  if (!res.ok) throw new Error(`DeepSeek error ${res.status}`)
   const data = await res.json()
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('Respuesta de DeepSeek vacía')
-  return JSON.parse(content)
+  return JSON.parse(data.choices[0].message.content)
 }
 
+// Envoltorio de Agente Genérico de Texto
+async function llamarAgenteTexto(promptSistema: string, promptUsuario: string): Promise<any> {
+  if (process.env.OPENAI_API_KEY) return llamarOpenAIText(promptSistema, promptUsuario)
+  if (process.env.ANTHROPIC_API_KEY) return llamarClaudeText(promptSistema, promptUsuario)
+  if (process.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_CATALOG_API_KEY) return llamarDeepSeekText(promptSistema, promptUsuario)
+  throw new Error('No hay proveedor de IA configurado para Texto')
+}
+
+// ── MOTOR MULTI-AGENTE ────────────────────────────────────────────────────────
+
 /**
- * Procesa imágenes de compra en dos pasos (híbrido visión-texto).
- * Paso 1: Visión de cabecera y transcripción horizontal de filas.
- * Paso 2: Análisis textual y estructuración de ítems.
+ * Fragmenta un texto largo en bloques de líneas (ej. 20 líneas por bloque con solapamiento opcional).
  */
+function chunkText(text: string, linesPerChunk = 25): string[] {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+  const chunks: string[] = []
+  for (let i = 0; i < lines.length; i += linesPerChunk) {
+    chunks.push(lines.slice(i, i + linesPerChunk).join('\n'))
+  }
+  return chunks
+}
+
 export async function extraerCompraDeImagenes(
   imagenes: { base64: string; mimeType: string }[],
   rucComprador: string | null = null
 ): Promise<ResultadoExtracionCompra> {
-  if (imagenes.length === 0) {
-    throw new Error('No se enviaron imágenes para procesar')
-  }
+  if (imagenes.length === 0) throw new Error('No se enviaron imágenes')
 
-  const openAiKey = process.env.OPENAI_API_KEY
-  const anthropicKey = process.env.ANTHROPIC_API_KEY
-  const deepseekKey = process.env.DEEPSEEK_CATALOG_API_KEY ?? process.env.DEEPSEEK_API_KEY
-
-  const promptVision = buildPromptVisionConsolidado(rucComprador)
-  const promptParser = buildPromptParserTextoItems()
-
-  let visionRaw: any = null
-
-  // ── PASO 1: EXTRAER CABECERA Y TRANSCRIPCION DE FILAS (VISION / OCR) ───────
-  if (openAiKey) {
-    console.log('[ComprasAI] Paso 1 - OpenAI Vision (Cabecera + Renglones)')
-    visionRaw = await llamarOpenAIVision(promptVision, imagenes)
-  } else if (anthropicKey) {
-    console.log('[ComprasAI] Paso 1 - Claude Vision (Cabecera + Renglones)')
-    visionRaw = await llamarClaudeVision(promptVision, imagenes)
-  } else if (deepseekKey) {
-    console.log('[ComprasAI] Paso 1 - Fallback OCR + DeepSeek Chat (Cabecera + Renglones)')
-    const ocrPromises = imagenes.map((img) => ocrImagen(img.base64, img.mimeType))
-    const textos = await Promise.all(ocrPromises)
-    const textoCompleto = textos.join('\n\n--- PAGINA ---\n\n')
-
-    if (!textoCompleto.trim()) {
-      throw new Error('El OCR no pudo extraer ningún texto de las imágenes')
-    }
-    visionRaw = await llamarDeepSeekText(promptVision, textoCompleto)
+  // 1. Ejecutar OCR y Orquestador de Cabecera en paralelo para ganar tiempo
+  console.log('[Multi-Agent] Iniciando OCR y Orquestador Cabecera...')
+  const promptCabecera = buildPromptOrquestadorCabecera(rucComprador)
+  
+  const ocrPromise = Promise.all(imagenes.map(img => ocrImagen(img.base64, img.mimeType)))
+  
+  let cabeceraPromise: Promise<any>
+  if (process.env.OPENAI_API_KEY) {
+    cabeceraPromise = llamarOpenAIVision(promptCabecera, imagenes)
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    cabeceraPromise = llamarClaudeVision(promptCabecera, imagenes)
   } else {
-    throw new Error('No se configuró ninguna API Key válida (OpenAI, Anthropic, o DeepSeek).')
+    // Fallback: usar DeepSeek con el resultado del OCR
+    cabeceraPromise = ocrPromise.then(textos => llamarDeepSeekText(promptCabecera, textos.join('\n')))
   }
 
-  // ── PASO 2: PARSEAR RENGLONES DE TABLA A JSON ESTRUCTURADO (TEXTO) ──────────
-  const lineasTabla: string[] = visionRaw.lineas_tabla ?? []
-  let itemsRaw: any = { items: [] }
+  const [textosOcr, cabeceraExtraida] = await Promise.all([ocrPromise, cabeceraPromise])
+  const textoCompleto = textosOcr.join('\n\n--- PAGINA ---\n\n')
 
-  if (lineasTabla.length > 0) {
-    const userPrompt = JSON.stringify({ lineas_tabla: lineasTabla })
-    
-    if (openAiKey) {
-      console.log('[ComprasAI] Paso 2 - OpenAI Text (Estructurando items)')
-      itemsRaw = await llamarOpenAIText(promptParser, userPrompt)
-    } else if (anthropicKey) {
-      console.log('[ComprasAI] Paso 2 - Claude Text (Estructurando items)')
-      itemsRaw = await llamarClaudeText(promptParser, userPrompt)
-    } else if (deepseekKey) {
-      console.log('[ComprasAI] Paso 2 - DeepSeek Text (Estructurando items)')
-      itemsRaw = await llamarDeepSeekText(promptParser, userPrompt)
-    }
-  } else {
-    console.log('[ComprasAI] Paso 2 - Omitido, no se extrajeron líneas de tabla en el Paso 1.')
-  }
+  // 2. Fragmentación del documento
+  console.log('[Multi-Agent] Fragmentando texto OCR...')
+  const bloques = chunkText(textoCompleto, 25)
+  console.log(`[Multi-Agent] Creados ${bloques.length} bloques de trabajo.`)
 
-  // ── NORMALIZACIÓN DE RESULTADOS DE CABECERA ────────────────────────────────
-  const tipoDoc = visionRaw.tipo_documento ?? 'desconocido'
-  const esFormal = ['factura', 'boleta'].includes(tipoDoc)
+  // 3. Agentes Extractores (Trabajadores de Fragmentos) en paralelo
+  const promptExtractor = buildPromptExtractorFragmento()
+  const trabajadoresPromises = bloques.map((bloque, i) => {
+    console.log(`[Multi-Agent] Lanzando Agente Extractor para bloque ${i + 1}...`)
+    const userPrompt = `Analiza el siguiente bloque de texto y extrae su tabla de productos:\n\n${bloque}`
+    return llamarAgenteTexto(promptExtractor, userPrompt)
+      .catch(e => {
+        console.error(`[Multi-Agent] Error en trabajador ${i + 1}:`, e)
+        return { items: [] } // Si un trabajador falla, devolvemos vacío para no romper todo
+      })
+  })
 
-  const cabecera = {
-    tipo_documento: tipoDoc,
-    es_formal: esFormal,
-    ruc_emisor: visionRaw.ruc_emisor ? String(visionRaw.ruc_emisor).replace(/\D/g, '') : null,
-    razon_social_emisor: visionRaw.razon_social_emisor?.trim() || null,
-    numero_factura: visionRaw.numero_factura?.trim() || null,
-    fecha_factura: visionRaw.fecha_factura || null,
-    total_bruto: typeof visionRaw.total_bruto === 'number' ? visionRaw.total_bruto : null,
-    igv: typeof visionRaw.igv === 'number' ? visionRaw.igv : null,
-    total_neto: typeof visionRaw.total_neto === 'number' ? visionRaw.total_neto : null,
-  }
-
-  // ── NORMALIZACIÓN DE ÍTEMS ─────────────────────────────────────────────────
-  const items: ItemCompraExtraido[] = (itemsRaw.items ?? []).map((item: any) => {
-    const unidadNormalizada = item.unidad ? normalizarUnidad(item.unidad) : 'NIU'
-    return {
-      descripcion: item.descripcion?.trim() || 'Producto sin nombre',
-      cantidad: typeof item.cantidad === 'number' && item.cantidad > 0 ? item.cantidad : null,
-      unidad: unidadNormalizada,
-      valor_unitario: typeof item.valor_unitario === 'number' ? item.valor_unitario : null,
-      precio_unitario: typeof item.precio_unitario === 'number' ? item.precio_unitario : null,
-      subtotal_linea: typeof item.subtotal_linea === 'number' ? item.subtotal_linea : null,
-      total_linea: typeof item.total_linea === 'number' ? item.total_linea : null,
-      precio_compra_unitario: typeof item.precio_compra_unitario === 'number' ? item.precio_compra_unitario : null,
-      subtotal: typeof item.subtotal === 'number' ? item.subtotal : null,
+  const resultadosTrabajadores = await Promise.all(trabajadoresPromises)
+  
+  // 4. Agrupar resultados de trabajadores
+  const itemsCrudosCombinados: any[] = []
+  resultadosTrabajadores.forEach(res => {
+    if (res && Array.isArray(res.items)) {
+      itemsCrudosCombinados.push(...res.items)
     }
   })
 
-  // ── VALIDACIÓN DE CABECERA ─────────────────────────────────────────────────
-  const advertencias: string[] = []
+  // 5. Agente Ensamblador Matemático
+  console.log(`[Multi-Agent] Lanzando Agente Ensamblador con ${itemsCrudosCombinados.length} items crudos...`)
+  const promptEnsamblador = buildPromptEnsambladorMatematico()
+  const ensambladorUserPrompt = JSON.stringify({
+    cabecera_detectada: cabeceraExtraida,
+    items_crudos_extraidos_por_trabajadores: itemsCrudosCombinados
+  }, null, 2)
 
-  // Validar si faltan datos en la cabecera
-  if (!cabecera.ruc_emisor && esFormal) {
-    advertencias.push('No se detectó RUC del proveedor en la factura/boleta.')
+  let datosEnsamblados = { items_ensamblados: [], analisis_global: {} }
+  if (itemsCrudosCombinados.length > 0) {
+    try {
+      datosEnsamblados = await llamarAgenteTexto(promptEnsamblador, ensambladorUserPrompt)
+    } catch (e) {
+      console.error('[Multi-Agent] Error en Agente Ensamblador:', e)
+    }
+  } else {
+    console.warn('[Multi-Agent] No se extrajeron items crudos. Omitiendo ensamblador.')
   }
-  if (!cabecera.numero_factura) {
-    advertencias.push('No se detectó número de comprobante.')
+
+  // ── NORMALIZACIÓN Y RESULTADO FINAL ───────────────────────────────────────
+  
+  const tipoDoc = cabeceraExtraida.tipo_documento ?? 'desconocido'
+  const esFormal = ['factura', 'boleta'].includes(tipoDoc)
+
+  const cabeceraFinal = {
+    tipo_documento: tipoDoc,
+    es_formal: esFormal,
+    ruc_emisor: cabeceraExtraida.ruc_emisor ? String(cabeceraExtraida.ruc_emisor).replace(/\\D/g, '') : null,
+    razon_social_emisor: cabeceraExtraida.razon_social_emisor?.trim() || null,
+    numero_factura: cabeceraExtraida.numero_factura?.trim() || null,
+    fecha_factura: cabeceraExtraida.fecha_factura || null,
+    total_bruto: typeof cabeceraExtraida.total_bruto === 'number' ? cabeceraExtraida.total_bruto : null,
+    igv: typeof cabeceraExtraida.igv === 'number' ? cabeceraExtraida.igv : null,
+    total_neto: typeof cabeceraExtraida.total_neto === 'number' ? cabeceraExtraida.total_neto : null,
   }
-  if (!cabecera.fecha_factura) {
-    advertencias.push('Fecha de emisión ausente, se usará la fecha de hoy.')
+
+  const itemsFinales: ItemCompraExtraido[] = (datosEnsamblados.items_ensamblados ?? []).map((item: any) => ({
+    descripcion: item.descripcion?.trim() || 'Producto sin nombre',
+    cantidad: typeof item.cantidad === 'number' && item.cantidad > 0 ? item.cantidad : null,
+    unidad: item.unidad ? normalizarUnidad(item.unidad) : 'NIU',
+    valor_unitario: null, // Estos ya fueron reconciliados por el ensamblador
+    precio_unitario: null,
+    subtotal_linea: null,
+    total_linea: null,
+    precio_compra_unitario: typeof item.precio_compra_unitario === 'number' ? item.precio_compra_unitario : null,
+    subtotal: typeof item.subtotal === 'number' ? item.subtotal : null,
+  }))
+
+  const advertencias: string[] = []
+  if (!cabeceraFinal.ruc_emisor && esFormal) {
+    advertencias.push('No se detectó RUC del proveedor (o fue confundido con el RUC del cliente).')
+  }
+  if ((datosEnsamblados.analisis_global as any)?.advertencia_general) {
+    advertencias.push((datosEnsamblados.analisis_global as any).advertencia_general)
   }
 
   return {
-    ...cabecera,
-    items,
+    ...cabeceraFinal,
+    items: itemsFinales,
     advertencias,
   }
 }
