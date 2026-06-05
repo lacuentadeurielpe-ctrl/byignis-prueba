@@ -190,13 +190,7 @@ async function llamarDeepSeekText(systemPrompt: string, userPrompt: string): Pro
 }
 
 // ── REBANADOR VISUAL DE IMÁGENES ──────────────────────────────────────────────
-async function sliceImage(
-  base64: string, 
-  mimeType: string, 
-  isFirstImage: boolean, 
-  cabeceraGlobalBuffer: Buffer | null, 
-  cabeceraHeight: number
-): Promise<{ base64: string, mimeType: string }[]> {
+async function sliceImage(base64: string, mimeType: string): Promise<{ base64: string, mimeType: string }[]> {
   const cleanB64 = cleanBase64(base64)
   try {
     const imgBuffer = Buffer.from(cleanB64, 'base64')
@@ -208,18 +202,6 @@ async function sliceImage(
     const OVERLAP = 150
 
     if (height <= MAX_SLICE_HEIGHT) {
-      if (!isFirstImage && cabeceraGlobalBuffer) {
-        // Stitch header to a small subsequent image
-        const compositeBuffer = await sharp({
-          create: { width, height: cabeceraHeight + height, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } }
-        })
-        .composite([
-          { input: cabeceraGlobalBuffer, top: 0, left: 0 },
-          { input: imgBuffer, top: cabeceraHeight, left: 0 }
-        ])
-        .png().toBuffer()
-        return [{ base64: cleanBase64(compositeBuffer.toString('base64')), mimeType: 'image/png' }]
-      }
       return [{ base64: cleanB64, mimeType }]
     }
 
@@ -232,34 +214,10 @@ async function sliceImage(
         .extract({ left: 0, top: y, width, height: h })
         .toBuffer()
         
-      if (isFirstImage && y === 0) {
-        // First slice of first image already has the headers natively
-        slices.push({
-          base64: cleanBase64(sliceBuffer.toString('base64')),
-          mimeType: mimeType
-        })
-      } else if (cabeceraGlobalBuffer) {
-        // Stitch header to this slice
-        const compositeBuffer = await sharp({
-          create: { width, height: cabeceraHeight + h, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } }
-        })
-        .composite([
-          { input: cabeceraGlobalBuffer, top: 0, left: 0 },
-          { input: sliceBuffer, top: cabeceraHeight, left: 0 }
-        ])
-        .png().toBuffer()
-
-        slices.push({
-          base64: cleanBase64(compositeBuffer.toString('base64')),
-          mimeType: 'image/png'
-        })
-      } else {
-        // Fallback if no header buffer
-        slices.push({
-          base64: cleanBase64(sliceBuffer.toString('base64')),
-          mimeType: mimeType
-        })
-      }
+      slices.push({
+        base64: cleanBase64(sliceBuffer.toString('base64')),
+        mimeType: mimeType
+      })
       
       if (y + h >= height) break
     }
@@ -295,26 +253,9 @@ export async function extraerCompraDeImagenes(
 ): Promise<ResultadoExtracionCompra> {
   if (imagenes.length === 0) throw new Error('No se enviaron imágenes')
 
-  // ── 0. OBTENER CABEZAL FÍSICO DE LA PRIMERA IMAGEN ───────────────────────
-  let cabeceraGlobalBuffer: Buffer | null = null
-  let cabeceraHeight = 0
-
-  try {
-    const firstImgBuffer = Buffer.from(cleanBase64(imagenes[0].base64), 'base64')
-    const metadata = await sharp(firstImgBuffer).metadata()
-    cabeceraHeight = Math.min(800, metadata.height || 800)
-    cabeceraGlobalBuffer = await sharp(firstImgBuffer)
-      .extract({ left: 0, top: 0, width: metadata.width || 1000, height: cabeceraHeight })
-      .toBuffer()
-  } catch (e) {
-    console.error('[Sharp] Error extrayendo cabecera global física', e)
-  }
-
-  // Rebanar imágenes largas pegándoles la cabecera física
-  console.log('[Multi-Agent] Rebanando e inyectando cabecera a imágenes gigantes...')
-  const rebanadasPromises = imagenes.map((img, index) => 
-    sliceImage(img.base64, img.mimeType, index === 0, cabeceraGlobalBuffer, cabeceraHeight)
-  )
+  // Rebanar imágenes largas
+  console.log('[Multi-Agent] Rebanando imágenes gigantes...')
+  const rebanadasPromises = imagenes.map(img => sliceImage(img.base64, img.mimeType))
   const rebanadasArrays = await Promise.all(rebanadasPromises)
   const imageSlices = rebanadasArrays.flat()
   console.log(`[Multi-Agent] Se generaron ${imageSlices.length} rebanadas visuales.`)

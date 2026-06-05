@@ -65,15 +65,17 @@ Reglas:
  * Extrae las filas de la tabla encajando los datos en las llaves del cabezal maestro.
  */
 export function buildPromptExtractorLiteral(encabezados: string[]): string {
-  const ordenadas = encabezados.map((enc, i) => `${i + 1}. ${enc}`).join('\n')
+  const ordenadas = encabezados.map((enc, i) => `Columna ${i + 1}: "${enc}"`).join('\n')
   
-  return `Eres un Tipeador de Tablas Estricto.
-Recibirás una imagen que representa un fragmento de una tabla de productos. Nota: hemos pegado visualmente la cabecera original en la parte superior de esta imagen para que sepas qué columna es cuál.
+  return `Eres un Tipeador de Tablas Estricto con Razonamiento Espacial.
+Recibirás una imagen que representa un pedazo de una tabla de productos. 
+ATENCIÓN: Es posible que esta imagen no tenga los títulos de las columnas impresos porque es un corte de la mitad inferior de la factura. ¡No te asustes! 
 
-Sabemos que las columnas originales de esta tabla, leídas DE IZQUIERDA A DERECHA, son estrictamente las siguientes:
+Por lógica de posición (de IZQUIERDA a DERECHA), las columnas son estrictamente estas:
 ${ordenadas}
 
-Tu ÚNICO trabajo es transcribir los bienes y servicios que veas en esta imagen a un arreglo de objetos JSON, respetando visualmente el orden de las columnas de izquierda a derecha para asociar cada número a su llave correcta. Usa LOS NOMBRES EXACTOS DE ARRIBA como llaves.
+Tu ÚNICO trabajo es transcribir los bienes y servicios que veas en esta imagen a un arreglo de objetos JSON, usando tu deducción visual: el primer número a la izquierda es la Columna 1, el texto al medio es la Columna 3, etc. 
+Usa los nombres exactos que están entre comillas arriba como las llaves de tu JSON (ejemplo: si dice Columna 1: "codigo", usa "codigo"). No incluyas la palabra 'Columna'.
 
 Responde ÚNICAMENTE con JSON válido con esta estructura:
 {
