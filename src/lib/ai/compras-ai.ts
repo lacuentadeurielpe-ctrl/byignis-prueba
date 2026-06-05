@@ -205,6 +205,25 @@ function chunkText(text: string, linesPerChunk = 25): string[] {
   return chunks
 }
 
+function parseLocalCurrency(val: string): number {
+  let clean = val.replace(/[^\d.,-]/g, '')
+  const lastComma = clean.lastIndexOf(',')
+  const lastPeriod = clean.lastIndexOf('.')
+
+  if (lastComma === -1 && lastPeriod === -1) return parseFloat(clean) || 0
+
+  if (lastComma !== -1 && lastPeriod !== -1) {
+    if (lastPeriod > lastComma) clean = clean.replace(/,/g, '')
+    else clean = clean.replace(/\./g, '').replace(',', '.')
+  } else if (lastComma !== -1) {
+    if (clean.length - lastComma - 1 === 2) clean = clean.replace(',', '.')
+    else clean = clean.replace(/,/g, '')
+  } else if (lastPeriod !== -1) {
+    if (clean.length - lastPeriod - 1 !== 2) clean = clean.replace(/\./g, '')
+  }
+  return parseFloat(clean) || 0
+}
+
 export async function extraerCompraDeImagenes(
   imagenes: { base64: string; mimeType: string }[],
   rucComprador: string | null = null
@@ -280,9 +299,8 @@ export async function extraerCompraDeImagenes(
       if (typeof val === 'number') {
         sumasColumnas[key] = (sumasColumnas[key] || 0) + val
       } else if (typeof val === 'string') {
-        // Tratar de convertir a número si es parseable
-        const parsed = parseFloat(val.replace(/[^\d.-]/g, ''))
-        if (!isNaN(parsed)) {
+        const parsed = parseLocalCurrency(val)
+        if (!isNaN(parsed) && parsed !== 0) {
           sumasColumnas[key] = (sumasColumnas[key] || 0) + parsed
           fila[key] = parsed // Normalizamos la matriz en sitio
         }
