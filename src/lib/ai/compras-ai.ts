@@ -47,20 +47,13 @@ export async function extraerCompraDeImagenes(
   const apiKey = process.env.MINDEE_API_KEY
   if (!apiKey) throw new Error('MINDEE_API_KEY no está configurada en .env')
 
-  const mindeeClient = new mindee.v1.Client({ apiKey })
+  const mindeeClient = new mindee.Client({ apiKey })
   const advertencias: string[] = []
 
-  console.log('[Mindee] Iniciando extracción de factura con Invoice V4...')
+  console.log('[Mindee] Iniciando extracción de factura con modelo personalizado V2...')
 
-  // Como la mayoría de facturas en Perú se pueden leer en la primera página
-  // mandamos la primera imagen (Mindee cobra por página/documento).
-  // Si enviaste un PDF completo, lo ideal es mandar el documento completo.
-  // Por ahora procesamos la imagen [0] que suele contener toda la tabla
-  // si es una foto de comprobante largo, o la factura principal.
   const imgData = imagenes[0]
   const cleanB64 = imgData.base64.replace(/^data:[^;]+;base64,/, '')
-  
-  // Asignamos una extensión basada en el mimeType
   const ext = imgData.mimeType === 'application/pdf' ? 'pdf' : 
               imgData.mimeType.includes('png') ? 'png' : 'jpg'
   
@@ -68,56 +61,103 @@ export async function extraerCompraDeImagenes(
 
   let apiResponse
   try {
-    // Usamos el cliente V1 que soporta clases concretas como InvoiceV4 nativamente en Mindee SDK v5
-    apiResponse = await mindeeClient.parse(mindee.v1.product.invoice.InvoiceV4, inputSource)
+    // Para llaves V2 (Docbuilder) debemos usar el cliente genérico y Extraction con el ID del modelo personalizado.
+    apiResponse = await mindeeClient.enqueueAndGetResult(
+      mindee.product.Extraction,
+      inputSource,
+      { modelId: '8ce28e2f-df16-48a9-a805-bba38150f597' }
+    )
   } catch (error: any) {
     console.error('[Mindee] Error de API:', error)
     throw new Error('Error al conectar con Mindee API: ' + error.message)
   }
 
-  const prediction = apiResponse.document.inference.prediction
+  // En V2 Extraction, los campos vienen en un diccionario genérico en la propiedad inference.prediction.fields
+  // Dependiendo de la versión exacta de la librería V5, la ruta puede ser ligeramente diferente, 
+  // pero usaremos una búsqueda segura.
+  const documentRes = apiResponse.document || apiResponse.inference?.document || (apiResponse as any)
+  const prediction = documentRes?.inference?.prediction || documentRes?.prediction || {}
+  const fields = prediction.fields || prediction
+
+  // Función de ayuda para extraer texto limpio de diferentes estructuras que devuelve V2 Extraction
+  const getValue = (key1: string, key2?: string) => {
+    let raw = fields[key1]
+    if (!raw && key2) raw = fields[key2]
+    
+    if (!raw) return null
+    if (typeof raw === 'string' || typeof raw === 'number') return raw
+    if (raw.value !== undefined) return raw.value
+    if (raw.content !== undefined) return raw.content
+    return null
+  }
 
   // 1. Extraer Cabecera
-  const rucsRaw = prediction.supplierCompanyRegistrations?.map((r: any) => r.value) || []
-  let rucEmisor = rucsRaw.find((r: string) => r && r.length === 11 && /^\d+$/.test(r)) || null
+  const supplierName = getValue('Supplier Name', 'supplier_name')
+  let rucEmisor = getValue('Supplier Company Registrations', 'supplier_company_registrations') || getValue('Supplier RUC', 'supplier_ruc') || null
   
-  // Lógica inversa: si el RUC detectado es el nuestro, lo ignoramos y advertimos
+  if (rucEmisor && typeof rucEmisor === 'string') {
+    // Extraer solo dígitos en caso de que venga con formato
+    const digits = rucEmisor.replace(/\D/g, '')
+    rucEmisor = digits.length === 11 ? digits : rucEmisor
+  }
+
   if (rucEmisor && rucComprador && rucEmisor === rucComprador) {
     rucEmisor = null
     advertencias.push('El RUC detectado era el de nuestra ferretería. Se omitió para el proveedor.')
   }
 
-  const tipoDocumentoDetectado = prediction.documentType?.value === 'INVOICE' ? 'factura' : 'boleta'
+  const invoiceNumber = getValue('Invoice Number', 'invoice_number')
+  const invoiceDate = getValue('Invoice Date', 'invoice_date') || getValue('Date', 'date')
+  const tipoDocumentoDetectado = 'factura'
   const esFormal = !!rucEmisor
 
-  const totalBruto = prediction.totalNet?.value ?? null
-  const totalNeto = prediction.totalAmount?.value ?? null
-  const igvAmount = prediction.taxes?.[0]?.value ?? null
+  const parseNum = (val: any) => {
+    if (val == null) return null
+    const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''))
+    return isNaN(num) ? null : num
+  }
+
+  const totalNeto = parseNum(getValue('Total Amount', 'total_amount'))
+  const igvAmount = parseNum(getValue('Total Tax', 'total_tax'))
+  const totalBruto = totalNeto !== null && igvAmount !== null ? totalNeto - igvAmount : parseNum(getValue('Total Net', 'total_net'))
 
   const cabecera = {
     tipo_documento:      (esFormal ? tipoDocumentoDetectado : 'nota_venta') as ResultadoExtracionCompra['tipo_documento'],
     es_formal:           esFormal,
     ruc_emisor:          rucEmisor,
-    razon_social_emisor: prediction.supplierName?.value || null,
-    numero_factura:      prediction.invoiceNumber?.value || null,
-    fecha_factura:       prediction.date?.value || null,
+    razon_social_emisor: supplierName || null,
+    numero_factura:      invoiceNumber || null,
+    fecha_factura:       invoiceDate || null,
     total_bruto:         totalBruto,
     igv:                 igvAmount,
     total_neto:          totalNeto,
   }
 
-  // 2. Extraer Líneas de Productos (Line Items)
-  const lineItemsRaw = prediction.lineItems || []
+  // 2. Extraer Líneas de Productos
+  // V2 Extraction devuelve las tablas en fields['Line Items'] como array de arrays o dicts
+  const lineItemsField = fields['Line Items'] || fields['line_items']
+  const lineItemsRaw = Array.isArray(lineItemsField) ? lineItemsField : (lineItemsField?.values || lineItemsField?.elements || [])
+  
   const items: ItemCompraExtraido[] = lineItemsRaw.map((line: any) => {
-    // line tiene campos como: description, quantity, unitPrice, totalAmount
-    const qty = line.quantity ?? null
-    const price = line.unitPrice ?? null
-    const total = line.totalAmount ?? null
+    // line puede ser un objeto plano si es un dict, o tener .fields si es una sub-estructura
+    const lineFields = line.fields || line
+    
+    const extractVal = (k1: string, k2?: string) => {
+      let raw = lineFields[k1]
+      if (!raw && k2) raw = lineFields[k2]
+      if (!raw) return null
+      return raw.value !== undefined ? raw.value : (raw.content !== undefined ? raw.content : raw)
+    }
+
+    const desc = extractVal('Description', 'description')
+    const qty = parseNum(extractVal('Quantity', 'quantity'))
+    const price = parseNum(extractVal('Unit Price', 'unit_price'))
+    const total = parseNum(extractVal('Total Amount', 'total_amount'))
     
     return {
-      descripcion:            line.description ? String(line.description).trim() : 'Producto sin nombre',
+      descripcion:            desc ? String(desc).trim() : 'Producto sin nombre',
       cantidad:               qty,
-      unidad:                 'NIU', // Mindee v4 no suele extraer unidad estándar, por defecto 'NIU'
+      unidad:                 'NIU',
       valor_unitario:         null,
       precio_unitario:        null,
       subtotal_linea:         null,
@@ -128,14 +168,14 @@ export async function extraerCompraDeImagenes(
   }).filter((item: ItemCompraExtraido) => item.descripcion !== 'Producto sin nombre' || item.cantidad !== null)
 
   if (items.length === 0) {
-    advertencias.push('Mindee no detectó ninguna línea de producto en este comprobante.')
+    advertencias.push('La IA no detectó ninguna línea de producto o la tabla no coincide con el esquema.')
   }
 
   if (!cabecera.ruc_emisor && esFormal) {
     advertencias.push('No se detectó RUC válido del proveedor.')
   }
 
-  console.log(`[Mindee] Éxito. RUC: ${cabecera.ruc_emisor}, Items: ${items.length}, Total: ${cabecera.total_neto}`)
+  console.log(`[Mindee V2] Éxito. RUC: ${cabecera.ruc_emisor}, Items: ${items.length}, Total: ${cabecera.total_neto}`)
 
   return { ...cabecera, items, advertencias }
 }
