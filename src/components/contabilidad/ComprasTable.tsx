@@ -76,26 +76,39 @@ export default function ComprasTable({ comprasIniciales }: Props) {
     document.body.removeChild(link)
   }
 
-  async function cambiarEstado(id: string, accion: 'confirmar' | 'anular') {
+  async function cambiarEstado(id: string, accion: 'confirmar' | 'anular' | 'eliminar') {
     if (accion === 'anular' && !confirm('¿Estás seguro de que deseas anular esta compra? Esto revertirá los cambios en el stock.')) {
+      return
+    }
+    if (accion === 'eliminar' && !confirm('¿Estás seguro de eliminar este borrador de forma permanente?')) {
       return
     }
 
     setLoadingAction(id)
     try {
-      const res = await fetch(`/api/compras/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion }),
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        setCompras((prev) =>
-          prev.map((c) => (c.id === id ? { ...c, estado: updated.estado } : c))
-        )
+      if (accion === 'eliminar') {
+        const res = await fetch(`/api/compras/${id}`, { method: 'DELETE' })
+        if (res.ok) {
+          setCompras((prev) => prev.filter((c) => c.id !== id))
+        } else {
+          const err = await res.json()
+          alert(err.error || 'Error al eliminar el borrador.')
+        }
       } else {
-        const err = await res.json()
-        alert(err.error || 'Error al cambiar el estado de la compra.')
+        const res = await fetch(`/api/compras/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion }),
+        })
+        if (res.ok) {
+          const updated = await res.json()
+          setCompras((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, estado: updated.estado } : c))
+          )
+        } else {
+          const err = await res.json()
+          alert(err.error || 'Error al cambiar el estado de la compra.')
+        }
       }
     } catch {
       alert('Error de red al actualizar la compra.')
@@ -245,13 +258,22 @@ export default function ComprasTable({ comprasIniciales }: Props) {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center gap-2 justify-end">
                           {isBorrador && (
-                            <button
-                              disabled={loadingAction === c.id}
-                              onClick={() => cambiarEstado(c.id, 'confirmar')}
-                              className="px-2.5 py-1 text-xs font-bold bg-green-600 hover:bg-green-700 text-white rounded-lg transition disabled:opacity-50"
-                            >
-                              Recibir
-                            </button>
+                            <>
+                              <button
+                                disabled={loadingAction === c.id}
+                                onClick={() => cambiarEstado(c.id, 'eliminar')}
+                                className="px-2.5 py-1 text-xs font-semibold bg-white hover:bg-red-50 text-red-600 rounded-lg border border-red-200 transition disabled:opacity-50"
+                              >
+                                Eliminar
+                              </button>
+                              <button
+                                disabled={loadingAction === c.id}
+                                onClick={() => cambiarEstado(c.id, 'confirmar')}
+                                className="px-2.5 py-1 text-xs font-bold bg-green-600 hover:bg-green-700 text-white rounded-lg transition disabled:opacity-50"
+                              >
+                                Recibir
+                              </button>
+                            </>
                           )}
                           {isRecibida && (
                             <button

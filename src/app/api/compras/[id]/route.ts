@@ -49,3 +49,36 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+
+// DELETE /api/compras/[id] — Eliminar una compra en borrador
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSessionInfo()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { id } = await params
+  const db = await getDB()
+  
+  try {
+    const compra = await db.compras.obtenerCompraPorId(session.ferreteriaId, id)
+    if (!compra) {
+      return NextResponse.json({ error: 'Compra no encontrada' }, { status: 404 })
+    }
+
+    if (compra.estado !== 'borrador') {
+      return NextResponse.json({ error: 'Solo se pueden eliminar compras en borrador' }, { status: 400 })
+    }
+
+    // Como es borrador, simplemente la borramos y la DB se encarga de items_compra por CASCADE
+    const { error } = await db.supabase
+      .from('compras')
+      .delete()
+      .eq('id', id)
+      .eq('ferreteria_id', session.ferreteriaId)
+
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}

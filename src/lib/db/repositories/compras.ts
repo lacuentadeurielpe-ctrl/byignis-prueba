@@ -30,13 +30,13 @@ export interface CompraInput {
 }
 
 export class ComprasRepository {
-  constructor(private supabase: SupabaseClient) {}
+  constructor(public supabase: SupabaseClient) {}
 
   /**
    * Crea un nuevo registro de compra con sus respectivos ítems.
    */
   async crearCompra(ferreteriaId: string, input: CompraInput, items: ItemCompraInput[]) {
-    // 1. Insertar cabecera de la compra
+    // 1. Insertar cabecera de la compra siempre como 'borrador' primero (requerido por el RPC)
     const { data: compra, error: errCompra } = await this.supabase
       .from('compras')
       .insert({
@@ -51,7 +51,7 @@ export class ComprasRepository {
         total_bruto: input.totalBruto,
         igv: input.igv,
         total_neto: input.totalNeto,
-        estado: input.estado ?? 'borrador',
+        estado: 'borrador', // siempre iniciar en borrador para cumplir con la regla del RPC
         notas: input.notas ?? null,
       })
       .select()
@@ -93,6 +93,7 @@ export class ComprasRepository {
     if (input.estado === 'recibida') {
       try {
         await this.confirmarRecepcion(ferreteriaId, compraId)
+        compra.estado = 'recibida'
       } catch (confirmErr: any) {
         // Si falla la confirmación, borramos la compra para consistencia
         await this.supabase.from('compras').delete().eq('id', compraId)
