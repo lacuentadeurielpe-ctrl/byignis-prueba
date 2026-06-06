@@ -105,7 +105,7 @@ export default function TabOverview({ pedidos, cotizaciones, creditos, cliente, 
               {cotizacionesRecientes.map(c => (
                 <div key={c.id} className="p-4 flex items-center justify-between hover:bg-zinc-50 transition">
                   <div>
-                    <p className="text-xs font-mono text-zinc-500">{c.numero_cotizacion}</p>
+                    <p className="text-xs font-mono text-zinc-500">COT-{c.id.split('-')[0].toUpperCase()}</p>
                     <p className="text-xs text-zinc-400 mt-1">{formatFecha(c.created_at)}</p>
                   </div>
                   <div className="text-right">

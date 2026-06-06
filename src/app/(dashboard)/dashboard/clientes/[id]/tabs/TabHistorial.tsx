@@ -115,7 +115,7 @@ export default function TabHistorial({ pedidos, cotizaciones, esDueno }: Props) 
                 {cotizaciones.map(c => (
                   <div key={c.id} className="p-4 hover:bg-zinc-50 transition flex justify-between items-center">
                     <div>
-                      <p className="text-xs font-mono text-zinc-500">{c.numero_cotizacion}</p>
+                      <p className="text-xs font-mono text-zinc-500">COT-{c.id.split('-')[0].toUpperCase()}</p>
                       <p className="text-xs text-zinc-400 mt-0.5">{formatFecha(c.created_at)}</p>
                     </div>
                     <div className="text-right">
