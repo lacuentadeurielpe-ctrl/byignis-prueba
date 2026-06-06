@@ -12,17 +12,19 @@ export interface ItemCotizacionInput {
 }
 
 export interface PedidoInput {
-  cotizacionId?: string | null
-  clienteId: string
+  cotizacionId?: string
+  clienteId: string | null
   numeroPedido: string
   nombreCliente: string
   telefonoCliente: string
   direccionEntrega?: string | null
   zonaDeliveryId?: string | null
-  modalidad: 'delivery' | 'recojo'
+  modalidad: string
   estado: string
+  estadoPago?: string
+  metodoPago?: string
   total: number
-  costoTotal: number
+  costoTotal: number | null
   fechaEntregaProgramada?: string | null
 }
 
@@ -142,6 +144,8 @@ export class VentasRepository {
         zona_delivery_id: input.zonaDeliveryId ?? null,
         modalidad: input.modalidad,
         estado: input.estado,
+        estado_pago: input.estadoPago,
+        metodo_pago: input.metodoPago,
         total: input.total,
         costo_total: input.costoTotal,
         fecha_entrega_programada: input.fechaEntregaProgramada ?? null,
@@ -168,11 +172,8 @@ export class VentasRepository {
 
     if (errItems) throw new Error(`Error al registrar ítems de pedido: ${errItems.message}`)
 
-    // Descontar stock (asíncrono)
-    this.supabase.rpc('reducir_stock_pedido', { p_pedido_id: pedidoId })
-      .then(({ error }) => {
-        if (error) console.error('[VentasRepository] Error al descontar stock:', error.message)
-      })
+    // El stock se descuenta automáticamente a través del trigger 'trigger_items_pedido_stock'
+    // en la tabla items_pedido, por lo tanto no necesitamos invocar un RPC manualmente.
 
     // Marcar la cotización como aprobada
     if (input.cotizacionId) {

@@ -193,6 +193,9 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
           telefono_cliente: telefonoFinal,
           modalidad: 'recojo',
           items,
+          venta_directa: true,
+          estado_pago: 'pagado',
+          metodo_pago: metodo,
         })
       })
 
@@ -202,17 +205,6 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
       }
 
       const { id: pedidoId } = await res.json()
-
-      // 2. PATCH para marcar como entregado + pagado
-      await fetch(`/api/orders/${pedidoId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          estado: 'entregado',
-          estado_pago: 'pagado',
-          metodo_pago: metodo,
-        })
-      })
 
       // 3. Comprobante
       if (tipoComprobante === 'nota_venta') {
