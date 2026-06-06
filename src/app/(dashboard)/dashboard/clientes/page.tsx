@@ -2,7 +2,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { redirect } from 'next/navigation'
-import { Users, UserPlus, GitMerge } from 'lucide-react'
+import { Users } from 'lucide-react'
 import ClientesTable from '@/components/clientes/ClientesTable'
 import ClientesDashboardMetrics from '@/components/clientes/ClientesDashboardMetrics'
 import ClientesPageActions from '@/components/clientes/ClientesPageActions'
@@ -61,18 +61,18 @@ export default async function ClientesPage() {
     : null
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-[1600px] mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-zinc-100 border border-zinc-200 rounded-2xl flex items-center justify-center">
-            <Users className="w-4 h-4 text-zinc-600" />
+          <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center">
+            <Users className="w-5 h-5 text-indigo-600" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-zinc-950 tracking-tight">CRM Clientes</h1>
-            <p className="text-xs text-zinc-400">Gestión de cartera y cuentas corrientes</p>
+            <h1 className="text-xl font-bold text-zinc-900 tracking-tight">CRM Clientes</h1>
+            <p className="text-sm text-zinc-500">Gestión de cartera y cuentas corrientes</p>
           </div>
         </div>
-        <ClientesPageActions esDueno={session.rol === 'dueno'} />
+        <ClientesPageActions esDueno={session.rol === 'dueno'} clientes={clientesConMetricas} />
       </div>
 
       <ClientesDashboardMetrics 
@@ -81,12 +81,11 @@ export default async function ClientesPage() {
         deudaTotal={deudaTotal}
         topComprador={topComprador}
         clientes={clientesConMetricas}
-        rawClientes={clientes}
       />
 
       <ClientesTable
         clientes={clientesConMetricas}
-        esVendedor={session.rol === 'vendedor'}
+        esDueno={session.rol === 'dueno'}
       />
     </div>
   )

@@ -21,11 +21,11 @@ interface ClienteSimple {
 }
 
 interface Props {
-  esVendedor: boolean
+  esDueno: boolean
   clientes: ClienteSimple[]
 }
 
-export default function ClientesPageActions({ esVendedor, clientes }: Props) {
+export default function ClientesPageActions({ esDueno, clientes }: Props) {
   const [modalFusionar, setModalFusionar] = useState(false)
   const [modalNuevo, setModalNuevo] = useState(false)
 
@@ -36,7 +36,7 @@ export default function ClientesPageActions({ esVendedor, clientes }: Props) {
   return (
     <>
       <div className="flex items-center gap-2">
-        {!esVendedor && (
+        {esDueno && (
           <button
             onClick={() => setModalFusionar(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50 rounded-xl text-sm font-medium transition shadow-sm"

@@ -44,10 +44,10 @@ function BadgeTipo({ tipo }: { tipo: TipoCliente }) {
 
 export default function ClientesTable({
   clientes: inicial,
-  esVendedor,
+  esDueno,
 }: {
   clientes: ClienteResumen[]
-  esVendedor: boolean
+  esDueno: boolean
 }) {
   const [clientes, setClientes] = useState(inicial)
   const [busqueda, setBusqueda] = useState('')
@@ -102,7 +102,7 @@ export default function ClientesTable({
                 <th className="text-left px-4 py-3 font-semibold text-zinc-400 text-[10px] uppercase tracking-wider">Cliente</th>
                 <th className="text-left px-3 py-3 font-semibold text-zinc-400 text-[10px] uppercase tracking-wider hidden md:table-cell">DNI/RUC</th>
                 <th className="text-center px-3 py-3 font-semibold text-zinc-400 text-[10px] uppercase tracking-wider">Pedidos</th>
-                {!esVendedor && (
+                {esDueno && (
                   <th className="text-right px-4 py-3 font-semibold text-zinc-400 text-[10px] uppercase tracking-wider hidden sm:table-cell">Total comprado</th>
                 )}
                 <th className="text-right px-4 py-3 font-semibold text-zinc-400 text-[10px] uppercase tracking-wider hidden lg:table-cell">Último pedido</th>
@@ -155,7 +155,7 @@ export default function ClientesTable({
                     )}
                   </td>
 
-                  {!esVendedor && (
+                  {esDueno && (
                     <td className="px-4 py-3.5 text-right hidden sm:table-cell">
                       <span className="text-sm font-bold text-zinc-900 tabular-nums">
                         {c.totalGastado > 0 ? formatPEN(c.totalGastado) : <span className="text-zinc-300 font-normal">—</span>}
