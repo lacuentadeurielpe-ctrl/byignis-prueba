@@ -112,8 +112,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-zinc-950 tracking-tight">{session.nombreFerreteria}</h1>
-          <p className="text-zinc-400 text-sm mt-0.5 capitalize">{etiquetaFechaLima()}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-zinc-950 dark:text-zinc-50 tracking-tight">{session.nombreFerreteria}</h1>
+          <p className="text-zinc-400 dark:text-zinc-500 text-sm mt-0.5 capitalize">{etiquetaFechaLima()}</p>
         </div>
         <Suspense>
           <PeriodSelector />

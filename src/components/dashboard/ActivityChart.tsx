@@ -1,13 +1,15 @@
 'use client'
 
+import { useTheme } from 'next-themes'
 import {
-  AreaChart, Area, BarChart, Bar,
+  AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
 } from 'recharts'
+import { useEffect, useState } from 'react'
 
 interface DayData {
-  dia: string      // etiqueta del eje X
+  dia: string
   pedidos: number
   cotizaciones: number
 }
@@ -16,60 +18,95 @@ interface ActivityChartProps {
   datos: DayData[]
 }
 
-const TOOLTIP_STYLE = {
-  fontSize: 12,
-  borderRadius: 10,
-  border: '1px solid #e4e4e7',
-  boxShadow: '0 1px 6px rgba(0,0,0,.07)',
-}
-
-const LEGEND_FORMATTER = (value: string) => (
-  <span style={{ fontSize: 12, color: '#71717a' }}>{value}</span>
-)
-
-const TICK_STYLE = { fontSize: 11, fill: '#a1a1aa' }
-
-export default function ActivityChart({ datos }: ActivityChartProps) {
-  // ≤7 puntos → barras verticales; más → área suavizada
-  if (datos.length <= 7) {
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
     return (
-      <ResponsiveContainer width="100%" height={180}>
-        <BarChart data={datos} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-          <XAxis dataKey="dia" tick={TICK_STYLE} />
-          <YAxis allowDecimals={false} tick={TICK_STYLE} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#fafafa' }} />
-          <Legend iconType="square" iconSize={10} formatter={LEGEND_FORMATTER} />
-          <Bar dataKey="cotizaciones" name="Cotizaciones" fill="#a1a1aa" radius={[3, 3, 0, 0]} />
-          <Bar dataKey="pedidos"      name="Pedidos"      fill="#18181b" radius={[3, 3, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 shadow-xl">
+        <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 mb-2">{label}</p>
+        {payload.map((entry: any, index: number) => (
+          <div key={index} className="flex items-center gap-2 text-xs">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+            <span className="text-zinc-500 dark:text-zinc-400 capitalize">{entry.name}:</span>
+            <span className="font-medium text-zinc-900 dark:text-zinc-100 tabular-nums">{entry.value}</span>
+          </div>
+        ))}
+      </div>
     )
   }
+  return null
+}
 
-  // Gráfico de área para períodos largos (semana, mes, 30d)
+export default function ActivityChart({ datos }: ActivityChartProps) {
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  if (!mounted) return <div className="w-full h-[180px] animate-pulse bg-zinc-100 dark:bg-zinc-800/50 rounded-lg" />
+
+  const isDark = resolvedTheme === 'dark'
+
+  // Colores dinámicos
+  const colorPrimary = isDark ? '#ffffff' : '#18181b' // Pedidos
+  const colorSecondary = isDark ? '#52525b' : '#a1a1aa' // Cotizaciones
+  const gridColor = isDark ? '#27272a' : '#f4f4f5'
+  const tickColor = isDark ? '#71717a' : '#a1a1aa'
+
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <AreaChart data={datos} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+      <AreaChart data={datos} margin={{ top: 10, right: 0, left: -24, bottom: 0 }}>
         <defs>
-          <linearGradient id="gCot" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#a1a1aa" stopOpacity={0.35} />
-            <stop offset="95%" stopColor="#a1a1aa" stopOpacity={0}    />
+          <linearGradient id="gPrimary" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={colorPrimary} stopOpacity={0.3} />
+            <stop offset="95%" stopColor={colorPrimary} stopOpacity={0} />
           </linearGradient>
-          <linearGradient id="gPed" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#18181b" stopOpacity={0.2}  />
-            <stop offset="95%" stopColor="#18181b" stopOpacity={0}    />
+          <linearGradient id="gSecondary" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={colorSecondary} stopOpacity={0.4} />
+            <stop offset="95%" stopColor={colorSecondary} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-        <XAxis dataKey="dia" tick={{ fontSize: 10, fill: '#a1a1aa' }} interval="preserveStartEnd" />
-        <YAxis allowDecimals={false} tick={TICK_STYLE} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} />
-        <Legend iconType="square" iconSize={10} formatter={LEGEND_FORMATTER} />
-        <Area type="monotone" dataKey="cotizaciones" name="Cotizaciones"
-          stroke="#a1a1aa" strokeWidth={2} fill="url(#gCot)" />
-        <Area type="monotone" dataKey="pedidos" name="Pedidos"
-          stroke="#18181b" strokeWidth={2} fill="url(#gPed)" />
+        
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+        
+        <XAxis 
+          dataKey="dia" 
+          tick={{ fontSize: 11, fill: tickColor }} 
+          tickLine={false}
+          axisLine={false}
+          dy={10}
+        />
+        
+        <YAxis 
+          allowDecimals={false} 
+          tick={{ fontSize: 11, fill: tickColor }} 
+          tickLine={false}
+          axisLine={false}
+        />
+        
+        <Tooltip content={<CustomTooltip />} cursor={{ stroke: gridColor, strokeWidth: 1, strokeDasharray: '4 4' }} />
+        
+        <Legend 
+          iconType="circle" 
+          iconSize={8} 
+          wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+        />
+        
+        <Area 
+          type="monotone" 
+          dataKey="cotizaciones" 
+          name="Cotizaciones"
+          stroke={colorSecondary} 
+          strokeWidth={2} 
+          fill="url(#gSecondary)" 
+        />
+        <Area 
+          type="monotone" 
+          dataKey="pedidos" 
+          name="Pedidos"
+          stroke={colorPrimary} 
+          strokeWidth={2} 
+          fill="url(#gPrimary)" 
+        />
       </AreaChart>
     </ResponsiveContainer>
   )

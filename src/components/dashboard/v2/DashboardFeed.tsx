@@ -5,6 +5,7 @@ import { Zap, ShoppingCart, FileText, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
+import { HoverSpotlightCard } from '@/components/ui/HoverSpotlightCard'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
@@ -43,40 +44,41 @@ export default function DashboardFeed() {
   const { feed } = data
 
   return (
-    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="bg-white/80 backdrop-blur-sm rounded-2xl border border-zinc-100 p-5 hover:shadow-sm transition">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-zinc-900">Actividad reciente</h3>
-        <span className="text-[10px] bg-emerald-50 text-emerald-600 border border-emerald-100 font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          en vivo
-        </span>
-      </div>
+    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="h-full">
+      <HoverSpotlightCard className="h-full p-5 flex flex-col">
+        <div className="flex items-center justify-between mb-4 relative z-10">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Actividad reciente</h3>
+          <span className="text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/50 font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+            en vivo
+          </span>
+        </div>
 
       {feed.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10 text-center">
-          <div className="w-10 h-10 rounded-2xl bg-zinc-50 border border-zinc-100 flex items-center justify-center mb-3">
-            <Zap className="w-5 h-5 text-zinc-300" />
+        <div className="flex flex-col items-center justify-center py-10 text-center relative z-10">
+          <div className="w-10 h-10 rounded-2xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 flex items-center justify-center mb-3">
+            <Zap className="w-5 h-5 text-zinc-300 dark:text-zinc-500" />
           </div>
-          <p className="text-sm text-zinc-400">Sin actividad reciente</p>
+          <p className="text-sm text-zinc-400 dark:text-zinc-500">Sin actividad reciente</p>
         </div>
       ) : (
-        <div className="relative">
-          <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gradient-to-b from-zinc-100 via-zinc-200 to-transparent" />
+        <div className="relative z-10">
+          <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gradient-to-b from-zinc-100 dark:from-zinc-800 via-zinc-200 dark:via-zinc-700 to-transparent" />
           <div className="space-y-1.5">
             {feed.map((item: any, idx: number) => {
               const Icon = iconFeed(item.type)
               return (
                 <motion.div key={item.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }}>
-                  <Link href={item.href} className="flex items-start gap-3 relative group rounded-xl hover:bg-zinc-50 px-1.5 py-1.5 transition">
-                    <div className={cn('w-[22px] h-[22px] rounded-full border-2 border-white shrink-0 flex items-center justify-center shadow-sm z-10 group-hover:scale-110 transition', colorFeed(item.estado, item.type))}>
+                  <Link href={item.href} className="flex items-start gap-3 relative group rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/50 px-1.5 py-1.5 transition">
+                    <div className={cn('w-[22px] h-[22px] rounded-full border-2 border-white dark:border-zinc-900 shrink-0 flex items-center justify-center shadow-sm z-10 group-hover:scale-110 transition', colorFeed(item.estado, item.type))}>
                       <Icon className="w-2.5 h-2.5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-baseline justify-between gap-2">
-                        <p className="text-xs font-semibold text-zinc-800 truncate">{item.titulo}</p>
-                        <p className="text-[10px] text-zinc-400 shrink-0 whitespace-nowrap">{tiempoRelativo(item.ts)}</p>
+                        <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">{item.titulo}</p>
+                        <p className="text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0 whitespace-nowrap">{tiempoRelativo(item.ts)}</p>
                       </div>
-                      <p className="text-[11px] text-zinc-400 truncate mt-0.5">{item.subtitulo}</p>
+                      <p className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{item.subtitulo}</p>
                     </div>
                   </Link>
                 </motion.div>
@@ -85,6 +87,7 @@ export default function DashboardFeed() {
           </div>
         </div>
       )}
+      </HoverSpotlightCard>
     </motion.div>
   )
 }

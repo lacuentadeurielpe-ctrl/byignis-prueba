@@ -28,18 +28,16 @@
   --glass-border: rgba(228, 228, 231, 0.5);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --foreground: #fafafa;
-    --primary: #fafafa;
-    --primary-foreground: #18181b;
-    --primary-hover: #e4e4e7;
-    --card: #09090b;
-    --card-border: #27272a;
-    --glass-bg: rgba(9, 9, 11, 0.85);
-    --glass-border: rgba(255, 255, 255, 0.1);
-  }
+.dark {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #18181b;
+  --primary-hover: #e4e4e7;
+  --card: #09090b;
+  --card-border: #27272a;
+  --glass-bg: rgba(9, 9, 11, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.1);
 }
 
 @theme inline {

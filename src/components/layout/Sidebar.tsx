@@ -25,6 +25,7 @@ import {
 import NotificationBadge from '@/components/layout/NotificationBadge'
 import type { Rol } from '@/lib/auth/roles'
 import { checkPermiso, type Permiso, type PermisoMap } from '@/lib/auth/permisos'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 interface NavItem {
   label: string
@@ -130,15 +131,15 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="w-64 shrink-0 bg-[#fcfcfd] border-r border-zinc-200/80 h-full flex flex-col z-40 relative">
+    <aside className="w-64 shrink-0 bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 h-full flex flex-col z-40 relative transition-ui">
 
       {/* ── Brand ──────────────────────────────────────────────────────── */}
-      <div className="px-4 py-4 border-b border-zinc-100">
+      <div className="px-4 py-4 border-b border-zinc-100 dark:border-zinc-800 transition-ui">
         <div className="flex items-center gap-3">
 
           {/* Logo — clickeable para el dueño */}
           <div className="relative shrink-0 group transition-ui hover:scale-105">
-            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/80 shadow-sm flex items-center justify-center border border-zinc-200/50 shrink-0">
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-50 dark:bg-zinc-900 shadow-sm flex items-center justify-center border border-zinc-200/50 dark:border-zinc-800 shrink-0">
               {subiendoLogo
                 ? <Loader2 className="w-4 h-4 text-zinc-400 animate-spin" />
                 : logoLocal
@@ -170,11 +171,11 @@ export default function Sidebar({
             )}
           </div>
 
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-zinc-950 truncate leading-tight">
+          <div className="min-w-0 flex-1 transition-ui">
+            <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-100 truncate leading-tight">
               {nombreFerreteria ?? 'Mi negocio'}
             </p>
-            <p className="text-xs text-zinc-400 mt-0.5">
+            <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
               {rol === 'dueno' ? (
                 <button
                   type="button"
@@ -214,13 +215,13 @@ export default function Sidebar({
                       className={cn(
                         'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200',
                         active
-                          ? 'bg-zinc-100 text-zinc-900 font-medium shadow-sm'
-                          : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900'
+                          ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-medium shadow-sm'
+                          : 'text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-white'
                       )}
                     >
                       <Icon className={cn(
                         'w-[18px] h-[18px] shrink-0 transition-all duration-200',
-                        active ? 'text-zinc-900' : 'text-zinc-400 group-hover:text-zinc-600'
+                        active ? 'text-zinc-900 dark:text-white' : 'text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-600 dark:group-hover:text-zinc-300'
                       )} />
                       <span className="truncate flex-1">{label}</span>
                       {badge && (
@@ -243,16 +244,17 @@ export default function Sidebar({
         })}
       </nav>
 
-      {/* ── Cerrar sesión ──────────────────────────────────────────────── */}
-      <div className="px-3 py-3 border-t border-zinc-100">
+      {/* ── Footer de Sidebar ──────────────────────────────────────────── */}
+      <div className="px-3 py-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2 transition-ui">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm
-                     text-zinc-500 hover:bg-red-50 hover:text-red-600 transition-ui w-full group"
+          className="flex flex-1 items-center gap-3 px-3 py-2.5 rounded-xl text-sm
+                     text-zinc-500 dark:text-zinc-400 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400 transition-ui group"
         >
-          <LogOut className="w-4 h-4 shrink-0 text-zinc-400 group-hover:text-red-500 transition-ui" />
+          <LogOut className="w-4 h-4 shrink-0 text-zinc-400 dark:text-zinc-500 group-hover:text-red-500 dark:group-hover:text-red-400 transition-ui" />
           <span>Cerrar sesión</span>
         </button>
+        <ThemeToggle />
       </div>
 
     </aside>

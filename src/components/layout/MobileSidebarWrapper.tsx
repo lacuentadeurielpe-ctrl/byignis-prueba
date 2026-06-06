@@ -52,7 +52,7 @@ export default function MobileSidebarWrapper({
   const tabsVisibles = TAB_ITEMS.filter((t) => checkPermiso(session, t.permiso))
 
   return (
-    <div className="flex h-screen overflow-hidden bg-zinc-50">
+    <div className="flex h-screen overflow-hidden bg-zinc-50 dark:bg-background text-foreground transition-ui">
 
       {/* ── Sidebar — solo desktop ──────────────────────────────────────── */}
       <div className="hidden md:flex md:shrink-0">
@@ -76,8 +76,8 @@ export default function MobileSidebarWrapper({
           {sidebar}
           <button
             onClick={() => setDrawerOpen(false)}
-            className="absolute top-4 right-[-40px] w-8 h-8 bg-white rounded-r-xl shadow-sm
-                       border border-l-0 border-zinc-200 flex items-center justify-center text-zinc-500"
+            className="absolute top-4 right-[-40px] w-8 h-8 bg-white dark:bg-zinc-900 rounded-r-xl shadow-sm
+                       border border-l-0 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-500 transition-ui"
           >
             <X className="w-4 h-4" />
           </button>
