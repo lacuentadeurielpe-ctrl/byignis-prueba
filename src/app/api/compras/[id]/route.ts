@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDB } from '@/lib/db'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { createClient } from '@/lib/supabase/server'
 
 // GET /api/compras/[id] — Detalle de una compra con sus ítems
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -28,6 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { id } = await params
   const db = await getDB()
+  const supabase = await createClient()
   
   try {
     const body = await request.json()
@@ -39,7 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     if (accion === 'confirmar') {
       // 1. Antes de confirmar, procesar los productos pendientes de creación (guardados en borrador)
-      const { data: items } = await db.supabase
+      const { data: items } = await supabase
         .from('items_compra')
         .select('id, nombre_producto, codigo_interno, es_formal, unidad_compra, precio_compra_unitario')
         .eq('compra_id', id)
@@ -52,7 +54,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
               const meta = JSON.parse(item.codigo_interno)
               if (meta.pendiente_crear) {
                 // Crear el producto ahora
-                const { data: prod, error: errProd } = await db.supabase
+                const { data: prod, error: errProd } = await supabase
                   .from('productos')
                   .insert({
                     ferreteria_id: session.ferreteriaId,
@@ -71,7 +73,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
                 if (prod && !errProd) {
                   // Actualizar items_compra para enlazar el nuevo producto
-                  await db.supabase
+                  await supabase
                     .from('items_compra')
                     .update({ 
                       producto_id: prod.id,
