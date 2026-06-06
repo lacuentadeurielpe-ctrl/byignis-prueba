@@ -21,6 +21,7 @@ import DashboardKPIs from '@/components/dashboard/v2/DashboardKPIs'
 import DashboardPipeline from '@/components/dashboard/v2/DashboardPipeline'
 import DashboardFeed from '@/components/dashboard/v2/DashboardFeed'
 import DashboardCharts from '@/components/dashboard/v2/DashboardCharts'
+import DashboardRealtime from '@/components/dashboard/v2/DashboardRealtime'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,6 +106,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-6xl mx-auto">
+      {/* ── MOTOR REALTIME ────────────────────────────────────────────── */}
+      <DashboardRealtime ferreteriaId={session.ferreteriaId} />
+
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
