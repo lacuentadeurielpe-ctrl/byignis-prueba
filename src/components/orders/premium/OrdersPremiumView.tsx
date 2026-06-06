@@ -255,13 +255,35 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
       )}
 
       {comprobantesHooks.modalBoleta && (
-        <ModalEmitirBoleta pedido={comprobantesHooks.modalBoleta} onClose={() => comprobantesHooks.setModalBoleta(null)} onEmitida={() => { comprobantesHooks.setModalBoleta(null); router.refresh() }} />
+        <ModalEmitirBoleta 
+          pedido={comprobantesHooks.modalBoleta} 
+          onClose={() => comprobantesHooks.setModalBoleta(null)} 
+          onEmitida={(resultado) => { 
+            comprobantesHooks.handleBoletaEmitida(comprobantesHooks.modalBoleta.id, resultado)
+            router.refresh() 
+          }} 
+        />
       )}
       {comprobantesHooks.modalFactura && (
-        <ModalEmitirFactura pedido={comprobantesHooks.modalFactura} onClose={() => comprobantesHooks.setModalFactura(null)} onEmitida={() => { comprobantesHooks.setModalFactura(null); router.refresh() }} />
+        <ModalEmitirFactura 
+          pedido={comprobantesHooks.modalFactura} 
+          onClose={() => comprobantesHooks.setModalFactura(null)} 
+          onEmitida={(resultado) => { 
+            comprobantesHooks.handleFacturaEmitida(comprobantesHooks.modalFactura.id, resultado)
+            router.refresh() 
+          }} 
+        />
       )}
       {comprobantesHooks.modalNC && (
-        <ModalNotaCredito comprobanteOriginal={comprobantesHooks.modalNC.comprobanteOriginal!} pedido={comprobantesHooks.modalNC.pedido} onCerrar={() => comprobantesHooks.setModalNC(null)} onEmitida={() => { comprobantesHooks.setModalNC(null); router.refresh() }} />
+        <ModalNotaCredito 
+          comprobanteOriginal={comprobantesHooks.modalNC.comprobanteOriginal!} 
+          pedido={comprobantesHooks.modalNC.pedido} 
+          onCerrar={() => comprobantesHooks.setModalNC(null)} 
+          onEmitida={() => { 
+            comprobantesHooks.setModalNC(null)
+            router.refresh() 
+          }} 
+        />
       )}</div>
   )
 }

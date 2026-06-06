@@ -218,7 +218,8 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     return { ok: false, error: 'El pedido no tiene productos facturables (comprados con factura) para emitir boleta.' }
   }
 
-  const comprobanteSecundarioId = undefined
+  const itemsInformales = todosLosItems.filter(i => i.productos?.facturable === false)
+  let comprobanteSecundarioId: string | undefined = undefined
 
   // ── 3. Verificar si ya existe boleta emitida — si es así, la devolvemos ────
   const { data: yaEmitida } = await supabase
@@ -231,13 +232,21 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     .maybeSingle()
 
   if (yaEmitida) {
+    const { data: yaEmitidaSecundaria } = await supabase
+      .from('comprobantes')
+      .select('id')
+      .eq('pedido_id', opts.pedidoId)
+      .eq('ferreteria_id', opts.ferreteriaId)
+      .eq('tipo', 'nota_venta')
+      .maybeSingle()
+
     return {
       ok:             true,
       comprobanteId:  yaEmitida.id,
       numeroCompleto: yaEmitida.numero_completo,
       pdfUrl:         yaEmitida.pdf_url   ?? undefined,
       xmlUrl:         yaEmitida.xml_url   ?? undefined,
-      comprobanteSecundarioId,
+      comprobanteSecundarioId: yaEmitidaSecundaria?.id,
     }
   }
 
@@ -458,12 +467,26 @@ export async function emitirBoleta(opts: OpcionesEmision): Promise<ResultadoEmis
     }
   }
 
+  if (resultado.ok && itemsInformales.length > 0) {
+    comprobanteSecundarioId = await procesarItemsInformales(
+      supabase,
+      opts.ferreteriaId,
+      opts.pedidoId,
+      itemsInformales,
+      todosLosItems,
+      opts.clienteNombre,
+      opts.clienteDni,
+      opts.emitidoPor
+    )
+  }
+
   return {
     ok:             true,
     comprobanteId:  comprobante?.id,
     numeroCompleto,
     pdfUrl:         resultado.data!.enlace_del_pdf,
     xmlUrl:         resultado.data!.enlace_del_xml,
+    comprobanteSecundarioId,
   }
 }
 
@@ -525,7 +548,8 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
     return { ok: false, error: 'El pedido no tiene productos facturables (comprados con factura) para emitir factura.' }
   }
 
-  const comprobanteSecundarioId = undefined
+  const itemsInformales = todosLosItems.filter(i => i.productos?.facturable === false)
+  let comprobanteSecundarioId: string | undefined = undefined
 
   // ── 3. Verificar si ya existe factura emitida — si es así, la devolvemos ──
   const { data: yaEmitida } = await supabase
@@ -538,12 +562,21 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
     .maybeSingle()
 
   if (yaEmitida) {
+    const { data: yaEmitidaSecundaria } = await supabase
+      .from('comprobantes')
+      .select('id')
+      .eq('pedido_id', opts.pedidoId)
+      .eq('ferreteria_id', opts.ferreteriaId)
+      .eq('tipo', 'nota_venta')
+      .maybeSingle()
+
     return {
       ok:             true,
       comprobanteId:  yaEmitida.id,
       numeroCompleto: yaEmitida.numero_completo,
       pdfUrl:         yaEmitida.pdf_url   ?? undefined,
       xmlUrl:         yaEmitida.xml_url   ?? undefined,
+      comprobanteSecundarioId: yaEmitidaSecundaria?.id,
     }
   }
 
@@ -757,6 +790,19 @@ export async function emitirFactura(opts: OpcionesFactura): Promise<ResultadoEmi
       error:          resultado.error,
       tokenInvalido:  resultado.tokenInvalido,
     }
+  }
+
+  if (resultado.ok && itemsInformales.length > 0) {
+    comprobanteSecundarioId = await procesarItemsInformales(
+      supabase,
+      opts.ferreteriaId,
+      opts.pedidoId,
+      itemsInformales,
+      todosLosItems,
+      opts.clienteNombre,
+      opts.clienteRuc,
+      opts.emitidoPor
+    )
   }
 
   return {
