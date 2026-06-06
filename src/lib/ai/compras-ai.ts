@@ -110,7 +110,11 @@ export async function extraerCompraDeImagenes(
     const result = await model.generateContent([prompt, ...imageParts])
     const textResponse = result.response.text()
     const cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim()
-    jsonResult = JSON.parse(cleanJson)
+    
+    // Solucionar el problema común de "trailing commas" (comas al final de listas/objetos) que rompen JSON.parse estricto
+    const jsonSinComas = cleanJson.replace(/,\s*([\]}])/g, '$1')
+    
+    jsonResult = JSON.parse(jsonSinComas)
   } catch (error: any) {
     console.error('[Gemini] Error al comunicarse con Gemini:', error)
     throw new Error('Error al analizar la imagen con IA: ' + error.message)

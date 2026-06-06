@@ -444,14 +444,14 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
             <UploadCloud className="w-10 h-10 text-zinc-400 group-hover:text-zinc-600 transition mb-3" />
-            <p className="text-xs font-bold text-zinc-700">Haz clic o arrastra fotos de tu factura aquí</p>
-            <p className="text-[10px] text-zinc-400 mt-1">Soporta múltiples páginas (fotos) de un mismo comprobante</p>
+            <p className="text-xs font-bold text-zinc-700">Haz clic o arrastra fotos o PDFs de tu factura aquí</p>
+            <p className="text-[10px] text-zinc-400 mt-1">Soporta múltiples páginas o documentos de un mismo comprobante</p>
           </div>
 
           {/* Lista de archivos cargados */}
           {archivos.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Imágenes listas para analizar ({archivos.length})</p>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Archivos listos para analizar ({archivos.length})</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {archivos.map((arch, index) => (
                   <div key={index} className="relative rounded-xl border border-zinc-200 overflow-hidden bg-zinc-50 p-2 group shadow-sm flex items-center gap-2">
