@@ -9,7 +9,7 @@
 
 import { normalizarUnidad } from '@/lib/constantes/unidades'
 
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 
 // ── Interfaces públicas (mantienen compatibilidad 100%) ─────────────
 export interface ItemCompraExtraido {
@@ -56,9 +56,41 @@ export async function extraerCompraDeImagenes(
   console.log('[Gemini] Iniciando extracción de factura con gemini-2.5-flash...')
 
   const genAI = new GoogleGenerativeAI(apiKey)
+  
+  const schema = {
+    type: SchemaType.OBJECT,
+    properties: {
+      ruc_proveedor: { type: SchemaType.STRING, description: "El número de RUC de 11 dígitos del proveedor" },
+      razon_social: { type: SchemaType.STRING, description: "El nombre o razón social del proveedor" },
+      numero_documento: { type: SchemaType.STRING, description: "El número de serie y correlativo (ej. F001-12345)" },
+      fecha_emision: { type: SchemaType.STRING, description: "La fecha de emisión en formato YYYY-MM-DD" },
+      es_formal: { type: SchemaType.BOOLEAN, description: "true si detectas un RUC válido de 11 dígitos, false si es una nota de venta sin RUC" },
+      total_bruto: { type: SchemaType.NUMBER, description: "El valor subtotal antes de aplicar el IGV" },
+      igv: { type: SchemaType.NUMBER, description: "El monto exacto del impuesto IGV" },
+      total_neto: { type: SchemaType.NUMBER, description: "El importe total final a pagar" },
+      productos: {
+        type: SchemaType.ARRAY,
+        items: {
+          type: SchemaType.OBJECT,
+          properties: {
+            descripcion: { type: SchemaType.STRING, description: "Nombre detallado del producto, incluyendo marca y medidas" },
+            cantidad: { type: SchemaType.NUMBER, description: "Cantidad numérica de unidades" },
+            precio_unitario: { type: SchemaType.NUMBER, description: "PRECIO CON IGV INCLUIDO. Si la tabla muestra Valor Unitario (sin IGV), multiplícalo por 1.18" },
+            subtotal: { type: SchemaType.NUMBER, description: "TOTAL DE LA LÍNEA CON IGV INCLUIDO." }
+          },
+          required: ["descripcion", "cantidad", "precio_unitario", "subtotal"]
+        }
+      }
+    },
+    required: ["es_formal", "total_neto"]
+  }
+
   const model = genAI.getGenerativeModel({ 
     model: 'gemini-2.5-flash',
-    generationConfig: { responseMimeType: 'application/json' }
+    generationConfig: { 
+      responseMimeType: 'application/json',
+      responseSchema: schema
+    }
   })
 
   const imageParts = imagenes.map(img => {
@@ -110,11 +142,7 @@ export async function extraerCompraDeImagenes(
     const result = await model.generateContent([prompt, ...imageParts])
     const textResponse = result.response.text()
     const cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim()
-    
-    // Solucionar el problema común de "trailing commas" (comas al final de listas/objetos) que rompen JSON.parse estricto
-    const jsonSinComas = cleanJson.replace(/,\s*([\]}])/g, '$1')
-    
-    jsonResult = JSON.parse(jsonSinComas)
+    jsonResult = JSON.parse(cleanJson)
   } catch (error: any) {
     console.error('[Gemini] Error al comunicarse con Gemini:', error)
     throw new Error('Error al analizar la imagen con IA: ' + error.message)
