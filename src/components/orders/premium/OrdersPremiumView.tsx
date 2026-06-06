@@ -65,7 +65,7 @@ export interface Pedido {
 export interface Producto { id: string; nombre: string; unidad: string; precio_base: number; precio_compra: number; stock: number }
 export interface Zona { id: string; nombre: string; tiempo_estimado_min: number }
 
-export default function OrdersPremiumView({ pedidos: inicial, productos = [], zonas = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, nubefactConfigurado = false, tieneRuc = false }: {
+export default function OrdersPremiumView({ pedidos: inicial, productos = [], zonas = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, nubefactConfigurado = false, tieneRuc = false, initEstado, initPedidoId }: {
   pedidos: Pedido[]
   productos?: Producto[]
   zonas?: Zona[]
@@ -75,6 +75,8 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
   permisos?: Partial<PermisoMap>
   nubefactConfigurado?: boolean
   tieneRuc?: boolean
+  initEstado?: string
+  initPedidoId?: string
 }) {
   const router = useRouter()
   const esDueno = rol === 'dueno'
@@ -97,6 +99,16 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
 
   const selectedOrder = pedidos.find(p => p.id === selectedOrderId)
+
+  // Handle deep linking initialization
+  useEffect(() => {
+    if (initEstado) {
+      filters.setFiltroEstado(initEstado)
+    }
+    if (initPedidoId) {
+      setSelectedOrderId(initPedidoId)
+    }
+  }, [initEstado, initPedidoId])
 
   // Realtime
   useEffect(() => {

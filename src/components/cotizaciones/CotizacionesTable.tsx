@@ -76,12 +76,12 @@ function estaEnRango(fecha: string, rango: string): boolean {
   return true
 }
 
-interface Props { cotizaciones: Cotizacion[]; productos?: Producto[]; margenMinimo?: number }
+interface Props { cotizaciones: Cotizacion[]; productos?: Producto[]; margenMinimo?: number; initCotizacionId?: string }
 
-export default function CotizacionesTable({ cotizaciones: inicial, productos = [], margenMinimo = 10 }: Props) {
+export default function CotizacionesTable({ cotizaciones: inicial, productos = [], margenMinimo = 10, initCotizacionId }: Props) {
   const router = useRouter()
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>(inicial)
-  const [expandido, setExpandido] = useState<string | null>(null)
+  const [expandido, setExpandido] = useState<string | null>(initCotizacionId ?? null)
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroFecha, setFiltroFecha] = useState('')

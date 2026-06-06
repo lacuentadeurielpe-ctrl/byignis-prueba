@@ -22,6 +22,7 @@ import DashboardPipeline from '@/components/dashboard/v2/DashboardPipeline'
 import DashboardFeed from '@/components/dashboard/v2/DashboardFeed'
 import DashboardCharts from '@/components/dashboard/v2/DashboardCharts'
 import DashboardRealtime from '@/components/dashboard/v2/DashboardRealtime'
+import DashboardInbox from '@/components/dashboard/v2/DashboardInbox'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +49,23 @@ function calcPeriodo(p: string): { inicio: string; fin: string; prevInicio: stri
       const prevLima = ahoraLima(); prevLima.setUTCMonth(prevLima.getUTCMonth() - 1)
       const pYyyy = prevLima.getUTCFullYear(); const pMm = String(prevLima.getUTCMonth() + 1).padStart(2, '0')
       return { inicio, fin: finHoy, prevInicio: `${pYyyy}-${pMm}-01T05:00:00Z`, prevFin: inicio, label: 'Este mes', dias: dia }
+    }
+    case 'mes_anterior': {
+      const lima = ahoraLima()
+      lima.setUTCDate(1) // Ir al primero del mes actual
+      lima.setUTCHours(0,0,0,0)
+      const fin = new Date(lima.getTime() - 1).toISOString() // Último milisegundo del mes anterior
+      lima.setUTCMonth(lima.getUTCMonth() - 1)
+      const inicio = lima.toISOString()
+      
+      const prevLima = new Date(lima.getTime())
+      prevLima.setUTCMonth(prevLima.getUTCMonth() - 1)
+      const prevInicio = prevLima.toISOString()
+      return { inicio, fin, prevInicio, prevFin: inicio, label: 'Mes anterior', dias: 30 }
+    }
+    case 'trimestre': {
+      const inicio = inicioDiaLima(-90)
+      return { inicio, fin: finHoy, prevInicio: inicioDiaLima(-180), prevFin: inicio, label: 'Este trimestre', dias: 90 }
     }
     case '30d': {
       const inicio = inicioDiaLima(-29)
@@ -109,16 +127,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       {/* ── MOTOR REALTIME ────────────────────────────────────────────── */}
       <DashboardRealtime ferreteriaId={session.ferreteriaId} />
 
-      {/* ── HEADER ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      {/* Cabecera & Periodo */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-zinc-950 dark:text-zinc-50 tracking-tight">{session.nombreFerreteria}</h1>
-          <p className="text-zinc-400 dark:text-zinc-500 text-sm mt-0.5 capitalize">{etiquetaFechaLima()}</p>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Dashboard</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">Visión general de tus operaciones</p>
         </div>
-        <Suspense>
+        <Suspense fallback={<div className="h-9 w-48 bg-zinc-100 dark:bg-zinc-800 rounded-xl animate-pulse" />}>
           <PeriodSelector />
         </Suspense>
       </div>
+
+      {/* Smart Inbox - Tareas y Alertas */}
+      <DashboardInbox />
 
       {/* ── COMPONENTES CLIENTE (SWR + REALTIME) ──────────────────────── */}
       <DashboardSnapshot esDueno={esDueno} />

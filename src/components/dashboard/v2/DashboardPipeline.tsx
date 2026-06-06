@@ -46,7 +46,7 @@ export default function DashboardPipeline() {
           const pct   = Math.round((count / totalPipeline) * 100)
           const Icon  = estado.icon
           return (
-            <Link key={estado.key} href="/dashboard/ventas?tab=pedidos" className="flex items-center gap-3 group hover:opacity-80 transition block">
+            <Link key={estado.key} href={`/dashboard/ventas?tab=pedidos&estado=${estado.key}`} className="flex items-center gap-3 group hover:opacity-80 transition block">
               <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-110', estado.bg)}>
                 <Icon className={cn('w-3.5 h-3.5', estado.text)} />
               </div>
@@ -73,7 +73,7 @@ export default function DashboardPipeline() {
         {pedidosRecientes.length === 0 ? (
           <p className="text-xs text-zinc-300 dark:text-zinc-600 text-center py-2">Sin pedidos en curso</p>
         ) : pedidosRecientes.map((p: any) => (
-          <Link key={p.id} href="/dashboard/ventas?tab=pedidos" className="flex items-center justify-between text-xs py-1 px-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition group">
+          <Link key={p.id} href={`/dashboard/ventas?tab=pedidos&pedido_id=${p.id}`} className="flex items-center justify-between text-xs py-1 px-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition group">
             <div className="min-w-0 flex items-center gap-1.5">
               <span className="font-medium text-zinc-700 dark:text-zinc-300 truncate">{p.nombre_cliente}</span>
               <span className="text-zinc-300 dark:text-zinc-600">·</span>

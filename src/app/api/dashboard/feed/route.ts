@@ -38,7 +38,7 @@ export async function GET() {
         titulo: p.estado, // El cliente lo mapeará visualmente
         subtitulo: `${p.nombre_cliente} · ${p.numero_pedido}`,
         ts: p.updated_at, 
-        href: '/dashboard/ventas?tab=pedidos',
+        href: `/dashboard/ventas?tab=pedidos&pedido_id=${p.id}`,
       })),
       ...(feedCotizaciones ?? []).map((c: any) => ({
         id: 'c_' + c.id, 
@@ -47,7 +47,7 @@ export async function GET() {
         titulo: 'Cotización enviada', 
         subtitulo: (c.clientes as { nombre?: string } | null)?.nombre ?? 'cliente',
         ts: c.created_at, 
-        href: '/dashboard/ventas?tab=cotizaciones',
+        href: `/dashboard/ventas?tab=cotizaciones&cotizacion_id=${c.id}`,
       })),
       ...(feedPagos ?? []).map((p: any) => ({
         id: 'pg_' + p.id,
@@ -56,7 +56,7 @@ export async function GET() {
         titulo: 'Pago recibido',
         subtitulo: `S/${p.monto} · ${(p.clientes as { nombre?: string } | null)?.nombre ?? 'cliente'}`,
         ts: p.registrado_at, 
-        href: '/dashboard/ventas?tab=pagos',
+        href: `/dashboard/ventas?tab=pagos&pago_id=${p.id}`,
       })),
     ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).slice(0, 9)
 

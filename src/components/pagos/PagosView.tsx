@@ -46,9 +46,9 @@ const TABS = [
   { key: 'rechazado',          label: 'Rechazados' },
 ]
 
-export default function PagosView({ pagos, esDueno }: { pagos: PagoItem[]; esDueno: boolean }) {
+export default function PagosView({ pagos, esDueno, initPagoId }: { pagos: PagoItem[]; esDueno: boolean; initPagoId?: string }) {
   const [tabActivo, setTabActivo] = useState('')
-  const [expandido, setExpandido] = useState<string | null>(null)
+  const [expandido, setExpandido] = useState<string | null>(initPagoId ?? null)
   const [procesando, setProcesando] = useState<string | null>(null)
   const [pagosState, setPagosState] = useState<PagoItem[]>(pagos)
 

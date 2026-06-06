@@ -28,10 +28,14 @@ type Tab = typeof TABS[number]['id']
 export default async function VentasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; estado?: string; pedido_id?: string; cotizacion_id?: string; pago_id?: string }>
 }) {
   const params = await searchParams
   const tab: Tab = (params.tab as Tab) ?? 'pedidos'
+  const initEstado = params.estado
+  const initPedidoId = params.pedido_id
+  const initCotizacionId = params.cotizacion_id
+  const initPagoId = params.pago_id
 
   const session = await getSessionInfo()
   if (!session) redirect('/auth/login')
@@ -70,6 +74,8 @@ export default async function VentasPage({
         permisos={session.permisos as PermisoMap}
         nubefactConfigurado={!!ferreteriaData?.nubefact_token_enc}
         tieneRuc={ferreteriaData?.tipo_ruc !== 'sin_ruc'}
+        initEstado={initEstado}
+        initPedidoId={initPedidoId}
       />
     )
   }
@@ -97,6 +103,7 @@ export default async function VentasPage({
         cotizaciones={lista}
         productos={productos as any[] ?? []}
         margenMinimo={configBot?.margen_minimo_porcentaje ?? 10}
+        initCotizacionId={initCotizacionId}
       />
     )
   }
@@ -129,6 +136,7 @@ export default async function VentasPage({
         <PagosView
           pagos={(pagos ?? []) as unknown as PagoItem[]}
           esDueno={session.rol === 'dueno'}
+          initPagoId={initPagoId}
         />
       </>
     )
