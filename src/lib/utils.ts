@@ -16,8 +16,10 @@ export function formatPEN(amount: number): string {
 }
 
 // Formatea una fecha en español peruano
-export function formatFecha(date: string | Date, opciones?: Intl.DateTimeFormatOptions): string {
+export function formatFecha(date: string | Date | null | undefined, opciones?: Intl.DateTimeFormatOptions): string {
+  if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '—'
   return d.toLocaleDateString('es-PE', {
     day: '2-digit',
     month: 'short',
