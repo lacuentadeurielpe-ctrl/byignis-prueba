@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Search, Sparkles, FileSpreadsheet, Download } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, Eye, AlertCircle, Search, Sparkles, FileSpreadsheet, Download, Paperclip } from 'lucide-react'
 import { formatPEN } from '@/lib/utils'
 import SmartPurchaseCapture from './SmartPurchaseCapture'
 import * as XLSX from 'xlsx'
@@ -18,6 +18,7 @@ interface Compra {
   total_neto: number
   estado: 'borrador' | 'recibida' | 'anulada'
   created_at: string
+  archivos_adjuntos: string[]
 }
 
 interface Props {
@@ -257,6 +258,15 @@ export default function ComprasTable({ comprasIniciales }: Props) {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center gap-2 justify-end">
+                          {c.archivos_adjuntos && c.archivos_adjuntos.length > 0 && (
+                            <button
+                              onClick={() => window.open(c.archivos_adjuntos[0], '_blank')}
+                              className="px-2.5 py-1 text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg border border-zinc-200 transition flex items-center gap-1"
+                              title="Ver documento adjunto"
+                            >
+                              <Paperclip className="w-3 h-3" /> Evidencia
+                            </button>
+                          )}
                           {isBorrador && (
                             <>
                               <button

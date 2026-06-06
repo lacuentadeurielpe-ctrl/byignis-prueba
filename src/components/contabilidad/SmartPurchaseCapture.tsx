@@ -546,6 +546,27 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
           {/* Acciones */}
           <div className="flex justify-end gap-3 pt-3 border-t border-zinc-100">
             <button
+              onClick={() => {
+                setCabecera({
+                  tipo_documento: 'factura',
+                  numero_factura: '',
+                  fecha_factura: new Date().toISOString().split('T')[0],
+                  ruc_proveedor: '',
+                  razon_social_proveedor: '',
+                  total_bruto: 0,
+                  igv: 0,
+                  total_neto: 0,
+                  notas: '',
+                  es_formal: true
+                })
+                setItems([])
+                setStep('reconcile')
+              }}
+              className="px-4 py-2 border border-zinc-250 hover:bg-zinc-50 text-zinc-800 text-xs font-semibold rounded-xl transition shadow-sm"
+            >
+              Registro Manual
+            </button>
+            <button
               onClick={onClose}
               className="px-4 py-2 border border-zinc-200 hover:bg-zinc-50 text-zinc-600 text-xs font-semibold rounded-xl transition"
             >
@@ -676,6 +697,27 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
                 <span>Total Compra:</span>
                 <span className="font-mono text-emerald-600 text-sm tabular-nums">{formatPEN(cabecera.total_neto)}</span>
               </div>
+            </div>
+
+            {/* Evidencia adjunta (Opcional en modo manual) */}
+            <div className="border-t border-zinc-200/50 pt-3.5 pb-2">
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">Evidencia (Opcional)</label>
+              {archivos.length > 0 ? (
+                <div className="text-xs text-zinc-600 bg-zinc-200/50 px-3 py-2 rounded-xl flex justify-between items-center border border-zinc-200">
+                  <span className="font-medium">{archivos.length} archivo(s) adjunto(s)</span>
+                  <button onClick={() => { setArchivos([]); setBase64Images([]); }} className="text-red-600 hover:text-red-700 font-bold hover:underline">
+                    Quitar
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input type="file" multiple accept="image/*,application/pdf" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                  <div className="w-full px-2.5 py-2 text-xs text-center rounded-xl border border-dashed border-zinc-300 bg-white font-medium text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50 transition flex items-center justify-center gap-1.5">
+                    <UploadCloud className="w-4 h-4 text-zinc-400" />
+                    Adjuntar comprobante o foto
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

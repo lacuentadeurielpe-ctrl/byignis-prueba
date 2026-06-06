@@ -25,7 +25,8 @@ export default async function ComprasPage() {
     fecha_factura: c.fecha_factura,
     total_neto: Number(c.total_neto),
     estado: c.estado,
-    created_at: c.created_at
+    created_at: c.created_at,
+    archivos_adjuntos: c.archivos_adjuntos || []
   }))
 
   return (
