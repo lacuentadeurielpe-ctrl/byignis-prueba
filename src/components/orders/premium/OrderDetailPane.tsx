@@ -154,7 +154,7 @@ export default function OrderDetailPane({
                 <select 
                   className="px-4 py-2 border border-zinc-300 rounded-lg text-sm font-medium text-zinc-700 bg-zinc-50 focus:ring-2 focus:ring-emerald-500 outline-none"
                   onChange={(e) => {
-                    if(e.target.value) actions.actualizarPago(pedido.id, 'pagado', e.target.value)
+                    if(e.target.value) actions.actualizarPago(pedido.id, { estado_pago: 'pagado', metodo_pago: e.target.value })
                   }}
                   value=""
                 >

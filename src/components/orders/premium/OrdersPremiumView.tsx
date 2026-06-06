@@ -230,41 +230,38 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
 
       {/* Modales (Ocultos) */}
       {modalNuevo && (
-        <NuevoPedidoModal onClose={(reload) => { setModalNuevo(false); if (reload) router.refresh() }} ferreteriaId={ferreteriaId ?? ''} productos={productos} zonas={zonas} />
+        <NuevoPedidoModal onClose={() => { setModalNuevo(false); router.refresh() }} productos={productos} zonas={zonas} />
       )}
       {modalVoz && (
-        <PedidoVozModal onClose={(reload) => { setModalVoz(false); if (reload) router.refresh() }} ferreteriaId={ferreteriaId ?? ''} productos={productos} />
+        <PedidoVozModal onClose={() => { setModalVoz(false); router.refresh() }} productos={productos} zonas={zonas} />
       )}
       {modalEditar && (
-        <EditarPedidoModal pedidoOriginal={modalEditar} onClose={(reload) => { setModalEditar(null); if (reload) router.refresh() }} ferreteriaId={ferreteriaId ?? ''} productos={productos} zonas={zonas} />
+        <EditarPedidoModal pedido={modalEditar} onClose={() => { setModalEditar(null); router.refresh() }} productos={productos} zonas={zonas} />
       )}
       {cancelDialog && (
         <ModalCancelarPedido
-          abierto={!!cancelDialog}
-          onClose={() => setCancelDialog(null)}
-          onConfirm={(motivo) => {
-            actions.cambiarEstado(cancelDialog.pedidoId, 'cancelado', undefined, undefined, motivo)
-            setCancelDialog(null)
-          }}
-          cargando={actions.eliminando === cancelDialog.pedidoId}
+          cancelDialog={cancelDialog}
+          setCancelDialog={setCancelDialog}
+          cambiarEstado={(id, estado, motivo) => actions.cambiarEstado(id, estado, motivo)}
         />
       )}
       {creditoDialog && (
         <ModalAprobarCredito
-          abierto={!!creditoDialog}
-          fechaLimiteDefault={creditoDialog.fechaLimite}
-          onClose={() => setCreditoDialog(null)}
-          onConfirm={(fechaLimite) => {
-            actions.aprobarCredito(creditoDialog.pedidoId, fechaLimite)
-            setCreditoDialog(null)
-          }}
-          cargando={actions.aprobandoCredito === creditoDialog.pedidoId}
+          creditoDialog={creditoDialog}
+          setCreditoDialog={setCreditoDialog}
+          aprobarCredito={(dialog) => actions.aprobarCredito(dialog)}
+          aprobandoCredito={actions.aprobandoCredito}
         />
       )}
 
-      {comprobantesHooks.modalBoleta && <ModalEmitirBoleta pedido={comprobantesHooks.modalBoleta} ferreteriaId={ferreteriaId!} onClose={(success) => { comprobantesHooks.setModalBoleta(null); if (success) comprobantesHooks.handleBoletaEmitida(comprobantesHooks.modalBoleta!.id) }} />}
-      {comprobantesHooks.modalFactura && <ModalEmitirFactura pedido={comprobantesHooks.modalFactura} ferreteriaId={ferreteriaId!} onClose={(success) => { comprobantesHooks.setModalFactura(null); if (success) comprobantesHooks.handleFacturaEmitida(comprobantesHooks.modalFactura!.id) }} />}
-      {comprobantesHooks.modalNC && <ModalNotaCredito comprobante={comprobantesHooks.modalNC.comprobante!} pedido={comprobantesHooks.modalNC.pedido} ferreteriaId={ferreteriaId!} onClose={(success) => { comprobantesHooks.setModalNC(null); if (success) router.refresh() }} />}
-    </div>
+      {comprobantesHooks.modalBoleta && (
+        <ModalEmitirBoleta pedido={comprobantesHooks.modalBoleta} onClose={() => comprobantesHooks.setModalBoleta(null)} onEmitida={() => { comprobantesHooks.setModalBoleta(null); router.refresh() }} />
+      )}
+      {comprobantesHooks.modalFactura && (
+        <ModalEmitirFactura pedido={comprobantesHooks.modalFactura} onClose={() => comprobantesHooks.setModalFactura(null)} onEmitida={() => { comprobantesHooks.setModalFactura(null); router.refresh() }} />
+      )}
+      {comprobantesHooks.modalNC && (
+        <ModalNotaCredito comprobanteOriginal={comprobantesHooks.modalNC.comprobanteOriginal!} pedido={comprobantesHooks.modalNC.pedido} onCerrar={() => comprobantesHooks.setModalNC(null)} onEmitida={() => { comprobantesHooks.setModalNC(null); router.refresh() }} />
+      )}</div>
   )
 }
