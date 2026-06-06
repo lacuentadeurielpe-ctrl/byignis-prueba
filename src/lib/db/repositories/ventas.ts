@@ -447,7 +447,7 @@ export class VentasRepository {
   }
 
   /**
-   * Obtiene los pedidos activos excluyendo cancelados.
+   * Obtiene los pedidos activos excluyendo cancelados. (Legacy)
    */
   async obtenerPedidosActivosPipeline(ferreteriaId: string) {
     const { data, error } = await this.supabase
@@ -456,6 +456,40 @@ export class VentasRepository {
       .eq('ferreteria_id', ferreteriaId)
       .not('estado', 'in', '(cancelado)')
       .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data ?? []
+  }
+
+  /**
+   * Obtiene la cuenta de pedidos en curso por estado agrupado mediante RPC (Fase 4).
+   */
+  async obtenerPipelineCounts(ferreteriaId: string) {
+    const { data, error } = await this.supabase.rpc('dashboard_pipeline', {
+      f_id: ferreteriaId
+    })
+
+    if (error) throw error
+    
+    // Transformar array [{estado_pedido: 'pendiente', cantidad: 5}, ...] a un Record
+    const pipeline: Record<string, number> = {}
+    for (const row of (data || [])) {
+      pipeline[row.estado_pedido] = Number(row.cantidad)
+    }
+    return pipeline
+  }
+
+  /**
+   * Obtiene los últimos 5 pedidos en curso (Fase 4).
+   */
+  async obtenerPedidosRecientesEnCurso(ferreteriaId: string) {
+    const { data, error } = await this.supabase
+      .from('pedidos')
+      .select('id, nombre_cliente, numero_pedido, estado')
+      .eq('ferreteria_id', ferreteriaId)
+      .in('estado', ['pendiente', 'confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado'])
+      .order('updated_at', { ascending: false })
+      .limit(5)
 
     if (error) throw error
     return data ?? []
@@ -520,7 +554,7 @@ export class VentasRepository {
   }
 
   /**
-   * Obtiene pedidos dentro de un rango de fechas para reportes.
+   * Obtiene pedidos dentro de un rango de fechas para reportes (Legacy, considerar usar obtenerKPIsRango).
    */
   async obtenerPedidosRango(ferreteriaId: string, inicio: string, fin: string) {
     const { data, error } = await this.supabase
@@ -532,6 +566,23 @@ export class VentasRepository {
 
     if (error) throw error
     return data ?? []
+  }
+
+  /**
+   * Obtiene los KPIs de ventas usando RPC en BD para máximo rendimiento (Fase 4).
+   */
+  async obtenerKPIsRango(ferreteriaId: string, inicio: string, fin: string) {
+    const { data, error } = await this.supabase.rpc('dashboard_kpi_rango', {
+      f_id: ferreteriaId,
+      p_inicio: inicio,
+      p_fin: fin
+    })
+
+    if (error) throw error
+    if (!data || data.length === 0) {
+      return { pedidos_n: 0, entregados_n: 0, ingresos_total: 0, ganancia_total: 0 }
+    }
+    return data[0] as { pedidos_n: number; entregados_n: number; ingresos_total: number; ganancia_total: number }
   }
 
   /**

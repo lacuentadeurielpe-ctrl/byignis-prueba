@@ -64,16 +64,16 @@ export async function GET(request: Request) {
 
   try {
     const [
-      pedidosPer,
-      pedidosPrevPer,
+      kpiPer,
+      kpiPrevPer,
       convPer,
       convPrevPer,
       clientesNuevosPer,
       clientesPrevPer,
       convActivas
     ] = await Promise.all([
-      ventasRepo.obtenerPedidosRango(fid, per.inicio, per.fin),
-      ventasRepo.obtenerPedidosRango(fid, per.prevInicio, per.prevFin),
+      ventasRepo.obtenerKPIsRango(fid, per.inicio, per.fin),
+      ventasRepo.obtenerKPIsRango(fid, per.prevInicio, per.prevFin),
       chatRepo.contarConversacionesActivasRango(fid, per.inicio, per.fin),
       chatRepo.contarConversacionesActivasRango(fid, per.prevInicio, per.prevFin),
       clientesRepo.contarClientesNuevosRango(fid, per.inicio, per.fin),
@@ -81,15 +81,14 @@ export async function GET(request: Request) {
       chatRepo.contarConversacionesPausadas(fid),
     ])
 
-    const pedidosPerArr   = pedidosPer ?? []
-    const pedidosPrevArr  = pedidosPrevPer ?? []
-    const totalPerPedidos = pedidosPerArr.length
-    const prevPerPedidos  = pedidosPrevArr.length
-    const perEntregados   = pedidosPerArr.filter((p: any) => p.estado === 'entregado').length
-    const prevEntregados  = pedidosPrevArr.filter((p: any) => p.estado === 'entregado').length
-    const perIngresos     = pedidosPerArr.filter((p: any) => p.estado !== 'cancelado').reduce((s, p) => s + (p.total ?? 0), 0)
-    const prevPerIngresos = pedidosPrevArr.filter((p: any) => p.estado !== 'cancelado').reduce((s, p) => s + (p.total ?? 0), 0)
-    const perGanancia     = session.rol !== 'vendedor' ? pedidosPerArr.filter((p: any) => p.estado === 'entregado').reduce((s, p) => s + (p.total ?? 0) - (p.costo_total ?? 0), 0) : 0
+    const totalPerPedidos = Number(kpiPer.pedidos_n)
+    const prevPerPedidos  = Number(kpiPrevPer.pedidos_n)
+    const perEntregados   = Number(kpiPer.entregados_n)
+    const prevEntregados  = Number(kpiPrevPer.entregados_n)
+    const perIngresos     = Number(kpiPer.ingresos_total)
+    const prevPerIngresos = Number(kpiPrevPer.ingresos_total)
+    const perGanancia     = session.rol !== 'vendedor' ? Number(kpiPer.ganancia_total) : 0
+    
     const ticketProm      = totalPerPedidos > 0 ? Math.round(perIngresos / totalPerPedidos) : 0
     const prevTicket      = prevPerPedidos  > 0 ? Math.round(prevPerIngresos / prevPerPedidos) : 0
     const tasaEntrega     = totalPerPedidos > 0 ? Math.round((perEntregados / totalPerPedidos) * 100) : 0
