@@ -73,7 +73,7 @@ export async function GET(
 
   // 5. Renderizar PDF
   try {
-    const stream = await renderToStream(React.createElement(PlantillaCompra, { data }))
+    const stream = await renderToStream(React.createElement(PlantillaCompra, { data }) as any)
     
     // Convert Node.js stream to Web ReadableStream
     const readableStream = new ReadableStream({
