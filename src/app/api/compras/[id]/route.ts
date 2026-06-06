@@ -38,6 +38,65 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (accion === 'confirmar') {
+      // 1. Antes de confirmar, procesar los productos pendientes de creación (guardados en borrador)
+      const { data: items } = await db.supabase
+        .from('items_compra')
+        .select('id, nombre_producto, codigo_interno, es_formal, unidad_compra, precio_compra_unitario')
+        .eq('compra_id', id)
+        .is('producto_id', null)
+
+      if (items && items.length > 0) {
+        for (const item of items) {
+          try {
+            if (item.codigo_interno && item.codigo_interno.includes('pendiente_crear')) {
+              const meta = JSON.parse(item.codigo_interno)
+              if (meta.pendiente_crear) {
+                // Crear el producto ahora
+                const { data: prod, error: errProd } = await db.supabase
+                  .from('productos')
+                  .insert({
+                    ferreteria_id: session.ferreteriaId,
+                    nombre: item.nombre_producto.trim(),
+                    categoria_id: meta.categoria_id,
+                    precio_base: meta.precio_base,
+                    precio_compra: item.precio_compra_unitario,
+                    unidad: item.unidad_compra || 'NIU',
+                    stock: 0,
+                    stock_minimo: meta.stock_minimo,
+                    facturable: item.es_formal,
+                    activo: true,
+                  })
+                  .select('id, codigo_interno')
+                  .single()
+
+                if (prod && !errProd) {
+                  // Actualizar items_compra para enlazar el nuevo producto
+                  await db.supabase
+                    .from('items_compra')
+                    .update({ 
+                      producto_id: prod.id,
+                      codigo_interno: prod.codigo_interno
+                    })
+                    .eq('id', item.id)
+
+                  // Guardar el alias si estaba pendiente
+                  if (meta.descripcion_factura) {
+                    await db.compras.guardarAliasProducto(
+                      session.ferreteriaId,
+                      prod.id,
+                      meta.descripcion_factura,
+                      1.0
+                    )
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Error al procesar producto pendiente:', e)
+          }
+        }
+      }
+
       await db.compras.confirmarRecepcion(session.ferreteriaId, id)
     } else {
       await db.compras.anularCompra(session.ferreteriaId, id)

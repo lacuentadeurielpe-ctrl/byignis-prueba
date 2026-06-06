@@ -157,34 +157,57 @@ export async function POST(request: Request) {
       let codigoInterno = null
 
       if (item.accion === 'crear') {
-        // Precio venta sugerido: si no se especifica, agregar un 30% de margen
         const precioBase = item.precio_venta_sugerido ?? Number((item.precio_compra_unitario * 1.3).toFixed(2))
+        const catId = item.categoria ? (mapaCategorias[item.categoria.trim().toLowerCase()] ?? null) : null
 
-        const { data: prod, error: errProd } = await supabase
-          .from('productos')
-          .insert({
-            ferreteria_id: session.ferreteriaId,
-            nombre: item.nombre.trim(),
-            categoria_id: item.categoria ? (mapaCategorias[item.categoria.trim().toLowerCase()] ?? null) : null,
+        if (recibir_inmediatamente) {
+          const { data: prod, error: errProd } = await supabase
+            .from('productos')
+            .insert({
+              ferreteria_id: session.ferreteriaId,
+              nombre: item.nombre.trim(),
+              categoria_id: catId,
+              precio_base: precioBase,
+              precio_compra: item.precio_compra_unitario,
+              unidad: item.unidad || 'NIU',
+              stock: 0, // El stock se sumará al procesar la recepción
+              stock_minimo: item.stock_minimo ?? null,
+              facturable: item.es_formal, // auto-marcar formalidad
+              activo: true,
+            })
+            .select('id, codigo_interno')
+            .single()
+
+          if (errProd || !prod) {
+            throw new Error(`Error al crear producto "${item.nombre}": ${errProd?.message}`)
+          }
+
+          productoId = prod.id
+          codigoInterno = prod.codigo_interno
+
+          // Guardar alias en alias_productos para memorizar el matching
+          if (item.descripcion_factura) {
+            await db.compras.guardarAliasProducto(
+              session.ferreteriaId,
+              productoId,
+              item.descripcion_factura,
+              1.0
+            )
+          }
+        } else {
+          // ES BORRADOR: No crear el producto aún para no ensuciar el catálogo.
+          // Guardamos los metadatos pendientes en codigo_interno.
+          productoId = null
+          codigoInterno = JSON.stringify({
+            pendiente_crear: true,
+            categoria_id: catId,
             precio_base: precioBase,
-            precio_compra: item.precio_compra_unitario,
-            unidad: item.unidad || 'NIU',
-            stock: 0, // El stock se sumará al procesar la recepción
-            stock_minimo: item.stock_minimo ?? null,
-            facturable: item.es_formal, // auto-marcar formalidad
-            activo: true,
+            descripcion_factura: item.descripcion_factura,
+            stock_minimo: item.stock_minimo
           })
-          .select('id, codigo_interno')
-          .single()
-
-        if (errProd || !prod) {
-          throw new Error(`Error al crear producto "${item.nombre}": ${errProd?.message}`)
         }
-
-        productoId = prod.id
-        codigoInterno = prod.codigo_interno
       } else if (item.accion === 'actualizar' && productoId) {
-        // Para productos existentes: Actualizar facturable y el costo de compra referencial
+        // Para productos existentes: Actualizar facturable
         const { data: prod, error: errUpdate } = await supabase
           .from('productos')
           .update({
@@ -200,16 +223,15 @@ export async function POST(request: Request) {
           console.error(`Error actualizando producto existente ${productoId}:`, errUpdate.message)
         }
         codigoInterno = prod?.codigo_interno || null
-      }
 
-      // Guardar alias en alias_productos para memorizar el matching
-      if (productoId && item.descripcion_factura) {
-        await db.compras.guardarAliasProducto(
-          session.ferreteriaId,
-          productoId,
-          item.descripcion_factura,
-          1.0
-        )
+        if (recibir_inmediatamente && item.descripcion_factura) {
+          await db.compras.guardarAliasProducto(
+            session.ferreteriaId,
+            productoId,
+            item.descripcion_factura,
+            1.0
+          )
+        }
       }
 
       // Preparar ítem para la inserción de compra
