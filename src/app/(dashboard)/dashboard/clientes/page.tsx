@@ -72,17 +72,16 @@ export default async function ClientesPage() {
             <p className="text-xs text-zinc-400">Gestión de cartera y cuentas corrientes</p>
           </div>
         </div>
-        <ClientesPageActions
-          esVendedor={session.rol === 'vendedor'}
-          clientes={clientesConMetricas}
-        />
+        <ClientesPageActions esDueno={session.rol === 'dueno'} />
       </div>
 
-      <ClientesDashboardMetrics
+      <ClientesDashboardMetrics 
         totalClientes={totalClientes}
         clientesActivos30Dias={clientesActivos30Dias}
         deudaTotal={deudaTotal}
         topComprador={topComprador}
+        clientes={clientesConMetricas}
+        rawClientes={clientes}
       />
 
       <ClientesTable

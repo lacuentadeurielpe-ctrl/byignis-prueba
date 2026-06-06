@@ -103,4 +103,34 @@ export class ClientesRepository {
     if (error) throw error
     return count ?? 0
   }
+
+  /**
+   * Obtiene la lista de oportunidades de CRM de un cliente.
+   */
+  async obtenerOportunidadesDeCliente(ferreteriaId: string, clienteId: string) {
+    const { data, error } = await this.supabase
+      .from('crm_oportunidades')
+      .select('id, titulo, descripcion, estado, valor_estimado, probabilidad_cierre, fecha_cierre_estimada, created_at, cotizacion_id')
+      .eq('cliente_id', clienteId)
+      .eq('ferreteria_id', ferreteriaId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data ?? []
+  }
+
+  /**
+   * Obtiene el feed de notas/bitácora de un cliente.
+   */
+  async obtenerNotasDeCliente(ferreteriaId: string, clienteId: string) {
+    const { data, error } = await this.supabase
+      .from('cliente_notas')
+      .select('id, tipo, contenido, created_at, autor_id')
+      .eq('cliente_id', clienteId)
+      .eq('ferreteria_id', ferreteriaId)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data ?? []
+  }
 }

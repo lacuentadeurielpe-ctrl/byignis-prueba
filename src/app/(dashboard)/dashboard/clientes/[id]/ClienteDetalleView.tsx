@@ -17,7 +17,10 @@ interface ClienteDetalleViewProps {
   cotizaciones: any[]
   creditos: any[]
   conversacion: any
+  oportunidades: any[]
+  notas: any[]
   esDueno: boolean
+  userId: string
 }
 
 const TABS = [
@@ -25,7 +28,7 @@ const TABS = [
   { id: 'cuenta', label: 'Cta. Corriente' },
   { id: 'historial', label: 'Historial' },
   { id: 'chat', label: 'Conversación' },
-  { id: 'notas', label: 'Notas' },
+  { id: 'notas', label: 'CRM / Notas' },
 ] as const
 
 export default function ClienteDetalleView({
@@ -34,7 +37,10 @@ export default function ClienteDetalleView({
   cotizaciones,
   creditos,
   conversacion,
-  esDueno
+  oportunidades,
+  notas,
+  esDueno,
+  userId
 }: ClienteDetalleViewProps) {
   const [activeTab, setActiveTab] = useState<typeof TABS[number]['id']>('overview')
   const [cliente, setCliente] = useState(initCliente)
@@ -200,8 +206,9 @@ export default function ClienteDetalleView({
         )}
         {activeTab === 'notas' && (
           <TabNotas 
-            cliente={cliente}
-            onUpdate={(notas) => setCliente({ ...cliente, notas_internas: notas })}
+            clienteId={cliente.id}
+            notasCRM={notas}
+            userId={userId}
           />
         )}
       </div>

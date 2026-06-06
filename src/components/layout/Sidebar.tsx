@@ -21,6 +21,7 @@ import {
   Truck,
   ScanLine,
   FileText,
+  Target,
 } from 'lucide-react'
 import NotificationBadge from '@/components/layout/NotificationBadge'
 import type { Rol } from '@/lib/auth/roles'
@@ -54,6 +55,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Catálogo',  href: '/dashboard/catalog',   icon: Package,    permiso: 'ver_stock' },
       { label: 'Clientes',  href: '/dashboard/clientes',  icon: Users,      permiso: 'ver_historial_clientes' },
+      { label: 'CRM / Pipeline', href: '/dashboard/crm',  icon: Target,     permiso: 'ver_historial_clientes' },
       { label: 'Créditos',  href: '/dashboard/creditos',  icon: CreditCard, permiso: 'ver_creditos' },
       { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos' },
     ],

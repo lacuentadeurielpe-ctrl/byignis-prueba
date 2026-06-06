@@ -31,12 +31,14 @@ export default async function ClienteDetallePage({ params }: Props) {
 
   if (!cliente) notFound()
 
-  // 2. Cargar en paralelo pedidos, cotizaciones, créditos y conversación activa
-  const [pedidos, cotizaciones, creditos, conversacion] = await Promise.all([
+  // 2. Cargar en paralelo pedidos, cotizaciones, créditos, conversación activa y datos CRM
+  const [pedidos, cotizaciones, creditos, conversacion, oportunidades, notas] = await Promise.all([
     clientesRepo.obtenerPedidosDeCliente(session.ferreteriaId, id),
     clientesRepo.obtenerCotizacionesDeCliente(session.ferreteriaId, id),
     clientesRepo.obtenerCreditosDeCliente(session.ferreteriaId, id),
     chatRepo.obtenerConversacionReciente(session.ferreteriaId, id),
+    clientesRepo.obtenerOportunidadesDeCliente(session.ferreteriaId, id),
+    clientesRepo.obtenerNotasDeCliente(session.ferreteriaId, id),
   ])
 
   // Cargar últimos mensajes si hay conversación
@@ -44,7 +46,6 @@ export default async function ClienteDetallePage({ params }: Props) {
   if (conversacion) {
     try {
       const msjs = await chatRepo.obtenerMensajesDeConversacion(conversacion.id, 30)
-      // Nota: obtenerMensajesDeConversacion ya retorna ordenados ascendentemente (reverse del listado original descendente)
       mensajes = msjs || []
     } catch {
       mensajes = []
@@ -58,7 +59,10 @@ export default async function ClienteDetallePage({ params }: Props) {
       cotizaciones={cotizaciones || []}
       creditos={creditos || []}
       conversacion={conversacion ? { ...conversacion, mensajes } : null}
+      oportunidades={oportunidades || []}
+      notas={notas || []}
       esDueno={session.rol === 'dueno'}
+      userId={session.userId}
     />
   )
 }

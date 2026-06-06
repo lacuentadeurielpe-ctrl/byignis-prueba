@@ -1,69 +1,149 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, Loader2, Check } from 'lucide-react'
+import { FileText, Phone, Users, MessageCircle, Loader2, Send } from 'lucide-react'
+import { formatFecha } from '@/lib/utils'
 
-interface Props {
-  cliente: any
-  onUpdate: (notas: string | null) => void
+interface NotaCRM {
+  id: string
+  tipo: 'nota' | 'llamada' | 'reunion' | 'whatsapp'
+  contenido: string
+  created_at: string
+  autor_id: string
 }
 
-export default function TabNotas({ cliente, onUpdate }: Props) {
-  const [notas, setNotas] = useState(cliente.notas_internas || '')
-  const [guardando, setGuardando] = useState(false)
-  const [guardado, setGuardado] = useState(false)
+interface Props {
+  clienteId: string
+  notasCRM: NotaCRM[]
+  userId: string
+}
 
-  async function guardar() {
-    setGuardando(true)
-    setGuardado(false)
+export default function TabNotas({ clienteId, notasCRM: iniciales, userId }: Props) {
+  const [notas, setNotas] = useState<NotaCRM[]>(iniciales)
+  const [nuevaNota, setNuevaNota] = useState('')
+  const [tipoNota, setTipoNota] = useState<NotaCRM['tipo']>('nota')
+  const [enviando, setEnviando] = useState(false)
+
+  const TIPO_ICONS = {
+    nota: { icon: FileText, color: 'text-amber-500', bg: 'bg-amber-100', label: 'Nota' },
+    llamada: { icon: Phone, color: 'text-blue-500', bg: 'bg-blue-100', label: 'Llamada' },
+    reunion: { icon: Users, color: 'text-indigo-500', bg: 'bg-indigo-100', label: 'Reunión' },
+    whatsapp: { icon: MessageCircle, color: 'text-emerald-500', bg: 'bg-emerald-100', label: 'WhatsApp' },
+  }
+
+  async function agregarNota() {
+    if (!nuevaNota.trim()) return
+    setEnviando(true)
     try {
-      const res = await fetch(`/api/clientes/${cliente.id}`, {
-        method: 'PATCH',
+      const res = await fetch(`/api/clientes/${clienteId}/notas`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notas_internas: notas.trim() || null })
+        body: JSON.stringify({ contenido: nuevaNota.trim(), tipo: tipoNota })
       })
       if (!res.ok) throw new Error()
-      
-      onUpdate(notas.trim() || null)
-      setGuardado(true)
-      setTimeout(() => setGuardado(false), 2000)
-    } catch (e) {
-      alert('Error al guardar notas')
+      const data = await res.json()
+      setNotas([{ ...data, autor_id: userId }, ...notas])
+      setNuevaNota('')
+      setTipoNota('nota')
+    } catch {
+      alert('Error al guardar nota')
     } finally {
-      setGuardando(false)
+      setEnviando(false)
     }
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden max-w-2xl">
-      <div className="p-6 border-b border-zinc-100 flex items-center gap-3">
-        <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
-          <FileText className="w-5 h-5 text-amber-500" />
-        </div>
-        <div>
-          <h3 className="text-sm font-bold text-zinc-900">Notas Internas</h3>
-          <p className="text-xs text-zinc-500">Información privada, el cliente no verá esto.</p>
-        </div>
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
-      <div className="p-6">
-        <textarea
-          value={notas}
-          onChange={(e) => setNotas(e.target.value)}
-          placeholder="Escribe aquí observaciones sobre el cliente, instrucciones de entrega frecuentes, acuerdos de pago especiales..."
-          className="w-full h-48 px-4 py-3 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-        />
-        <div className="mt-4 flex justify-end items-center gap-3">
-          {guardado && <span className="text-xs font-bold text-emerald-600 flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Guardado</span>}
-          <button
-            onClick={guardar}
-            disabled={guardando || notas === (cliente.notas_internas || '')}
-            className="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition"
-          >
-            {guardando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar Notas'}
-          </button>
+      {/* Editor (1 col) */}
+      <div className="lg:col-span-1">
+        <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden sticky top-6">
+          <div className="p-4 border-b border-zinc-100 bg-zinc-50/50">
+            <h3 className="text-sm font-bold text-zinc-900">Registrar Interacción</h3>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="flex gap-2">
+              {Object.entries(TIPO_ICONS).map(([key, config]) => {
+                const Icon = config.icon
+                const isActive = tipoNota === key
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setTipoNota(key as any)}
+                    className={`flex-1 flex flex-col items-center justify-center p-2 rounded-xl transition ${
+                      isActive ? 'bg-zinc-900 text-white shadow-md' : 'bg-zinc-50 text-zinc-500 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 mb-1 ${isActive ? 'text-white' : config.color}`} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">{config.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <textarea
+              value={nuevaNota}
+              onChange={(e) => setNuevaNota(e.target.value)}
+              placeholder="¿Qué sucedió con este cliente?"
+              className="w-full h-32 px-3 py-2 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none bg-zinc-50"
+            />
+
+            <button
+              onClick={agregarNota}
+              disabled={enviando || !nuevaNota.trim()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition"
+            >
+              {enviando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {enviando ? 'Guardando...' : 'Guardar en Historial'}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Feed (2 cols) */}
+      <div className="lg:col-span-2">
+        <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden p-6">
+          <h3 className="text-lg font-bold text-zinc-900 mb-6">Bitácora CRM</h3>
+          
+          {notas.length === 0 ? (
+            <div className="text-center py-12 bg-zinc-50 rounded-xl border border-zinc-100 border-dashed">
+              <FileText className="w-8 h-8 text-zinc-300 mx-auto mb-3" />
+              <p className="text-sm font-medium text-zinc-500">No hay interacciones registradas.</p>
+            </div>
+          ) : (
+            <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-zinc-200 before:to-transparent">
+              {notas.map((nota, i) => {
+                const config = TIPO_ICONS[nota.tipo] || TIPO_ICONS.nota
+                const Icon = config.icon
+                const esMio = nota.autor_id === userId
+
+                return (
+                  <div key={nota.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                    {/* Icon */}
+                    <div className={`flex items-center justify-center w-10 h-10 rounded-full border-4 border-white ${config.bg} shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10`}>
+                      <Icon className={`w-4 h-4 ${config.color}`} />
+                    </div>
+                    {/* Card */}
+                    <div className="w-[calc(100%-3rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-2xl border border-zinc-200 bg-white shadow-sm hover:shadow-md transition">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${config.bg} ${config.color}`}>
+                          {config.label}
+                        </span>
+                        <time className="text-xs font-medium text-zinc-400">{formatFecha(nota.created_at)}</time>
+                      </div>
+                      <p className="text-sm text-zinc-700 whitespace-pre-wrap">{nota.contenido}</p>
+                      <div className="mt-3 text-xs text-zinc-400 font-medium">
+                        Registrado por: <span className="text-zinc-600">{esMio ? 'Tú' : 'Usuario'}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
     </div>
   )
 }
