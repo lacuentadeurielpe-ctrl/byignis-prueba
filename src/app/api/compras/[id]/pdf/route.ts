@@ -42,10 +42,10 @@ export async function GET(
 
   // 3. Preparar items
   const items = (compra.items_compra || []).map((i: any) => ({
-    cantidad: Number(i.cantidad),
-    descripcion: i.producto_nombre || 'Producto sin nombre',
-    precio_unitario: Number(i.precio_unitario),
-    subtotal: Number(i.subtotal),
+    cantidad: Number(i.cantidad_comprada || i.cantidad || 0),
+    descripcion: i.nombre_producto || i.producto_nombre || 'Producto sin nombre',
+    precio_unitario: Number(i.precio_compra_unitario || i.precio_unitario || 0),
+    subtotal: Number(i.subtotal || 0),
   }))
 
   // 4. Preparar data para la plantilla
@@ -61,7 +61,7 @@ export async function GET(
       numero_factura: compra.numero_factura || '',
       tipo: (compra.tipo || 'informal') as any,
       fecha: compra.fecha_factura || compra.created_at,
-      proveedor_nombre: compra.proveedor_nombre || '',
+      proveedor_nombre: compra.razon_social_proveedor || compra.proveedor_nombre || '',
       proveedor_ruc: compra.proveedor_ruc || '',
       subtotal: Number(compra.total_bruto || 0),
       igv: Number(compra.igv || 0),
