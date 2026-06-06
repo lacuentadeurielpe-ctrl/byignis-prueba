@@ -1,12 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-// Usamos el service role para saltarnos RLS en la subida desde el backend
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
-
 export async function subirImagenComprobante(base64Image: string, mimeType: string, ferreteriaId: string): Promise<string> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+  // Usamos el service role para saltarnos RLS en la subida desde el backend
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+
   const extension = mimeType.split('/')[1] || 'jpg'
   const fileName = `${ferreteriaId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`
   
