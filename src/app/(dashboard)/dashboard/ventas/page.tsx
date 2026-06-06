@@ -4,7 +4,7 @@ import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
 import { FileText, ShoppingCart, CreditCard, TrendingUp } from 'lucide-react'
 import CotizacionesTable from '@/components/cotizaciones/CotizacionesTable'
-import OrdersTable from '@/components/orders/OrdersTable'
+import OrdersPremiumView from '@/components/orders/premium/OrdersPremiumView'
 import PagosView, { type PagoItem } from '@/components/pagos/PagosView'
 import type { PermisoMap } from '@/lib/auth/permisos'
 import { cn } from '@/lib/utils'
@@ -60,7 +60,7 @@ export default async function VentasPage({
     ])
 
     pedidosContent = (
-      <OrdersTable
+      <OrdersPremiumView
         pedidos={pedidos as any[] ?? []}
         productos={productos as any[] ?? []}
         zonas={zonas as any[] ?? []}

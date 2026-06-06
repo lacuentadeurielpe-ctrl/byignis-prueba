@@ -130,7 +130,7 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="w-64 shrink-0 glass shadow-soft border-r border-glass-border h-full flex flex-col transition-ui z-40 relative">
+    <aside className="w-64 shrink-0 bg-[#fcfcfd] border-r border-zinc-200/80 h-full flex flex-col z-40 relative">
 
       {/* ── Brand ──────────────────────────────────────────────────────── */}
       <div className="px-4 py-4 border-b border-zinc-100">
@@ -212,15 +212,15 @@ export default function Sidebar({
                       key={href}
                       href={href}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-ui',
+                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200',
                         active
-                          ? 'bg-primary/10 text-primary font-bold shadow-sm ring-1 ring-primary/20'
-                          : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 hover:translate-x-1'
+                          ? 'bg-zinc-100 text-zinc-900 font-medium shadow-sm'
+                          : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900'
                       )}
                     >
                       <Icon className={cn(
-                        'w-4 h-4 shrink-0 transition-ui',
-                        active ? 'text-primary scale-110' : 'text-zinc-400'
+                        'w-[18px] h-[18px] shrink-0 transition-all duration-200',
+                        active ? 'text-zinc-900' : 'text-zinc-400 group-hover:text-zinc-600'
                       )} />
                       <span className="truncate flex-1">{label}</span>
                       {badge && (
