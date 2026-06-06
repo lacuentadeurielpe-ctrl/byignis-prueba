@@ -41,7 +41,16 @@ export function useOrderFilters(pedidos: any[]) {
 
   const hayFiltros = busqueda || filtroEstado || filtroFecha
 
+  const conteosEstados = useMemo(() => {
+    const conteos: Record<string, number> = {}
+    for (const p of pedidos) {
+      conteos[p.estado] = (conteos[p.estado] || 0) + 1
+    }
+    return conteos
+  }, [pedidos])
+
   return {
+    pedidos,
     busqueda,
     setBusqueda,
     filtroEstado,
@@ -49,6 +58,7 @@ export function useOrderFilters(pedidos: any[]) {
     filtroFecha,
     setFiltroFecha,
     filtrados,
-    hayFiltros
+    hayFiltros,
+    conteosEstados
   }
 }
