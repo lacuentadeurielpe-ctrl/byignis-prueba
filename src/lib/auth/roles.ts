@@ -24,6 +24,7 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   const { data: { session } } = await supabase.auth.getSession()
 
   if (!session) return null
+  const user = session.user
 
   // 1. ¿Es dueño?
   const { data: ferreteria } = await supabase
