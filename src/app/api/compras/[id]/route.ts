@@ -69,7 +69,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     }
 
     // Como es borrador, simplemente la borramos y la DB se encarga de items_compra por CASCADE
-    const { error } = await db.supabase
+    const { error } = await db.compras.supabase
       .from('compras')
       .delete()
       .eq('id', id)
