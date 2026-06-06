@@ -248,15 +248,19 @@ export default function ComprasTable({ comprasIniciales }: Props) {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center gap-2 justify-end">
-                          {c.archivos_adjuntos && c.archivos_adjuntos.length > 0 && (
-                            <button
-                              onClick={() => window.open(c.archivos_adjuntos[0], '_blank')}
-                              className="px-2.5 py-1 text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg border border-zinc-200 transition flex items-center gap-1"
-                              title="Ver documento adjunto"
-                            >
-                              <Paperclip className="w-3 h-3" /> Evidencia
-                            </button>
-                          )}
+                          <button
+                            onClick={() => {
+                              if (c.archivos_adjuntos && c.archivos_adjuntos.length > 0) {
+                                window.open(c.archivos_adjuntos[0], '_blank')
+                              } else {
+                                window.open(`/api/compras/${c.id}/pdf`, '_blank')
+                              }
+                            }}
+                            className="px-2.5 py-1 text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg border border-zinc-200 transition flex items-center gap-1"
+                            title={c.archivos_adjuntos && c.archivos_adjuntos.length > 0 ? "Ver documento adjunto" : "Ver resumen PDF"}
+                          >
+                            <Eye className="w-3 h-3" /> Ver
+                          </button>
                           {isBorrador && (
                             <>
                               <button
