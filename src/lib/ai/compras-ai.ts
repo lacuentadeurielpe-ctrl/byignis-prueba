@@ -9,7 +9,7 @@
 
 import { normalizarUnidad } from '@/lib/constantes/unidades'
 
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
+import { GoogleGenerativeAI, SchemaType, Schema } from '@google/generative-ai'
 
 // ── Interfaces públicas (mantienen compatibilidad 100%) ─────────────
 export interface ItemCompraExtraido {
@@ -57,7 +57,7 @@ export async function extraerCompraDeImagenes(
 
   const genAI = new GoogleGenerativeAI(apiKey)
   
-  const schema = {
+  const schema: Schema = {
     type: SchemaType.OBJECT,
     properties: {
       ruc_proveedor: { type: SchemaType.STRING, description: "El número de RUC de 11 dígitos del proveedor" },
