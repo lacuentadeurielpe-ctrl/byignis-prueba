@@ -189,7 +189,7 @@ export async function POST(request: Request) {
           if (item.descripcion_factura) {
             await db.compras.guardarAliasProducto(
               session.ferreteriaId,
-              productoId,
+              productoId as string,
               item.descripcion_factura,
               1.0
             )
