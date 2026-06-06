@@ -143,7 +143,7 @@ export default function ClientesDashboardMetrics({
                 <Tooltip
                   cursor={{ fill: '#f4f4f5' }}
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [formatPEN(value), 'Volumen']}
+                  formatter={(value: any) => [formatPEN(Number(value) || 0), 'Volumen']}
                 />
                 <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>
