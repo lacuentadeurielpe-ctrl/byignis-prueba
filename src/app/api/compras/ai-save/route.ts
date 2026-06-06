@@ -224,10 +224,10 @@ export async function POST(request: Request) {
         }
         codigoInterno = prod?.codigo_interno || null
 
-        if (recibir_inmediatamente && item.descripcion_factura) {
+        if (recibir_inmediatamente && item.descripcion_factura && productoId) {
           await db.compras.guardarAliasProducto(
             session.ferreteriaId,
-            productoId,
+            productoId as string,
             item.descripcion_factura,
             1.0
           )
