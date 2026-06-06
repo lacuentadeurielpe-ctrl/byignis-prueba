@@ -30,7 +30,8 @@ interface CompraConfirmadaBody {
   notas?: string | null
   items: ItemConfirmado[]
   recibir_inmediatamente: boolean
-  imagenes?: { base64: string; mimeType: string }[]
+  archivos?: { base64: string; mimeType: string }[]
+  forzar_duplicado?: boolean
 }
 
 // POST /api/compras/ai-save
@@ -43,22 +44,48 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json() as CompraConfirmadaBody
-    const { items, recibir_inmediatamente, imagenes } = body
+    const { items, recibir_inmediatamente, archivos, forzar_duplicado } = body
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: 'No se enviaron ítems para guardar' }, { status: 400 })
     }
 
-    // 0. Subir imágenes en paralelo si existen
-    const urlsImagenes: string[] = []
-    if (imagenes && imagenes.length > 0) {
-      const promesasSubida = imagenes.map(img => 
-        subirImagenComprobante(img.base64, img.mimeType, session.ferreteriaId)
+    // 0a. Verificar duplicado por número de factura (solo si es formal y tiene número)
+    if (!forzar_duplicado && body.numero_factura?.trim()) {
+      const { data: existente } = await supabase
+        .from('compras')
+        .select('id, numero_compra, proveedor_nombre, total_neto, fecha_factura, created_at')
+        .eq('ferreteria_id', session.ferreteriaId)
+        .eq('numero_factura', body.numero_factura.trim())
+        .neq('estado', 'anulada')
+        .limit(1)
+        .single()
+
+      if (existente) {
+        return NextResponse.json({
+          error: 'DUPLICADO',
+          compra_existente: {
+            id: existente.id,
+            numero_compra: existente.numero_compra,
+            proveedor_nombre: existente.proveedor_nombre,
+            total_neto: existente.total_neto,
+            fecha_factura: existente.fecha_factura,
+            registrado_el: existente.created_at,
+          }
+        }, { status: 409 })
+      }
+    }
+
+    // 0b. Subir archivos adjuntos en paralelo si existen
+    const urlsArchivos: string[] = []
+    if (archivos && archivos.length > 0) {
+      const promesasSubida = archivos.map(arch =>
+        subirImagenComprobante(arch.base64, arch.mimeType, session.ferreteriaId)
       )
       const resultados = await Promise.allSettled(promesasSubida)
       resultados.forEach(res => {
-        if (res.status === 'fulfilled') urlsImagenes.push(res.value)
-        else console.error('Falló la subida de una imagen:', res.reason)
+        if (res.status === 'fulfilled') urlsArchivos.push(res.value)
+        else console.error('Falló la subida de un archivo:', res.reason)
       })
     }
 
@@ -223,11 +250,11 @@ export async function POST(request: Request) {
       itemsProcesados
     )
 
-    // 5. Vincular las imágenes subidas al registro de compra (ya que repository aún no las soporta en el crear)
-    if (urlsImagenes.length > 0) {
+    // 5. Vincular archivos adjuntos al registro de compra
+    if (urlsArchivos.length > 0) {
       await supabase
         .from('compras')
-        .update({ imagenes_adjuntas: urlsImagenes })
+        .update({ archivos_adjuntos: urlsArchivos })
         .eq('id', (compra as any).id)
     }
 

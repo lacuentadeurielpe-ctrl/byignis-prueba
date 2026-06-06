@@ -87,6 +87,13 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
   const [items, setItems] = useState<ItemExtraccion[]>([])
   const [advertencias, setAdvertencias] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [duplicado, setDuplicado] = useState<null | {
+    numero_compra: string
+    proveedor_nombre: string | null
+    total_neto: number
+    fecha_factura: string | null
+    registrado_el: string
+  }>(null)
 
   // Carga inicial del catálogo para re-matching manual
   useEffect(() => {
@@ -339,7 +346,8 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
           stock_minimo: it.stock_minimo,
           es_formal: it.es_formal
         })),
-        imagenes: base64Images
+        imagenes: base64Images,  // mantenemos el campo para compatibilidad tipado
+        archivos: base64Images,
       }
 
       const res = await fetch('/api/compras/ai-save', {
@@ -349,10 +357,69 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
       })
 
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Error al guardar la compra')
+        const errData = await res.json()
+        // Caso especial: duplicado detectado (409)
+        if (res.status === 409 && errData.error === 'DUPLICADO') {
+          setDuplicado(errData.compra_existente)
+          setIsSaving(false)
+          return
+        }
+        throw new Error(errData.error || 'Error al guardar la compra')
       }
 
+      router.push('/dashboard/contabilidad/compras')
+      router.refresh()
+      onClose()
+    } catch (err: any) {
+      setError(err.message || 'Error de red al guardar la compra')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const guardarForzandoDuplicado = async (recibirStock: boolean) => {
+    setDuplicado(null)
+    setIsSaving(true)
+    setError(null)
+
+    const payload = {
+      tipo: cabecera.tipo_documento === 'factura' ? 'formal' : (cabecera.tipo_documento === 'boleta' ? 'formal' : 'informal'),
+      numero_factura: cabecera.numero_factura,
+      fecha_factura: cabecera.fecha_factura,
+      ruc_proveedor: cabecera.ruc_proveedor,
+      razon_social_proveedor: cabecera.razon_social_proveedor,
+      total_bruto: cabecera.total_bruto,
+      igv: cabecera.igv,
+      total_neto: cabecera.total_neto,
+      notas: cabecera.notas,
+      recibir_inmediatamente: recibirStock,
+      forzar_duplicado: true,
+      archivos: base64Images,
+      items: items.map((it) => ({
+        descripcion_factura: it.descripcion_factura,
+        accion: it.accion,
+        producto_existente_id: it.producto_existente_id,
+        nombre: it.nombre,
+        cantidad: it.cantidad,
+        precio_compra_unitario: it.precio_compra_unitario,
+        precio_venta_sugerido: it.precio_venta_sugerido,
+        unidad: it.unidad_factura,
+        categoria: it.categoria,
+        stock_minimo: it.stock_minimo,
+        es_formal: it.es_formal
+      }))
+    }
+
+    try {
+      const res = await fetch('/api/compras/ai-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.error || 'Error al guardar la compra')
+      }
       router.push('/dashboard/contabilidad/compras')
       router.refresh()
       onClose()
@@ -893,6 +960,60 @@ export default function SmartPurchaseCapture({ onClose }: SmartPurchaseCapturePr
                   Confirmar y Recibir Stock
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE DUPLICADO */}
+      {duplicado && (
+        <div className="fixed inset-0 z-[60] bg-zinc-950/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-zinc-200 rounded-2xl shadow-xl max-w-sm w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-amber-50 border-b border-amber-100 px-5 py-4 flex gap-3 items-start">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-bold text-amber-900">Posible Documento Duplicado</h3>
+                <p className="text-[11px] leading-relaxed text-amber-700 mt-1">
+                  El sistema detectó que ya ingresaste la factura <strong className="font-bold">{cabecera.numero_factura}</strong> anteriormente.
+                </p>
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="bg-zinc-50 border border-zinc-100 rounded-lg p-3 space-y-1.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-zinc-500">Proveedor:</span>
+                  <span className="font-medium text-zinc-900 truncate max-w-[150px]" title={duplicado.proveedor_nombre || ''}>
+                    {duplicado.proveedor_nombre || 'Desconocido'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-zinc-500">Total Neto:</span>
+                  <span className="font-bold text-zinc-900">{formatPEN(duplicado.total_neto)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-zinc-500">Registrado el:</span>
+                  <span className="font-medium text-zinc-900">
+                    {new Date(duplicado.registrado_el).toLocaleDateString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[10px] text-zinc-500 text-center px-2">
+                ¿Estás seguro de que quieres guardar esta compra de todos modos?
+              </p>
+            </div>
+            <div className="border-t border-zinc-100 p-4 bg-zinc-50 flex gap-2 justify-end">
+              <button
+                onClick={() => setDuplicado(null)}
+                className="px-4 py-2 text-xs font-bold text-zinc-600 hover:text-zinc-900 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => guardarForzandoDuplicado(true)} // O guardar en borrador? Asumimos recibir stock por defecto si fuerza
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition"
+              >
+                Sí, guardar duplicado
+              </button>
             </div>
           </div>
         </div>
