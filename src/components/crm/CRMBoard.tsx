@@ -14,7 +14,7 @@ interface Oportunidad {
   valor_estimado: number
   probabilidad_cierre: number
   fecha_cierre_estimada: string
-  clientes: { id: string; nombre: string; alias: string; tipo: string }
+  clientes: any
 }
 
 const COLUMNAS = [
@@ -141,10 +141,10 @@ export default function CRMBoard({ oportunidades: inicial, clientes, userId }: {
 
                             <div className="flex items-center gap-2 mb-3">
                               <div className="w-5 h-5 rounded-md bg-zinc-100 flex items-center justify-center shrink-0">
-                                {item.clientes?.tipo === 'empresa' ? <Building2 className="w-3 h-3 text-zinc-500" /> : <User className="w-3 h-3 text-zinc-500" />}
+                                {(Array.isArray(item.clientes) ? item.clientes[0]?.tipo : item.clientes?.tipo) === 'empresa' ? <Building2 className="w-3 h-3 text-zinc-500" /> : <User className="w-3 h-3 text-zinc-500" />}
                               </div>
                               <span className="text-xs font-medium text-zinc-700 truncate">
-                                {item.clientes?.nombre || item.clientes?.alias}
+                                {Array.isArray(item.clientes) ? (item.clientes[0]?.nombre || item.clientes[0]?.alias) : (item.clientes?.nombre || item.clientes?.alias)}
                               </span>
                             </div>
 
