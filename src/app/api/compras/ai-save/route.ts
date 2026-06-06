@@ -159,8 +159,33 @@ export async function POST(request: Request) {
       if (item.accion === 'crear') {
         const precioBase = item.precio_venta_sugerido ?? Number((item.precio_compra_unitario * 1.3).toFixed(2))
         const catId = item.categoria ? (mapaCategorias[item.categoria.trim().toLowerCase()] ?? null) : null
+        const nombreLimpio = item.nombre.trim()
 
-        if (recibir_inmediatamente) {
+        // ── Verificación de Nombre Único ──
+        // Si por alguna razón la IA marcó como "crear" pero el producto ya existe (por nombre idéntico),
+        // lo enlazamos al existente para no violar la regla de unicidad ni duplicar inventario.
+        const { data: prodExistente } = await supabase
+          .from('productos')
+          .select('id, codigo_interno')
+          .eq('ferreteria_id', session.ferreteriaId)
+          .ilike('nombre', nombreLimpio)
+          .limit(1)
+          .single()
+
+        if (prodExistente) {
+          // El producto ya existe! Cambiamos silenciosamente la acción a "actualizar"
+          productoId = prodExistente.id
+          codigoInterno = prodExistente.codigo_interno
+          
+          if (recibir_inmediatamente && item.descripcion_factura) {
+            await db.compras.guardarAliasProducto(
+              session.ferreteriaId,
+              productoId as string,
+              item.descripcion_factura,
+              1.0
+            )
+          }
+        } else if (recibir_inmediatamente) {
           const { data: prod, error: errProd } = await supabase
             .from('productos')
             .insert({

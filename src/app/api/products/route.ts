@@ -82,6 +82,20 @@ export async function POST(request: Request) {
     delete productoData.categoria  // quitar el campo string antes del insert
   }
 
+  // ── Verificación de Nombre Único ──
+  const nombreLimpio = productoData.nombre.trim()
+  const { data: prodExistente } = await supabase
+    .from('productos')
+    .select('id')
+    .eq('ferreteria_id', session.ferreteriaId)
+    .ilike('nombre', nombreLimpio)
+    .limit(1)
+    .single()
+
+  if (prodExistente) {
+    return NextResponse.json({ error: `Ya existe un producto con el nombre "${nombreLimpio}" en tu catálogo.` }, { status: 400 })
+  }
+
   // Crear el producto
   const { data: producto, error: errProducto } = await supabase
     .from('productos')

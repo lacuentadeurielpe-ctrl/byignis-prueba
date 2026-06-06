@@ -53,31 +53,57 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             if (item.codigo_interno && item.codigo_interno.includes('pendiente_crear')) {
               const meta = JSON.parse(item.codigo_interno)
               if (meta.pendiente_crear) {
-                // Crear el producto ahora
-                const { data: prod, error: errProd } = await supabase
+                const nombreLimpio = item.nombre_producto.trim()
+
+                // ── Verificación de Nombre Único ──
+                // Si el dueño creó el producto manualmente mientras este borrador estaba pendiente,
+                // evitamos duplicarlo y lo enlazamos al existente.
+                const { data: prodExistente } = await supabase
                   .from('productos')
-                  .insert({
-                    ferreteria_id: session.ferreteriaId,
-                    nombre: item.nombre_producto.trim(),
-                    categoria_id: meta.categoria_id,
-                    precio_base: meta.precio_base,
-                    precio_compra: item.precio_compra_unitario,
-                    unidad: item.unidad_compra || 'NIU',
-                    stock: 0,
-                    stock_minimo: meta.stock_minimo,
-                    facturable: item.es_formal,
-                    activo: true,
-                  })
                   .select('id, codigo_interno')
+                  .eq('ferreteria_id', session.ferreteriaId)
+                  .ilike('nombre', nombreLimpio)
+                  .limit(1)
                   .single()
 
-                if (prod && !errProd) {
-                  // Actualizar items_compra para enlazar el nuevo producto
+                let finalProdId = null
+                let finalCodigoInterno = null
+
+                if (prodExistente) {
+                  finalProdId = prodExistente.id
+                  finalCodigoInterno = prodExistente.codigo_interno
+                } else {
+                  // Crear el producto ahora
+                  const { data: prod, error: errProd } = await supabase
+                    .from('productos')
+                    .insert({
+                      ferreteria_id: session.ferreteriaId,
+                      nombre: item.nombre_producto.trim(),
+                      categoria_id: meta.categoria_id,
+                      precio_base: meta.precio_base,
+                      precio_compra: item.precio_compra_unitario,
+                      unidad: item.unidad_compra || 'NIU',
+                      stock: 0,
+                      stock_minimo: meta.stock_minimo,
+                      facturable: item.es_formal,
+                      activo: true,
+                    })
+                    .select('id, codigo_interno')
+                    .single()
+
+                  if (prod && !errProd) {
+                    finalProdId = prod.id
+                    finalCodigoInterno = prod.codigo_interno
+                  }
+                }
+
+                if (finalProdId) {
+                  // Actualizar items_compra para enlazar el nuevo producto (o el existente encontrado)
                   await supabase
                     .from('items_compra')
                     .update({ 
-                      producto_id: prod.id,
-                      codigo_interno: prod.codigo_interno
+                      producto_id: finalProdId,
+                      codigo_interno: finalCodigoInterno
                     })
                     .eq('id', item.id)
 
@@ -85,7 +111,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
                   if (meta.descripcion_factura) {
                     await db.compras.guardarAliasProducto(
                       session.ferreteriaId,
-                      prod.id,
+                      finalProdId,
                       meta.descripcion_factura,
                       1.0
                     )

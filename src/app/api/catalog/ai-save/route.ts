@@ -54,6 +54,35 @@ export async function POST(request: Request) {
 
   // ── Crear nuevos ──────────────────────────────────────────────────────────
   if (paraCrear.length > 0) {
+    // 1. Verificación de Nombre Único (Evitar error 500 de base de datos)
+    const nombresParaCrear = paraCrear.map(i => i.nombre.trim())
+    const { data: colisiones } = await supabase
+      .from('productos')
+      .select('nombre')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .in('nombre', nombresParaCrear) // in case-sensitive, pero ilike no soporta array. Usamos in() y PostgreSQL asume validación si los nombres matchean exactamente, pero para ser seguros:
+    
+    // Mejor hacemos una consulta con ilike para cada uno o descargamos todos los nombres.
+    // Como pueden ser pocos (ej. 10-20), iteramos o hacemos OR con ilike.
+    // O más simple: consultar los existentes que coincidan ignorando case.
+    const orQuery = nombresParaCrear.map(n => `nombre.ilike.%${n}%`).join(',')
+    const { data: duplicadosReales } = await supabase
+      .from('productos')
+      .select('nombre')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .or(orQuery)
+
+    // Filtramos para asegurar coincidencia exacta (ignorando case)
+    const nombresColisionados = duplicadosReales
+      ?.map(p => p.nombre)
+      ?.filter(n => nombresParaCrear.some(nc => nc.toLowerCase() === n.toLowerCase()))
+
+    if (nombresColisionados && nombresColisionados.length > 0) {
+      return NextResponse.json({ 
+        error: `Los siguientes productos ya existen en tu catálogo: ${nombresColisionados.join(', ')}. Por favor edita sus nombres o quítalos de la lista.` 
+      }, { status: 400 })
+    }
+
     const insertData = paraCrear.map((item) => ({
       ferreteria_id: session.ferreteriaId,
       nombre: item.nombre.trim(),

@@ -43,6 +43,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
+  // ── Verificación de Nombre Único ──
+  if (productoData.nombre) {
+    const nombreLimpio = productoData.nombre.trim()
+    const { data: prodExistente } = await supabase
+      .from('productos')
+      .select('id')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .ilike('nombre', nombreLimpio)
+      .neq('id', id)
+      .limit(1)
+      .single()
+
+    if (prodExistente) {
+      return NextResponse.json({ error: `Ya existe otro producto con el nombre "${nombreLimpio}" en tu catálogo.` }, { status: 400 })
+    }
+  }
+
   // Actualizar campos del producto — verifica pertenencia via ferreteria_id
   const { error: errProducto } = await supabase
     .from('productos')
