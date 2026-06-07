@@ -72,6 +72,36 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Control de Acceso por Módulos Activos (Feature Flags)
+  const ROUTE_MODULES: { [key: string]: string } = {
+    '/dashboard/crm': 'crm',
+    '/dashboard/creditos': 'creditos',
+    '/dashboard/delivery': 'delivery',
+    '/dashboard/comprobantes': 'comprobantes',
+    '/dashboard/salud': 'salud',
+    '/dashboard/catalog': 'catalog',
+    '/dashboard/clientes': 'clientes',
+    '/dashboard/finanzas': 'finanzas',
+    '/dashboard/ventas': 'ventas',
+    '/dashboard/conversations': 'chat',
+    '/pos': 'pos',
+  }
+
+  const matchedRoute = Object.keys(ROUTE_MODULES).find(route => pathname.startsWith(route))
+  if (matchedRoute) {
+    const moduleName = ROUTE_MODULES[matchedRoute]
+    const envVar = process.env.NEXT_PUBLIC_ACTIVE_MODULES
+    const activeList = envVar
+      ? envVar.split(',').map(m => m.trim())
+      : ['dashboard', 'pos', 'ventas', 'chat', 'catalog', 'clientes', 'finanzas', 'settings']
+
+    if (!activeList.includes(moduleName)) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      return NextResponse.redirect(url)
+    }
+  }
+
   return supabaseResponse
 }
 

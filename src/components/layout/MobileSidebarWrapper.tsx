@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import NotificationBadge from '@/components/layout/NotificationBadge'
 import { checkPermiso, type PermisoMap, type Permiso } from '@/lib/auth/permisos'
 import type { Rol } from '@/lib/auth/roles'
+import { isModuleEnabled, type ModuleName } from '@/lib/config/modules'
 
 // ── Tab bar principal (móvil) ─────────────────────────────────────────────────
 const TAB_ITEMS: {
@@ -15,13 +16,14 @@ const TAB_ITEMS: {
   href: string
   icon: React.ElementType
   permiso: Permiso
+  moduleName: ModuleName
   badge?: 'pedidos' | 'conversaciones'
   exact?: boolean
 }[] = [
-  { label: 'Inicio',  href: '/dashboard',              icon: LayoutDashboard, permiso: 'ver_dashboard', exact: true },
-  { label: 'Ventas',  href: '/dashboard/ventas',       icon: TrendingUp,      permiso: 'ver_pedidos',  badge: 'pedidos' },
-  { label: 'Chat',    href: '/dashboard/conversations', icon: MessageSquare,   permiso: 'ver_pedidos',  badge: 'conversaciones' },
-  { label: 'Catálogo', href: '/dashboard/catalog',      icon: Package,         permiso: 'ver_stock' },
+  { label: 'Inicio',  href: '/dashboard',              icon: LayoutDashboard, permiso: 'ver_dashboard', moduleName: 'dashboard', exact: true },
+  { label: 'Ventas',  href: '/dashboard/ventas',       icon: TrendingUp,      permiso: 'ver_pedidos',   moduleName: 'ventas',    badge: 'pedidos' },
+  { label: 'Chat',    href: '/dashboard/conversations', icon: MessageSquare,   permiso: 'ver_pedidos',   moduleName: 'chat',      badge: 'conversaciones' },
+  { label: 'Catálogo', href: '/dashboard/catalog',      icon: Package,         permiso: 'ver_stock',     moduleName: 'catalog' },
 ]
 
 interface MobileSidebarWrapperProps {
@@ -49,7 +51,9 @@ export default function MobileSidebarWrapper({
   const pathname = usePathname()
 
   const session      = { rol, permisos }
-  const tabsVisibles = TAB_ITEMS.filter((t) => checkPermiso(session, t.permiso))
+  const tabsVisibles = TAB_ITEMS.filter((t) => 
+    checkPermiso(session, t.permiso) && isModuleEnabled(t.moduleName)
+  )
 
   return (
     <div className="flex h-screen overflow-hidden bg-zinc-50 dark:bg-background text-foreground transition-ui">

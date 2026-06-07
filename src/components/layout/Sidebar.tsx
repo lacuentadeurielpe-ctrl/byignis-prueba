@@ -27,6 +27,7 @@ import NotificationBadge from '@/components/layout/NotificationBadge'
 import type { Rol } from '@/lib/auth/roles'
 import { checkPermiso, type Permiso, type PermisoMap } from '@/lib/auth/permisos'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { isModuleEnabled, type ModuleName } from '@/lib/config/modules'
 
 interface NavItem {
   label: string
@@ -34,6 +35,7 @@ interface NavItem {
   icon: React.ElementType
   badge?: 'pedidos' | 'conversaciones' | 'cotizaciones'
   permiso?: Permiso
+  moduleName?: ModuleName
 }
 
 interface NavGroup {
@@ -44,28 +46,28 @@ interface NavGroup {
 const navGroups: NavGroup[] = [
   {
     items: [
-      { label: 'Dashboard', href: '/dashboard',       icon: LayoutDashboard, permiso: 'ver_dashboard' },
-      { label: 'Caja POS',  href: '/pos',             icon: ScanLine,        permiso: 'ver_pedidos' },
-      { label: 'Ventas',    href: '/dashboard/ventas', icon: TrendingUp,      badge: 'pedidos',        permiso: 'ver_pedidos' },
-      { label: 'Chat',      href: '/dashboard/conversations', icon: MessageSquare, badge: 'conversaciones', permiso: 'ver_pedidos' },
+      { label: 'Dashboard', href: '/dashboard',       icon: LayoutDashboard, permiso: 'ver_dashboard', moduleName: 'dashboard' },
+      { label: 'Caja POS',  href: '/pos',             icon: ScanLine,        permiso: 'ver_pedidos', moduleName: 'pos' },
+      { label: 'Ventas',    href: '/dashboard/ventas', icon: TrendingUp,      badge: 'pedidos',        permiso: 'ver_pedidos', moduleName: 'ventas' },
+      { label: 'Chat',      href: '/dashboard/conversations', icon: MessageSquare, badge: 'conversaciones', permiso: 'ver_pedidos', moduleName: 'chat' },
     ],
   },
   {
     label: 'Gestión',
     items: [
-      { label: 'Catálogo',  href: '/dashboard/catalog',   icon: Package,    permiso: 'ver_stock' },
-      { label: 'Clientes',  href: '/dashboard/clientes',  icon: Users,      permiso: 'ver_historial_clientes' },
-      { label: 'CRM / Pipeline', href: '/dashboard/crm',  icon: Target,     permiso: 'ver_historial_clientes' },
-      { label: 'Créditos',  href: '/dashboard/creditos',  icon: CreditCard, permiso: 'ver_creditos' },
-      { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos' },
+      { label: 'Catálogo',  href: '/dashboard/catalog',   icon: Package,    permiso: 'ver_stock', moduleName: 'catalog' },
+      { label: 'Clientes',  href: '/dashboard/clientes',  icon: Users,      permiso: 'ver_historial_clientes', moduleName: 'clientes' },
+      { label: 'CRM / Pipeline', href: '/dashboard/crm',  icon: Target,     permiso: 'ver_historial_clientes', moduleName: 'crm' },
+      { label: 'Créditos',  href: '/dashboard/creditos',  icon: CreditCard, permiso: 'ver_creditos', moduleName: 'creditos' },
+      { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos', moduleName: 'delivery' },
     ],
   },
   {
     items: [
-      { label: 'Facturación', href: '/dashboard/comprobantes', icon: FileText, permiso: 'ver_caja_dia'           },
-      { label: 'Finanzas', href: '/dashboard/finanzas', icon: BarChart2, permiso: 'ver_caja_dia'           },
-      { label: 'Salud',    href: '/dashboard/salud',    icon: Activity,  permiso: 'configurar_ferreteria'  },
-      { label: 'Ajustes',  href: '/dashboard/settings', icon: Settings,  permiso: 'configurar_ferreteria'  },
+      { label: 'Facturación', href: '/dashboard/comprobantes', icon: FileText, permiso: 'ver_caja_dia', moduleName: 'comprobantes' },
+      { label: 'Finanzas', href: '/dashboard/finanzas', icon: BarChart2, permiso: 'ver_caja_dia', moduleName: 'finanzas' },
+      { label: 'Salud',    href: '/dashboard/salud',    icon: Activity,  permiso: 'configurar_ferreteria', moduleName: 'salud' },
+      { label: 'Ajustes',  href: '/dashboard/settings', icon: Settings,  permiso: 'configurar_ferreteria', moduleName: 'settings' },
     ],
   },
 ]
@@ -195,9 +197,11 @@ export default function Sidebar({
       {/* ── Navegación ─────────────────────────────────────────────────── */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
         {navGroups.map((group, gi) => {
-          const visibles = group.items.filter((item) =>
-            !item.permiso || checkPermiso(session, item.permiso)
-          )
+          const visibles = group.items.filter((item) => {
+            const hasPerm = !item.permiso || checkPermiso(session, item.permiso)
+            const isEnabled = !item.moduleName || isModuleEnabled(item.moduleName)
+            return hasPerm && isEnabled
+          })
           if (visibles.length === 0) return null
 
           return (
