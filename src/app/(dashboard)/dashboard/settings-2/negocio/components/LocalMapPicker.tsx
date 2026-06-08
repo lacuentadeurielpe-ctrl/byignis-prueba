@@ -1,23 +1,10 @@
 'use client'
 
-import dynamic from 'next/dynamic'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { AlertCircle, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import PlacesAutocomplete from './PlacesAutocomplete'
 import type { GooglePlacesResult } from '@/types/locales'
 import { geocodeAddress } from '@/lib/maps/geocoding'
-
-// Leaflet - no SSR
-const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false })
-const TileLayer = dynamic(() => import('react-leaflet').then(m => m.TileLayer), { ssr: false })
-const Marker = dynamic(() => import('react-leaflet').then(m => m.Marker), { ssr: false })
-
-// MapClickHandler como componente dinámico
-const MapClickHandler = dynamic(
-  () => import('./MapClickHandler').then(m => m.default),
-  { ssr: false }
-)
 
 interface LocalMapPickerProps {
   onLocationChange: (data: {
@@ -40,12 +27,13 @@ export default function LocalMapPicker({
   autoSave = true,
 }: LocalMapPickerProps) {
   const [direccion, setDireccion] = useState(initialDireccion)
-  const [markerPosition, setMarkerPosition] = useState<[number, number] | null>(
+  const [markerPosition, setMarkerPosition] = useState<[number, number]>(
     initialLat && initialLng ? [initialLat, initialLng] : [-12.0464, -77.0428]
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const mapIframeRef = useRef<HTMLIFrameElement>(null)
 
   // Debounce save
   const debouncedSave = useCallback(
@@ -64,6 +52,12 @@ export default function LocalMapPicker({
     setMarkerPosition([result.lat, result.lng])
     setError(null)
 
+    // Update iframe with new coordinates
+    if (mapIframeRef.current) {
+      const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${result.lng - 0.01},${result.lat - 0.01},${result.lng + 0.01},${result.lat + 0.01}&layer=mapnik&marker=${result.lat},${result.lng}`
+      mapIframeRef.current.src = mapUrl
+    }
+
     if (autoSave) {
       debouncedSave({
         direccion: result.descripcion,
@@ -81,7 +75,7 @@ export default function LocalMapPicker({
     }
   }
 
-  // Handle mapa click (reverse geocoding)
+  // Handle manual map click - reverse geocoding
   const handleMapClick = async (lat: number, lng: number) => {
     setLoading(true)
     setError(null)
@@ -98,6 +92,13 @@ export default function LocalMapPicker({
 
       if (result) {
         setDireccion(result.direccion_formateada)
+        setMarkerPosition([lat, lng])
+
+        // Update iframe
+        if (mapIframeRef.current) {
+          const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.01},${lat - 0.01},${lng + 0.01},${lat + 0.01}&layer=mapnik&marker=${lat},${lng}`
+          mapIframeRef.current.src = mapUrl
+        }
 
         if (autoSave) {
           debouncedSave({
@@ -125,10 +126,6 @@ export default function LocalMapPicker({
     }
   }
 
-  if (!markerPosition) {
-    return <div className="text-sm text-zinc-500">Cargando mapa...</div>
-  }
-
   return (
     <div className="space-y-3">
       {/* Input con PlacesAutocomplete */}
@@ -151,43 +148,38 @@ export default function LocalMapPicker({
         )}
       </div>
 
-      {/* Mapa interactivo */}
+      {/* Mapa embebido de OpenStreetMap */}
       <div className="relative">
-        <div className="w-full h-96 rounded-lg overflow-hidden border-2 border-zinc-200 hover:border-indigo-300 transition-colors">
-          <MapContainer center={markerPosition} zoom={15} style={{ height: '100%', width: '100%' }}>
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; OpenStreetMap'
-            />
+        <div className="w-full rounded-lg overflow-hidden border-2 border-zinc-200 hover:border-indigo-300 transition-colors">
+          <iframe
+            ref={mapIframeRef}
+            width="100%"
+            height="400"
+            style={{ border: 0 }}
+            loading="lazy"
+            allowFullScreen={true}
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${markerPosition[1] - 0.01},${markerPosition[0] - 0.01},${markerPosition[1] + 0.01},${markerPosition[0] + 0.01}&layer=mapnik&marker=${markerPosition[0]},${markerPosition[1]}`}
+          />
+        </div>
 
-            {markerPosition && <Marker position={markerPosition} />}
-
-            <MapClickHandler
-              markerPosition={markerPosition}
-              setMarkerPosition={setMarkerPosition}
-              onMapClick={handleMapClick}
-            />
-          </MapContainer>
-
-          {loading && (
-            <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-lg">
-              <div className="bg-white rounded-lg p-4 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                <p className="text-sm text-zinc-700">Obteniendo ubicación...</p>
-              </div>
+        {loading && (
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-lg">
+            <div className="bg-white rounded-lg p-4 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+              <p className="text-sm text-zinc-700">Obteniendo ubicación...</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
-        {/* Info overlay */}
-        <div className="absolute bottom-3 left-3 bg-white rounded-lg px-3 py-2 shadow-lg border border-zinc-200 text-xs max-w-xs">
-          <p className="text-zinc-900 font-medium">💡 Instrucciones:</p>
-          <ul className="text-zinc-600 space-y-0.5 mt-1">
-            <li>• Escribe la dirección arriba para buscar</li>
-            <li>• O haz click en el mapa para marcar</li>
-            <li>• Se guarda automáticamente</li>
-          </ul>
-        </div>
+      {/* Info overlay */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs">
+        <p className="text-blue-900 font-medium">💡 Instrucciones:</p>
+        <ul className="text-blue-700 space-y-0.5 mt-1">
+          <li>• Escribe la dirección arriba para buscar</li>
+          <li>• El mapa se actualizará automáticamente</li>
+          <li>• Se guarda automáticamente</li>
+        </ul>
       </div>
 
       {/* Coordenadas en tiempo real */}

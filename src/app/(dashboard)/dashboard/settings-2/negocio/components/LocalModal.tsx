@@ -60,10 +60,7 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
       toast.error('El nombre del local es requerido')
       return
     }
-    if (!formData.direccion.trim()) {
-      toast.error('La dirección es requerida')
-      return
-    }
+    // Dirección es OPCIONAL - para negocios digitales
 
     setIsSaving(true)
     try {
@@ -162,8 +159,12 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
             />
           </div>
 
-          {/* Dirección y ubicación con mapa interactivo */}
-          <LocalMapPicker
+          {/* Dirección y ubicación (opcional - para negocios digitales) */}
+          <div>
+            <p className="text-xs text-zinc-500 mb-3 italic">
+              💡 La ubicación es opcional. Úsala si haces entregas desde este local.
+            </p>
+            <LocalMapPicker
             onLocationChange={result => {
               handleChange('direccion', result.direccion)
               handleChange('lat', result.lat)
@@ -176,6 +177,7 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
             initialLng={formData.lng}
             autoSave={true}
           />
+          </div>
 
           {/* Contacto */}
           <div>
