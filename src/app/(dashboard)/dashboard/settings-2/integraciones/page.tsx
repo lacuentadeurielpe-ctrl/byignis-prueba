@@ -1,6 +1,7 @@
-﻿'use client'
+'use client'
 
 import { Cloud, MessageCircle, FileText, MapPin, Zap, Banknote, BookOpen, Code } from 'lucide-react'
+import { useMemo } from 'react'
 import SettingsHeader from '../components/SettingsHeader'
 import IntegrationCard from './components/IntegrationCard'
 
@@ -16,7 +17,7 @@ const INTEGRACIONES_CORE = [
   {
     id: 'nubefact',
     name: 'Nubefact',
-    description: 'FacturaciÃ³n electrÃ³nica SUNAT',
+    description: 'Facturación electrónica SUNAT',
     icon: FileText,
     status: 'desconectado' as const,
     href: '/dashboard/settings-2/integraciones/nubefact',
@@ -24,7 +25,7 @@ const INTEGRACIONES_CORE = [
   {
     id: 'mercadopago',
     name: 'Mercado Pago',
-    description: 'Pagos y recaudaciÃ³n en lÃ­nea',
+    description: 'Pagos y recaudación en línea',
     icon: Banknote,
     status: 'desconectado' as const,
     href: '/dashboard/settings-2/integraciones/mercadopago',
@@ -34,7 +35,7 @@ const INTEGRACIONES_CORE = [
     name: 'Google Maps',
     description: 'Geocoding y rutas de delivery',
     icon: MapPin,
-    status: 'desconectado' as const,
+    status: 'conectado' as const,
     href: '/dashboard/settings-2/integraciones/maps',
   },
 ]
@@ -43,7 +44,7 @@ const INTEGRACIONES_ROADMAP = [
   {
     id: 'osmio',
     name: 'OSMIO',
-    description: 'Plataforma de envÃ­os',
+    description: 'Plataforma de envíos',
     icon: Cloud,
     comingSoon: true,
   },
@@ -76,7 +77,7 @@ export default function IntegracionesPage() {
       <SettingsHeader
         title="Integraciones"
         description="Conecta servicios externos para ampliar funcionalidades"
-        breadcrumbs={[{ label: 'ConfiguraciÃ³n' }, { label: 'Integraciones' }]}
+        breadcrumbs={[{ label: 'Configuración' }, { label: 'Integraciones' }]}
       />
 
       <div className="p-6 max-w-6xl space-y-8">
@@ -94,7 +95,7 @@ export default function IntegracionesPage() {
         </div>
 
         <div className="border-t border-zinc-200 pt-8">
-          <h3 className="text-sm font-semibold text-zinc-900 mb-4">PrÃ³ximamente</h3>
+          <h3 className="text-sm font-semibold text-zinc-900 mb-4">Próximamente</h3>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
             {INTEGRACIONES_ROADMAP.map(integration => (
               <IntegrationCard
@@ -107,7 +108,7 @@ export default function IntegracionesPage() {
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-8">
           <p className="text-sm text-blue-900">
-            ðŸ’¡ <strong>Tip:</strong> Las integraciones requieren tokens/claves API. Guarda-las en un lugar seguro.
+            💡 <strong>Tip:</strong> Las integraciones requieren tokens/claves API. Guarda-las en un lugar seguro.
           </p>
         </div>
       </div>
