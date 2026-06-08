@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { AlertCircle, Loader2, Navigation } from 'lucide-react'
 import PlacesAutocomplete from './PlacesAutocomplete'
 import type { GooglePlacesResult } from '@/types/locales'
 import { geocodeAddress } from '@/lib/maps/geocoding'
@@ -33,7 +33,9 @@ export default function LocalMapPicker({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const mapIframeRef = useRef<HTMLIFrameElement>(null)
+  const mapContainerRef = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<any>(null)
+  const markerRef = useRef<any>(null)
 
   // Debounce save
   const debouncedSave = useCallback(
@@ -46,37 +48,85 @@ export default function LocalMapPicker({
     [onLocationChange]
   )
 
-  // Handle dirección input + PlacesAutocomplete
-  const handleSelectPlace = async (result: GooglePlacesResult) => {
-    setDireccion(result.descripcion)
-    setMarkerPosition([result.lat, result.lng])
-    setError(null)
+  // Initialize Google Map
+  useEffect(() => {
+    if (!mapContainerRef.current) return
 
-    // Update iframe with new coordinates
-    if (mapIframeRef.current) {
-      const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${result.lng - 0.01},${result.lat - 0.01},${result.lng + 0.01},${result.lat + 0.01}&layer=mapnik&marker=${result.lat},${result.lng}`
-      mapIframeRef.current.src = mapUrl
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    if (!apiKey) {
+      setError('Google Maps API no configurado')
+      return
     }
 
-    if (autoSave) {
-      debouncedSave({
-        direccion: result.descripcion,
-        lat: result.lat,
-        lng: result.lng,
-        place_id: result.place_id,
-      })
-    } else {
-      onLocationChange({
-        direccion: result.descripcion,
-        lat: result.lat,
-        lng: result.lng,
-        place_id: result.place_id,
-      })
+    // Load Google Maps script
+    const script = document.createElement('script')
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`
+    script.async = true
+    script.onload = () => {
+      initMap()
     }
+    script.onerror = () => {
+      setError('No se pudo cargar Google Maps')
+    }
+    document.body.appendChild(script)
+
+    return () => {
+      if (script.parentNode) {
+        script.parentNode.removeChild(script)
+      }
+    }
+  }, [])
+
+  const initMap = () => {
+    if (!mapContainerRef.current || !window.google) return
+
+    const map = new window.google.maps.Map(mapContainerRef.current, {
+      center: { lat: markerPosition[0], lng: markerPosition[1] },
+      zoom: 15,
+      mapTypeControl: true,
+      fullscreenControl: true,
+      streetViewControl: false,
+    })
+
+    mapRef.current = map
+
+    // Create marker
+    const marker = new window.google.maps.Marker({
+      position: { lat: markerPosition[0], lng: markerPosition[1] },
+      map: map,
+      draggable: true,
+      title: 'Tu ubicación',
+    })
+
+    markerRef.current = marker
+
+    // Marker drag event
+    marker.addListener('dragend', async () => {
+      const pos = marker.getPosition()
+      if (!pos) return
+
+      const lat = pos.lat()
+      const lng = pos.lng()
+      setMarkerPosition([lat, lng])
+
+      // Reverse geocode
+      await performReverseGeocode(lat, lng)
+    })
+
+    // Map click event
+    map.addListener('click', async (e: any) => {
+      const lat = e.latLng.lat()
+      const lng = e.latLng.lng()
+
+      marker.setPosition({ lat, lng })
+      setMarkerPosition([lat, lng])
+
+      // Reverse geocode
+      await performReverseGeocode(lat, lng)
+    })
   }
 
-  // Handle manual map click - reverse geocoding
-  const handleMapClick = async (lat: number, lng: number) => {
+  const performReverseGeocode = async (lat: number, lng: number) => {
     setLoading(true)
     setError(null)
 
@@ -92,13 +142,6 @@ export default function LocalMapPicker({
 
       if (result) {
         setDireccion(result.direccion_formateada)
-        setMarkerPosition([lat, lng])
-
-        // Update iframe
-        if (mapIframeRef.current) {
-          const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.01},${lat - 0.01},${lng + 0.01},${lat + 0.01}&layer=mapnik&marker=${lat},${lng}`
-          mapIframeRef.current.src = mapUrl
-        }
 
         if (autoSave) {
           debouncedSave({
@@ -126,13 +169,44 @@ export default function LocalMapPicker({
     }
   }
 
+  // Handle dirección input + PlacesAutocomplete
+  const handleSelectPlace = async (result: GooglePlacesResult) => {
+    setDireccion(result.descripcion)
+    setMarkerPosition([result.lat, result.lng])
+    setError(null)
+
+    // Update map
+    if (mapRef.current) {
+      mapRef.current.setCenter({ lat: result.lat, lng: result.lng })
+      mapRef.current.setZoom(16)
+    }
+
+    if (markerRef.current) {
+      markerRef.current.setPosition({ lat: result.lat, lng: result.lng })
+    }
+
+    if (autoSave) {
+      debouncedSave({
+        direccion: result.descripcion,
+        lat: result.lat,
+        lng: result.lng,
+        place_id: result.place_id,
+      })
+    } else {
+      onLocationChange({
+        direccion: result.descripcion,
+        lat: result.lat,
+        lng: result.lng,
+        place_id: result.place_id,
+      })
+    }
+  }
+
   return (
     <div className="space-y-3">
       {/* Input con PlacesAutocomplete */}
       <div>
-        <label className="block text-sm font-medium text-zinc-700 mb-2">
-          📍 Ubicación del local
-        </label>
+        <label className="block text-sm font-medium text-zinc-700 mb-2">📍 Ubicación del local</label>
         <PlacesAutocomplete
           value={direccion}
           onChange={setDireccion}
@@ -148,19 +222,12 @@ export default function LocalMapPicker({
         )}
       </div>
 
-      {/* Mapa embebido de OpenStreetMap */}
+      {/* Google Map interactivo */}
       <div className="relative">
-        <div className="w-full rounded-lg overflow-hidden border-2 border-zinc-200 hover:border-indigo-300 transition-colors">
-          <iframe
-            ref={mapIframeRef}
-            width="100%"
-            height="400"
-            style={{ border: 0 }}
-            loading="lazy"
-            allowFullScreen={true}
-            src={`https://www.openstreetmap.org/export/embed.html?bbox=${markerPosition[1] - 0.01},${markerPosition[0] - 0.01},${markerPosition[1] + 0.01},${markerPosition[0] + 0.01}&layer=mapnik&marker=${markerPosition[0]},${markerPosition[1]}`}
-          />
-        </div>
+        <div
+          ref={mapContainerRef}
+          className="w-full h-96 rounded-lg overflow-hidden border-2 border-zinc-200 hover:border-indigo-300 transition-colors bg-zinc-100"
+        />
 
         {loading && (
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-lg">
@@ -174,18 +241,19 @@ export default function LocalMapPicker({
 
       {/* Info overlay */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs">
-        <p className="text-blue-900 font-medium">💡 Instrucciones:</p>
+        <p className="text-blue-900 font-medium">💡 Cómo usar:</p>
         <ul className="text-blue-700 space-y-0.5 mt-1">
-          <li>• Escribe la dirección arriba para buscar</li>
-          <li>• El mapa se actualizará automáticamente</li>
-          <li>• Se guarda automáticamente</li>
+          <li>• Escribe la dirección en el campo arriba</li>
+          <li>• O haz click directamente en el mapa</li>
+          <li>• Arrastra el marcador para ajustar</li>
+          <li>• Se guarda automáticamente cada 800ms</li>
         </ul>
       </div>
 
       {/* Coordenadas en tiempo real */}
       {markerPosition && (
         <div className="p-3 bg-zinc-50 rounded-lg border border-zinc-200 space-y-1">
-          <p className="text-xs font-medium text-zinc-700">Coordenadas:</p>
+          <p className="text-xs font-medium text-zinc-700">📍 Coordenadas:</p>
           <p className="text-xs text-zinc-600 font-mono">
             Lat: <span className="text-zinc-900">{markerPosition[0].toFixed(6)}</span> | Lng:{' '}
             <span className="text-zinc-900">{markerPosition[1].toFixed(6)}</span>
