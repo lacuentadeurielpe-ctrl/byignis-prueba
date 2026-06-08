@@ -133,9 +133,14 @@ export function useOrderActions(
       if (!res.ok) throw new Error()
       const data = await res.json()
       setPedidos((prev) => prev.map((p) => p.id === pedidoId
-        ? { ...p, repartidor_id: repartidorId === 'ninguno' ? null : repartidorId }
+        ? {
+            ...p,
+            repartidor_id: repartidorId === 'ninguno' ? null : repartidorId,
+            // El backend avanza a 'enviado' si era delivery en preparación
+            ...(data?.estado ? { estado: data.estado } : {}),
+          }
         : p))
-      toast.success('Repartidor asignado')
+      toast.success(data?.estado === 'enviado' ? 'Repartidor asignado · Pedido en camino' : 'Repartidor asignado')
     } catch {
       toast.error('Error al asignar repartidor')
     } finally {

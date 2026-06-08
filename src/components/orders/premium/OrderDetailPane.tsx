@@ -2,6 +2,7 @@
 
 import { Pedido, Repartidor } from './OrdersPremiumView'
 import { cn, formatPEN, formatFechaHoraLima, labelEstadoPedido, colorEstadoPedido, labelEstadoPago, colorEstadoPago } from '@/lib/utils'
+import { usePedidoEstados } from '../hooks/usePedidoEstados'
 import { X, MapPin, Phone, User, Package, Clock, CreditCard, ChevronRight, FileText, Send, CheckCircle2, Truck, ExternalLink, Pencil, Trash2 } from 'lucide-react'
 
 export default function OrderDetailPane({
@@ -30,10 +31,12 @@ export default function OrderDetailPane({
   tieneRuc: boolean
 }) {
 
+  const { label: labelEstado, color: colorEstado } = usePedidoEstados()
   const nombre = pedido.clientes?.nombre ?? pedido.nombre_cliente
   const tel = pedido.clientes?.telefono ?? pedido.telefono_cliente
   const dniRuc = pedido.clientes?.dni_ruc
-  const colorClass = colorEstadoPedido(pedido.estado)
+  // Prefiere el catálogo (fuente de verdad); cae a las utils si aún no cargó
+  const colorClass = colorEstado(pedido.estado, colorEstadoPedido(pedido.estado))
 
   // Handlers para acciones de XState adaptadas al UI
   const handleAction = async (estadoSiguiente: string, loadingKey: string) => {
@@ -54,7 +57,7 @@ export default function OrderDetailPane({
             <div className="flex items-center gap-3">
               <h2 className="text-xl font-bold text-zinc-900 tracking-tight">{pedido.numero_pedido}</h2>
               <span className={cn("text-xs px-2 py-0.5 rounded-md font-semibold tracking-wide border", colorClass)}>
-                {labelEstadoPedido(pedido.estado)}
+                {labelEstado(pedido.estado, labelEstadoPedido(pedido.estado))}
               </span>
             </div>
             <p className="text-sm font-medium text-zinc-500 mt-0.5">
