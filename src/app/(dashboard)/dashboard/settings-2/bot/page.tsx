@@ -1,8 +1,8 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { Zap } from 'lucide-react'
-import SettingsHeader from '../../components/SettingsHeader'
+import SettingsHeader from '../components/SettingsHeader'
 import BotPerfilTab from './components/BotPerfilTab'
 import BotAgentesTab from './components/BotAgentesTab'
 import BotComplementariosTab from './components/BotComplementariosTab'
@@ -25,7 +25,7 @@ export default function BotPage() {
       <SettingsHeader
         title="Bot IA"
         description="Configura la personalidad y comportamiento del asistente"
-        breadcrumbs={[{ label: 'Configuración' }, { label: 'Bot' }]}
+        breadcrumbs={[{ label: 'ConfiguraciÃ³n' }, { label: 'Bot' }]}
       />
 
       <div className="p-6 max-w-6xl space-y-6">

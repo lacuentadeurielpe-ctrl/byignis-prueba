@@ -1,9 +1,9 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { CreditCard } from 'lucide-react'
-import FormSection from '../../../components/FormSection'
-import { useSettingsSave } from '../../../utils/settingsHooks'
+import FormSection from '../../components/FormSection'
+import { useSettingsSave } from '../../utils/settingsHooks'
 
 interface PagosFormData {
   metodos_pago_activos?: string[]
@@ -13,11 +13,11 @@ interface PagosFormData {
 }
 
 const METODOS = [
-  { id: 'efectivo', label: 'Efectivo', icon: '💵' },
-  { id: 'yape', label: 'Yape', icon: '📱' },
-  { id: 'plin', label: 'Plin', icon: '📱' },
-  { id: 'transferencia', label: 'Transferencia', icon: '🏦' },
-  { id: 'mercadopago', label: 'Mercado Pago', icon: '💳' },
+  { id: 'efectivo', label: 'Efectivo', icon: 'ðŸ’µ' },
+  { id: 'yape', label: 'Yape', icon: 'ðŸ“±' },
+  { id: 'plin', label: 'Plin', icon: 'ðŸ“±' },
+  { id: 'transferencia', label: 'Transferencia', icon: 'ðŸ¦' },
+  { id: 'mercadopago', label: 'Mercado Pago', icon: 'ðŸ’³' },
 ]
 
 export default function PagosMetodosForm() {
@@ -69,8 +69,8 @@ export default function PagosMetodosForm() {
 
   return (
     <FormSection
-      title="Métodos de Pago"
-      description="Configura cómo aceptas pagos"
+      title="MÃ©todos de Pago"
+      description="Configura cÃ³mo aceptas pagos"
       icon={<CreditCard className="w-5 h-5" />}
       onSave={handleSave}
       onCancel={() => setIsDirty(false)}
@@ -80,9 +80,9 @@ export default function PagosMetodosForm() {
       {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg">{error}</div>}
 
       <div className="space-y-6">
-        {/* Métodos disponibles */}
+        {/* MÃ©todos disponibles */}
         <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-3">Métodos disponibles</label>
+          <label className="block text-sm font-medium text-zinc-700 mb-3">MÃ©todos disponibles</label>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {METODOS.map(metodo => (
               <label key={metodo.id} className="flex items-center gap-2 p-3 border border-zinc-200 rounded-lg cursor-pointer hover:bg-zinc-50">
@@ -103,15 +103,15 @@ export default function PagosMetodosForm() {
         {/* Yape */}
         {isYapeActive && (
           <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-3">
-            <h4 className="font-medium text-indigo-900">Configuración Yape</h4>
+            <h4 className="font-medium text-indigo-900">ConfiguraciÃ³n Yape</h4>
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-2">Número Yape</label>
+              <label className="block text-sm font-medium text-zinc-700 mb-2">NÃºmero Yape</label>
               <input
                 type="text"
                 value={data.datos_yape?.numero || ''}
                 onChange={e => handleNestedChange('yape', 'numero', e.target.value)}
                 className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Número de teléfono"
+                placeholder="NÃºmero de telÃ©fono"
               />
             </div>
           </div>
@@ -120,15 +120,15 @@ export default function PagosMetodosForm() {
         {/* Plin */}
         {isPlinActive && (
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
-            <h4 className="font-medium text-blue-900">Configuración Plin</h4>
+            <h4 className="font-medium text-blue-900">ConfiguraciÃ³n Plin</h4>
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-2">Número Plin</label>
+              <label className="block text-sm font-medium text-zinc-700 mb-2">NÃºmero Plin</label>
               <input
                 type="text"
                 value={data.datos_plin?.numero || ''}
                 onChange={e => handleNestedChange('plin', 'numero', e.target.value)}
                 className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Número de teléfono"
+                placeholder="NÃºmero de telÃ©fono"
               />
             </div>
             <div>
@@ -160,7 +160,7 @@ export default function PagosMetodosForm() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-2">Número Cuenta</label>
+                <label className="block text-sm font-medium text-zinc-700 mb-2">NÃºmero Cuenta</label>
                 <input
                   type="text"
                   value={data.datos_transferencia?.cuenta || ''}

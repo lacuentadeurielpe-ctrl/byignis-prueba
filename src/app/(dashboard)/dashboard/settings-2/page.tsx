@@ -30,35 +30,35 @@ const CHECKLIST: ChecklistItem[] = [
     title: 'Configura datos de la empresa',
     description: 'Nombre, dirección, teléfono, horarios',
     completed: true,
-    href: '/dashboard/settings-2/sections/negocio',
+    href: '/dashboard/settings-2/negocio',
   },
   {
     id: '2',
     title: 'Conecta WhatsApp (YCloud)',
     description: 'API key y webhook secret',
     completed: true,
-    href: '/dashboard/settings-2/sections/integraciones',
+    href: '/dashboard/settings-2/integraciones',
   },
   {
     id: '3',
     title: 'Configura facturación (RUC, régimen)',
     description: 'Completar datos tributarios',
     completed: false,
-    href: '/dashboard/settings-2/sections/finanzas',
+    href: '/dashboard/settings-2/finanzas',
   },
   {
     id: '4',
     title: 'Agrega tu equipo',
     description: 'Empleados y repartidores',
     completed: false,
-    href: '/dashboard/settings-2/sections/equipo',
+    href: '/dashboard/settings-2/equipo',
   },
   {
     id: '5',
     title: 'Carga tu catálogo',
     description: 'Productos y categorías',
     completed: true,
-    href: '/dashboard/settings-2/sections/catalogo',
+    href: '/dashboard/settings-2/catalogo',
   },
 ]
 
@@ -68,7 +68,7 @@ const MODULES: ModuleStatus[] = [
     name: 'Negocio',
     status: 'completo',
     statusLabel: '✓',
-    href: '/dashboard/settings-2/sections/negocio',
+    href: '/dashboard/settings-2/negocio',
     icon: '🏢',
   },
   {
@@ -77,7 +77,7 @@ const MODULES: ModuleStatus[] = [
     status: 'alerta',
     statusLabel: '⚠️',
     statusDetail: 'MP token vence 2026-06-15',
-    href: '/dashboard/settings-2/sections/integraciones',
+    href: '/dashboard/settings-2/integraciones',
     icon: '🔗',
     count: '3',
   },
@@ -87,7 +87,7 @@ const MODULES: ModuleStatus[] = [
     status: 'incompleto',
     statusLabel: '○',
     statusDetail: 'Falta agregar empleados',
-    href: '/dashboard/settings-2/sections/equipo',
+    href: '/dashboard/settings-2/equipo',
     icon: '👥',
   },
   {
@@ -96,7 +96,7 @@ const MODULES: ModuleStatus[] = [
     status: 'incompleto',
     statusLabel: '○',
     statusDetail: 'Falta completar RUC',
-    href: '/dashboard/settings-2/sections/finanzas',
+    href: '/dashboard/settings-2/finanzas',
     icon: '💰',
   },
   {
@@ -104,7 +104,7 @@ const MODULES: ModuleStatus[] = [
     name: 'Bot AI',
     status: 'completo',
     statusLabel: '✓',
-    href: '/dashboard/settings-2/sections/bot',
+    href: '/dashboard/settings-2/bot',
     icon: '🤖',
   },
   {
@@ -113,7 +113,7 @@ const MODULES: ModuleStatus[] = [
     status: 'completo',
     statusLabel: '✓',
     statusDetail: '120 productos',
-    href: '/dashboard/settings-2/sections/catalogo',
+    href: '/dashboard/settings-2/catalogo',
     icon: '📦',
   },
   {
@@ -122,7 +122,7 @@ const MODULES: ModuleStatus[] = [
     status: 'completo',
     statusLabel: '✓',
     statusDetail: '5 zonas configuradas',
-    href: '/dashboard/settings-2/sections/delivery',
+    href: '/dashboard/settings-2/delivery',
     icon: '🚚',
   },
   {
@@ -130,7 +130,7 @@ const MODULES: ModuleStatus[] = [
     name: 'Avanzado',
     status: 'incompleto',
     statusLabel: '○',
-    href: '/dashboard/settings-2/sections/avanzado',
+    href: '/dashboard/settings-2/avanzado',
     icon: '⚙️',
   },
 ]
@@ -277,7 +277,7 @@ export default function Settings2Hub() {
                   <span className="text-blue-600 font-bold flex-shrink-0 mt-0.5">1.</span>
                   <div className="flex-1">
                     Completa tu RUC para habilitar facturación automática
-                    <Link href="/dashboard/settings-2/sections/finanzas" className="ml-2 text-blue-600 font-semibold hover:text-blue-700 inline-flex items-center gap-1 group-hover:gap-2 transition">
+                    <Link href="/dashboard/settings-2/finanzas" className="ml-2 text-blue-600 font-semibold hover:text-blue-700 inline-flex items-center gap-1 group-hover:gap-2 transition">
                       Ir <ArrowRight className="w-3 h-3" />
                     </Link>
                   </div>
@@ -286,7 +286,7 @@ export default function Settings2Hub() {
                   <span className="text-blue-600 font-bold flex-shrink-0 mt-0.5">2.</span>
                   <div className="flex-1">
                     Revisa tu token Mercado Pago (vence en 8 días)
-                    <Link href="/dashboard/settings-2/sections/integraciones" className="ml-2 text-blue-600 font-semibold hover:text-blue-700 inline-flex items-center gap-1 group-hover:gap-2 transition">
+                    <Link href="/dashboard/settings-2/integraciones" className="ml-2 text-blue-600 font-semibold hover:text-blue-700 inline-flex items-center gap-1 group-hover:gap-2 transition">
                       Ir <ArrowRight className="w-3 h-3" />
                     </Link>
                   </div>

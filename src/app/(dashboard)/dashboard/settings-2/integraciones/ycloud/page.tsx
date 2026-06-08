@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { MessageCircle, AlertCircle, CheckCircle } from 'lucide-react'
-import SettingsHeader from '../../../components/SettingsHeader'
-import FormSection from '../../../components/FormSection'
+import SettingsHeader from '../../components/SettingsHeader'
+import FormSection from '../../components/FormSection'
 import IntegrationStatusBadge from '../components/IntegrationStatusBadge'
 
 interface YCloudData {

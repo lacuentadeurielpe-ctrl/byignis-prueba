@@ -1,39 +1,35 @@
 ﻿'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, AlertCircle, CheckCircle } from 'lucide-react'
-import SettingsHeader from '../../../components/SettingsHeader'
-import FormSection from '../../../components/FormSection'
+import { MapPin, AlertCircle, CheckCircle } from 'lucide-react'
+import SettingsHeader from '../../components/SettingsHeader'
+import FormSection from '../../components/FormSection'
 
-interface NubefactData {
-  estado?: 'conectado' | 'desconectado' | 'pruebas' | 'error'
+interface MapsData {
+  estado?: 'conectado' | 'desconectado' | 'error'
   metadata?: {
-    token?: string
-    modo?: 'prueba' | 'produccion'
-    url_ruta?: string
+    api_key?: string
   }
 }
 
-export default function NubefactPage() {
-  const [data, setData] = useState<NubefactData>({})
+export default function MapsPage() {
+  const [data, setData] = useState<MapsData>({})
   const [loading, setLoading] = useState(true)
-  const [token, setToken] = useState('')
-  const [modo, setModo] = useState<'prueba' | 'produccion'>('prueba')
+  const [apiKey, setApiKey] = useState('')
   const [isSaving, setIsSaving] = useState(false)
-  const [showToken, setShowToken] = useState(false)
+  const [showKey, setShowKey] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch('/api/settings-2/integraciones/nubefact')
+        const res = await fetch('/api/settings-2/integraciones/maps')
         if (res.ok) {
           const result = await res.json()
           setData(result)
-          if (result.metadata?.token) {
-            setToken(result.metadata.token)
-            setModo(result.metadata.modo || 'prueba')
+          if (result.metadata?.api_key) {
+            setApiKey(result.metadata.api_key)
           }
         }
       } catch (err) {
@@ -46,8 +42,8 @@ export default function NubefactPage() {
   }, [])
 
   const handleConnect = async () => {
-    if (!token) {
-      setError('Token es requerido')
+    if (!apiKey) {
+      setError('API Key es requerida')
       return
     }
 
@@ -56,16 +52,16 @@ export default function NubefactPage() {
     setSuccess('')
 
     try {
-      const res = await fetch('/api/settings-2/integraciones/nubefact', {
-        method: 'POST',
+      const res = await fetch('/api/settings-2/integraciones/maps', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, modo }),
+        body: JSON.stringify({ api_key: apiKey }),
       })
 
       if (res.ok) {
         const result = await res.json()
         setData(result)
-        setSuccess(`Nubefact conectado en modo ${modo}`)
+        setSuccess('Google Maps conectado')
       } else {
         const err = await res.json()
         setError(err.error || 'Error al conectar')
@@ -78,20 +74,20 @@ export default function NubefactPage() {
   }
 
   const handleDisconnect = async () => {
-    if (!confirm('¿Desconectar Nubefact?')) return
+    if (!confirm('¿Desconectar Google Maps?')) return
 
     setIsSaving(true)
     setError('')
 
     try {
-      const res = await fetch('/api/settings-2/integraciones/nubefact', {
+      const res = await fetch('/api/settings-2/integraciones/maps', {
         method: 'DELETE',
       })
 
       if (res.ok) {
         setData({ estado: 'desconectado' })
-        setToken('')
-        setSuccess('Nubefact desconectado')
+        setApiKey('')
+        setSuccess('Google Maps desconectado')
       } else {
         setError('Error al desconectar')
       }
@@ -105,21 +101,20 @@ export default function NubefactPage() {
   if (loading) return <div className="p-6 text-sm text-zinc-500">Cargando...</div>
 
   const isConnected = data?.estado === 'conectado'
-  const isTestMode = data?.estado === 'pruebas'
 
   return (
     <div>
       <SettingsHeader
-        title="Nubefact"
-        description="Facturación electrónica SUNAT"
-        breadcrumbs={[{ label: 'Configuración' }, { label: 'Integraciones' }, { label: 'Nubefact' }]}
+        title="Google Maps"
+        description="Geocoding y rutas de delivery"
+        breadcrumbs={[{ label: 'Configuración' }, { label: 'Integraciones' }, { label: 'Google Maps' }]}
       />
 
       <div className="p-6 max-w-4xl space-y-6">
         <FormSection
           title="Estado de Conexión"
-          description="Estado actual de la integración Nubefact"
-          icon={<FileText className="w-5 h-5" />}
+          description="Estado actual de Google Maps API"
+          icon={<MapPin className="w-5 h-5" />}
         >
           <div className="space-y-4">
             {isConnected ? (
@@ -127,18 +122,8 @@ export default function NubefactPage() {
                 <div className="flex items-center gap-3">
                   <CheckCircle className="w-5 h-5 text-emerald-600" />
                   <div>
-                    <p className="font-medium text-emerald-900">Conectado (Producción)</p>
-                    <p className="text-sm text-emerald-700">Nubefact está activo en producción</p>
-                  </div>
-                </div>
-              </div>
-            ) : isTestMode ? (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <p className="font-medium text-blue-900">En Pruebas</p>
-                    <p className="text-sm text-blue-700">Nubefact está en modo sandbox</p>
+                    <p className="font-medium text-emerald-900">Conectado</p>
+                    <p className="text-sm text-emerald-700">Google Maps está activo para geocoding y rutas</p>
                   </div>
                 </div>
               </div>
@@ -148,7 +133,7 @@ export default function NubefactPage() {
                   <AlertCircle className="w-5 h-5 text-amber-600" />
                   <div>
                     <p className="font-medium text-amber-900">Desconectado</p>
-                    <p className="text-sm text-amber-700">Conecta Nubefact para emitir comprobantes</p>
+                    <p className="text-sm text-amber-700">Conecta Google Maps para optimizar entregas</p>
                   </div>
                 </div>
               </div>
@@ -157,9 +142,9 @@ export default function NubefactPage() {
         </FormSection>
 
         <FormSection
-          title="Credenciales"
-          description="Configura tu token de Nubefact"
-          icon={<FileText className="w-5 h-5" />}
+          title="API Key"
+          description="Configura tu clave de API de Google Maps"
+          icon={<MapPin className="w-5 h-5" />}
           isDirty={true}
         >
           <div className="space-y-4">
@@ -167,41 +152,28 @@ export default function NubefactPage() {
             {success && <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-lg">{success}</div>}
 
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-2">Token API</label>
+              <label className="block text-sm font-medium text-zinc-700 mb-2">API Key</label>
               <div className="relative">
                 <input
-                  type={showToken ? 'text' : 'password'}
-                  value={token}
-                  onChange={e => setToken(e.target.value)}
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
                   className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="tutoken..."
+                  placeholder="AIza..."
                 />
                 <button
                   type="button"
-                  onClick={() => setShowToken(!showToken)}
+                  onClick={() => setShowKey(!showKey)}
                   className="absolute right-3 top-2.5 text-xs text-zinc-500 hover:text-zinc-700"
                 >
-                  {showToken ? 'Ocultar' : 'Mostrar'}
+                  {showKey ? 'Ocultar' : 'Mostrar'}
                 </button>
               </div>
-              <p className="text-xs text-zinc-500 mt-1">Obtén tu token desde tu panel de Nubefact</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-2">Modo</label>
-              <select
-                value={modo}
-                onChange={e => setModo(e.target.value as 'prueba' | 'produccion')}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="prueba">Pruebas (Sandbox)</option>
-                <option value="produccion">Producción</option>
-              </select>
-              <p className="text-xs text-zinc-500 mt-1">Usa Pruebas para testear, Producción para facturación real</p>
+              <p className="text-xs text-zinc-500 mt-1">Obtén tu API Key desde Google Cloud Console</p>
             </div>
 
             <div className="flex gap-3 pt-4">
-              {isConnected || isTestMode ? (
+              {isConnected ? (
                 <button
                   onClick={handleDisconnect}
                   disabled={isSaving}
@@ -212,7 +184,7 @@ export default function NubefactPage() {
               ) : (
                 <button
                   onClick={handleConnect}
-                  disabled={isSaving || !token}
+                  disabled={isSaving || !apiKey}
                   className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded disabled:opacity-50"
                 >
                   {isSaving ? 'Conectando...' : 'Conectar'}
@@ -224,7 +196,7 @@ export default function NubefactPage() {
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-900">
-            ℹ️ <strong>Importante:</strong> Cambia a Producción solo cuando hayas probado toda la funcionalidad correctamente.
+            ℹ️ <strong>Información:</strong> Google Maps es opcional pero recomendado para delivery.
           </p>
         </div>
       </div>

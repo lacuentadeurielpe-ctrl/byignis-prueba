@@ -1,9 +1,9 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { Building2 } from 'lucide-react'
-import FormSection from '../../../components/FormSection'
-import { useSettingsSave } from '../../../utils/settingsHooks'
+import FormSection from '../../components/FormSection'
+import { useSettingsSave } from '../../utils/settingsHooks'
 
 interface GeneralFormData {
   nombre?: string
@@ -49,8 +49,8 @@ export default function GeneralForm() {
 
   return (
     <FormSection
-      title="Información General"
-      description="Datos principales de tu ferretería"
+      title="InformaciÃ³n General"
+      description="Datos principales de tu ferreterÃ­a"
       icon={<Building2 className="w-5 h-5" />}
       onSave={handleSave}
       onCancel={() => setIsDirty(false)}
@@ -61,18 +61,18 @@ export default function GeneralForm() {
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-2">Nombre de ferretería *</label>
+          <label className="block text-sm font-medium text-zinc-700 mb-2">Nombre de ferreterÃ­a *</label>
           <input
             type="text"
             value={data.nombre || ''}
             onChange={e => handleChange('nombre', e.target.value)}
             className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="Ej: Ferretería El Maestro"
+            placeholder="Ej: FerreterÃ­a El Maestro"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-2">Teléfono WhatsApp *</label>
+          <label className="block text-sm font-medium text-zinc-700 mb-2">TelÃ©fono WhatsApp *</label>
           <input
             type="text"
             value={data.telefono_whatsapp || ''}
@@ -80,11 +80,11 @@ export default function GeneralForm() {
             className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             placeholder="Ej: 51987654321 (sin +)"
           />
-          <p className="text-xs text-zinc-500 mt-1">Formato: número sin + (ej: 51987654321)</p>
+          <p className="text-xs text-zinc-500 mt-1">Formato: nÃºmero sin + (ej: 51987654321)</p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-2">Dirección</label>
+          <label className="block text-sm font-medium text-zinc-700 mb-2">DirecciÃ³n</label>
           <input
             type="text"
             value={data.direccion || ''}

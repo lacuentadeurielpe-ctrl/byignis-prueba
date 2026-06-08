@@ -14,7 +14,7 @@ interface NavItem {
   count?: string | number
 }
 
-const BASE = '/dashboard/settings-2/sections'
+const BASE = '/dashboard/settings-2'
 
 const SECTIONS: NavItem[] = [
   {

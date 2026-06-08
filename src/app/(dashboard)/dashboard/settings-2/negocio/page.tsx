@@ -1,6 +1,6 @@
-'use client'
+﻿'use client'
 
-import SettingsHeader from '../../components/SettingsHeader'
+import SettingsHeader from '../components/SettingsHeader'
 import GeneralForm from './components/GeneralForm'
 import HorariosForm from './components/HorariosForm'
 import PagosMetodosForm from './components/PagosMetodosForm'
@@ -10,8 +10,8 @@ export default function NegocioPage() {
     <div>
       <SettingsHeader
         title="Negocio"
-        description="Configura los datos principales de tu ferretería"
-        breadcrumbs={[{ label: 'Configuración' }, { label: 'Negocio' }]}
+        description="Configura los datos principales de tu ferreterÃ­a"
+        breadcrumbs={[{ label: 'ConfiguraciÃ³n' }, { label: 'Negocio' }]}
       />
 
       <div className="p-6 max-w-4xl space-y-6">

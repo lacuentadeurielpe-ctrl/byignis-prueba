@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import SettingsHeader from '../../components/SettingsHeader'
+import SettingsHeader from '../components/SettingsHeader'
 import AvanzadoModulosTab from './components/AvanzadoModulosTab'
 import AvanzadoPoliticasTab from './components/AvanzadoPoliticasTab'
 import AvanzadoLogsTab from './components/AvanzadoLogsTab'

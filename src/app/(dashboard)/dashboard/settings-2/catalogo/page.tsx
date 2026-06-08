@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Package } from 'lucide-react'
-import SettingsHeader from '../../components/SettingsHeader'
+import SettingsHeader from '../components/SettingsHeader'
 import CategoriasTab from './components/CategoriasTab'
 import TiersTab from './components/TiersTab'
 import UnidadesTab from './components/UnidadesTab'

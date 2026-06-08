@@ -84,9 +84,7 @@ export async function proxy(request: NextRequest) {
     '/dashboard/finanzas': 'finanzas',
     '/dashboard/ventas': 'ventas',
     '/dashboard/conversations': 'chat',
-    '/dashboard/settings': 'settings',
     '/dashboard/settings-2': 'settings-2',
-    '/dashboard/settings-2/sections': 'settings-2',
     '/pos': 'pos',
   }
 

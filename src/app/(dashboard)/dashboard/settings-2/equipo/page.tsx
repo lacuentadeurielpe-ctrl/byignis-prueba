@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Users } from 'lucide-react'
-import SettingsHeader from '../../components/SettingsHeader'
+import SettingsHeader from '../components/SettingsHeader'
 import EmpleadosTab from './components/EmpleadosTab'
 import RepartidoresTab from './components/RepartidoresTab'
 

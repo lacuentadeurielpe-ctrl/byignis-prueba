@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { Banknote, AlertCircle, CheckCircle } from 'lucide-react'
-import SettingsHeader from '../../../components/SettingsHeader'
-import FormSection from '../../../components/FormSection'
+import SettingsHeader from '../../components/SettingsHeader'
+import FormSection from '../../components/FormSection'
 
 interface MPData {
   estado?: 'conectado' | 'desconectado' | 'error'
