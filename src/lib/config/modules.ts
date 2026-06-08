@@ -21,7 +21,12 @@ const DEFAULT_ACTIVE_MODULES: ModuleName[] = [
   'chat',
   'catalog',
   'clientes',
+  'crm',
+  'creditos',
+  'delivery',
+  'comprobantes',
   'finanzas',
+  'salud',
   'settings',
   'settings-2'
 ];

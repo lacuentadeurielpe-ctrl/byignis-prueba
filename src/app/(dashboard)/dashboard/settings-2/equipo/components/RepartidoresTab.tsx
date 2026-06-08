@@ -21,10 +21,32 @@ export default function RepartidoresTab() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
   const [copiado, setCopiado] = useState<string | null>(null)
+  const [generando, setGenerando] = useState<string | null>(null)
 
   function getPortalUrl(token: string) {
     const base = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL ?? '')
     return `${base}/delivery/${token}`
+  }
+
+  async function generarToken(id: string) {
+    setGenerando(id)
+    try {
+      const res = await fetch('/api/settings-2/equipo/repartidores', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, accion: 'generar_token' }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        setRepartidores(prev => prev.map(r => r.id === id ? { ...r, token: updated.token } : r))
+      } else {
+        setError('Error al generar el link de acceso')
+      }
+    } catch {
+      setError('Error en la conexión')
+    } finally {
+      setGenerando(null)
+    }
   }
 
   async function copiarLink(token: string) {
@@ -217,7 +239,23 @@ export default function RepartidoresTab() {
                         </button>
                       </div>
                     ) : (
-                      <span className="text-xs text-zinc-400 italic">Sin token</span>
+                      <button
+                        onClick={() => generarToken(rep.id)}
+                        disabled={generando === rep.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        {generando === rep.id ? (
+                          <>
+                            <span className="inline-block w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                            Generando...
+                          </>
+                        ) : (
+                          <>
+                            <ExternalLink className="w-3 h-3" />
+                            Generar link
+                          </>
+                        )}
+                      </button>
                     )}
                   </td>
                   <td className="px-5 py-3.5">

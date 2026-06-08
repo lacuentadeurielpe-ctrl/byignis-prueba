@@ -1,6 +1,8 @@
 ﻿import { NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { hashPin } from '@/lib/pin'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +45,8 @@ export async function POST(request: Request) {
     }
 
     const pin = Math.floor(1000 + Math.random() * 9000).toString()
+    const pin_hash = hashPin(pin)
+    const token = crypto.randomBytes(32).toString('hex')
 
     const { data, error } = await supabase
       .from('repartidores')
@@ -51,6 +55,8 @@ export async function POST(request: Request) {
         nombre: body.nombre,
         telefono: body.telefono,
         pin,
+        pin_hash,
+        token,
         estado: 'activo',
         zonas_asignadas: body.zonas_asignadas || [],
       })
@@ -88,6 +94,32 @@ export async function PATCH(request: Request) {
 
     if (!body.id) {
       return NextResponse.json({ error: 'ID es requerido' }, { status: 400 })
+    }
+
+    // Acción especial: generar o regenerar token + pin_hash para repartidores sin acceso
+    if (body.accion === 'generar_token') {
+      const { data: rep } = await supabase
+        .from('repartidores')
+        .select('pin')
+        .eq('id', body.id)
+        .eq('ferreteria_id', session.ferreteriaId)
+        .single()
+
+      if (!rep) return NextResponse.json({ error: 'Repartidor no encontrado' }, { status: 404 })
+
+      const nuevoToken = crypto.randomBytes(32).toString('hex')
+      const nuevoPinHash = hashPin(rep.pin)
+
+      const { data, error } = await supabase
+        .from('repartidores')
+        .update({ token: nuevoToken, pin_hash: nuevoPinHash })
+        .eq('id', body.id)
+        .eq('ferreteria_id', session.ferreteriaId)
+        .select('id, nombre, telefono, pin, token, estado, zonas_asignadas, created_at')
+        .single()
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json(data)
     }
 
     const updateData: Record<string, any> = {}
