@@ -26,25 +26,50 @@ export async function POST(request: Request) {
 
   const supabase = await createClient()
 
-  // Obtener coordenadas de la ferretería
+  // Obtener datos de la ferretería
   const { data: ferreteria } = await supabase
     .from('ferreterias')
-    .select('lat, lng, nombre, direccion')
+    .select('nombre')
     .eq('id', session.ferreteriaId)
     .single()
 
-  let ferreteriaLat = ferreteria?.lat as number | null
-  let ferreteriaLng = ferreteria?.lng as number | null
+  // Prioridad 1: coordenadas del local principal (locales_ferreteria)
+  const { data: localPrincipal } = await supabase
+    .from('locales_ferreteria')
+    .select('lat, lng, direccion')
+    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('es_principal', true)
+    .eq('activo', true)
+    .single()
 
-  // Si no tiene coords, intentar geocodificar la dirección del negocio
+  let ferreteriaLat = (localPrincipal?.lat ?? null) as number | null
+  let ferreteriaLng = (localPrincipal?.lng ?? null) as number | null
+
+  // Prioridad 2: geocodificar dirección del local principal si no tiene coords
   if (!ferreteriaLat || !ferreteriaLng) {
-    const direccionNegocio = (ferreteria?.direccion as string | null) ?? null
-    if (direccionNegocio) {
-      const coords = await geocodificarDireccion(direccionNegocio, 'Lima, Perú')
+    const dirLocal = (localPrincipal?.direccion as string | null) ?? null
+    if (dirLocal && dirLocal !== 'Por definir') {
+      const coords = await geocodificarDireccion(dirLocal, 'Perú')
       if (coords) {
         ferreteriaLat = coords.lat
         ferreteriaLng = coords.lng
       }
+    }
+  }
+
+  // Prioridad 3: cualquier local activo con coords
+  if (!ferreteriaLat || !ferreteriaLng) {
+    const { data: otroLocal } = await supabase
+      .from('locales_ferreteria')
+      .select('lat, lng')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .eq('activo', true)
+      .not('lat', 'is', null)
+      .limit(1)
+      .single()
+    if (otroLocal?.lat) {
+      ferreteriaLat = otroLocal.lat as number
+      ferreteriaLng = otroLocal.lng as number
     }
   }
 
