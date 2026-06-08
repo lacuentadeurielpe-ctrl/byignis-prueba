@@ -4,7 +4,7 @@ import { getSessionInfo } from '@/lib/auth/roles'
 
 export const dynamic = 'force-dynamic'
 
-// GET /api/entregas — entregas activas de la ferretería
+// GET /api/entregas — Entregas activas de la ferretería
 export async function GET(req: NextRequest) {
   const session = await getSessionInfo()
   if (!session) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
@@ -16,14 +16,26 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('entregas')
     .select(`
-      id, estado, eta_inicial, eta_actual, orden_en_ruta,
-      salio_at, llego_at, distancia_km, duracion_estimada_min, duracion_real_min,
-      pedidos(id, numero_pedido, nombre_cliente, telefono_cliente, direccion_entrega, total, eta_minutos, estado),
-      vehiculos(id, nombre, tipo),
-      repartidores(id, nombre)
+      id,
+      estado,
+      asignado_at,
+      salio_at,
+      llego_at,
+      distancia_km,
+      duracion_estimada_min,
+      duracion_real_min,
+      direccion_entrega,
+      instrucciones,
+      gps_ultima_lat,
+      gps_ultima_lng,
+      gps_actualizado_at,
+      pedidos(id, numero_pedido, nombre_cliente, telefono_cliente, total, estado),
+      zonas_delivery(id, nombre, tiempo_estimado_min),
+      repartidores(id, nombre, telefono),
+      vehiculos_delivery(id, tipo, placa)
     `)
-    .eq('ferreteria_id', session.ferreteriaId)   // FERRETERÍA AISLADA
-    .order('created_at', { ascending: false })
+    .eq('ferreteria_id', session.ferreteriaId)
+    .order('asignado_at', { ascending: false })
 
   if (estado) query = query.eq('estado', estado)
 
@@ -31,3 +43,4 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data ?? [])
 }
+
