@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { AlertCircle, Loader2, Navigation } from 'lucide-react'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import PlacesAutocomplete from './PlacesAutocomplete'
 import type { GooglePlacesResult } from '@/types/locales'
 import { geocodeAddress } from '@/lib/maps/geocoding'
@@ -32,6 +32,7 @@ export default function LocalMapPicker({
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mapReady, setMapReady] = useState(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<any>(null)
@@ -52,78 +53,72 @@ export default function LocalMapPicker({
   useEffect(() => {
     if (!mapContainerRef.current) return
 
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-    if (!apiKey) {
-      setError('Google Maps API no configurado')
-      return
-    }
-
-    // Load Google Maps script
-    const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`
-    script.async = true
-    script.onload = () => {
-      initMap()
-    }
-    script.onerror = () => {
-      setError('No se pudo cargar Google Maps')
-    }
-    document.body.appendChild(script)
-
-    return () => {
-      if (script.parentNode) {
-        script.parentNode.removeChild(script)
+    // Esperar a que Google Maps esté disponible
+    const checkAndInit = () => {
+      if (window.google?.maps) {
+        initMap()
+      } else {
+        setTimeout(checkAndInit, 100)
       }
     }
+
+    checkAndInit()
   }, [])
 
   const initMap = () => {
-    if (!mapContainerRef.current || !window.google) return
+    if (!mapContainerRef.current || !window.google?.maps || mapRef.current) return
 
-    const map = new window.google.maps.Map(mapContainerRef.current, {
-      center: { lat: markerPosition[0], lng: markerPosition[1] },
-      zoom: 15,
-      mapTypeControl: true,
-      fullscreenControl: true,
-      streetViewControl: false,
-    })
+    try {
+      const map = new window.google.maps.Map(mapContainerRef.current, {
+        center: { lat: markerPosition[0], lng: markerPosition[1] },
+        zoom: 16,
+        mapTypeControl: true,
+        fullscreenControl: false,
+        streetViewControl: false,
+      })
 
-    mapRef.current = map
+      mapRef.current = map
 
-    // Create marker
-    const marker = new window.google.maps.Marker({
-      position: { lat: markerPosition[0], lng: markerPosition[1] },
-      map: map,
-      draggable: true,
-      title: 'Tu ubicación',
-    })
+      // Create draggable marker
+      const marker = new window.google.maps.Marker({
+        position: { lat: markerPosition[0], lng: markerPosition[1] },
+        map: map,
+        draggable: true,
+        title: 'Arrastra para ajustar ubicación',
+      })
 
-    markerRef.current = marker
+      markerRef.current = marker
 
-    // Marker drag event
-    marker.addListener('dragend', async () => {
-      const pos = marker.getPosition()
-      if (!pos) return
+      // Marker dragend event
+      marker.addListener('dragend', async () => {
+        const pos = marker.getPosition()
+        if (!pos) return
 
-      const lat = pos.lat()
-      const lng = pos.lng()
-      setMarkerPosition([lat, lng])
+        const lat = pos.lat()
+        const lng = pos.lng()
+        setMarkerPosition([lat, lng])
+        await performReverseGeocode(lat, lng)
+      })
 
-      // Reverse geocode
-      await performReverseGeocode(lat, lng)
-    })
+      // Map click event - CRITICAL
+      map.addListener('click', async (e: any) => {
+        const lat = e.latLng.lat()
+        const lng = e.latLng.lng()
 
-    // Map click event
-    map.addListener('click', async (e: any) => {
-      const lat = e.latLng.lat()
-      const lng = e.latLng.lng()
+        // Mover marcador
+        marker.setPosition({ lat, lng })
+        setMarkerPosition([lat, lng])
 
-      marker.setPosition({ lat, lng })
-      setMarkerPosition([lat, lng])
+        // Reverse geocode
+        await performReverseGeocode(lat, lng)
+      })
 
-      // Reverse geocode
-      await performReverseGeocode(lat, lng)
-    })
+      setMapReady(true)
+      setError(null)
+    } catch (err) {
+      console.error('Error initializing map:', err)
+      setError('Error al cargar el mapa')
+    }
   }
 
   const performReverseGeocode = async (lat: number, lng: number) => {
@@ -158,29 +153,27 @@ export default function LocalMapPicker({
             place_id: result.place_id,
           })
         }
-      } else {
-        setError('No se pudo obtener la dirección')
       }
     } catch (err) {
       console.error('Reverse geocoding error:', err)
-      setError('Error al obtener dirección')
     } finally {
       setLoading(false)
     }
   }
 
-  // Handle dirección input + PlacesAutocomplete
+  // Handle PlacesAutocomplete selection
   const handleSelectPlace = async (result: GooglePlacesResult) => {
     setDireccion(result.descripcion)
     setMarkerPosition([result.lat, result.lng])
     setError(null)
 
-    // Update map
+    // Update map center and zoom
     if (mapRef.current) {
       mapRef.current.setCenter({ lat: result.lat, lng: result.lng })
       mapRef.current.setZoom(16)
     }
 
+    // Update marker
     if (markerRef.current) {
       markerRef.current.setPosition({ lat: result.lat, lng: result.lng })
     }
@@ -203,9 +196,9 @@ export default function LocalMapPicker({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 relative z-10">
       {/* Input con PlacesAutocomplete */}
-      <div>
+      <div className="relative z-40">
         <label className="block text-sm font-medium text-zinc-700 mb-2">📍 Ubicación del local</label>
         <PlacesAutocomplete
           value={direccion}
@@ -223,17 +216,26 @@ export default function LocalMapPicker({
       </div>
 
       {/* Google Map interactivo */}
-      <div className="relative">
+      <div className="relative z-0">
         <div
           ref={mapContainerRef}
           className="w-full h-96 rounded-lg overflow-hidden border-2 border-zinc-200 hover:border-indigo-300 transition-colors bg-zinc-100"
         />
 
+        {!mapReady && (
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-lg">
+            <div className="bg-white rounded-lg p-4 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+              <p className="text-sm text-zinc-700">Cargando mapa...</p>
+            </div>
+          </div>
+        )}
+
         {loading && (
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-lg">
             <div className="bg-white rounded-lg p-4 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-              <p className="text-sm text-zinc-700">Obteniendo ubicación...</p>
+              <p className="text-sm text-zinc-700">Obteniendo dirección...</p>
             </div>
           </div>
         )}
@@ -243,10 +245,10 @@ export default function LocalMapPicker({
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs">
         <p className="text-blue-900 font-medium">💡 Cómo usar:</p>
         <ul className="text-blue-700 space-y-0.5 mt-1">
-          <li>• Escribe la dirección en el campo arriba</li>
-          <li>• O haz click directamente en el mapa</li>
-          <li>• Arrastra el marcador para ajustar</li>
-          <li>• Se guarda automáticamente cada 800ms</li>
+          <li>• <strong>Escribe</strong> la dirección arriba para buscar</li>
+          <li>• <strong>Haz click</strong> en el mapa para marcar ubicación</li>
+          <li>• <strong>Arrastra el marcador</strong> rojo para ajustar</li>
+          <li>• Se guarda automáticamente en 800ms</li>
         </ul>
       </div>
 

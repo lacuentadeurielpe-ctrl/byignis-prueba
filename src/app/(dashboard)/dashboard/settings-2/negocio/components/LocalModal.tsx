@@ -91,13 +91,13 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center md:items-end z-50 p-4 md:p-0">
       <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
+        initial={{ y: '100%', opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: '100%', opacity: 0 }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="w-full max-w-4xl bg-white md:rounded-2xl rounded-t-3xl shadow-2xl overflow-y-auto max-h-[90vh]"
+        className="w-full max-w-4xl bg-white md:rounded-2xl rounded-t-3xl shadow-2xl overflow-y-auto max-h-[90vh] max-h-screen md:max-h-[90vh]"
       >
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between px-6 py-4 bg-white border-b border-zinc-200">
@@ -118,7 +118,7 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-visible">
           {/* Nombre y Código */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
