@@ -35,17 +35,12 @@ export function useOrderActions(
         throw new Error(err.error ?? 'Error al actualizar el estado')
       }
       const actualizado = await res.json()
-      console.log('✅ Respuesta del servidor:', actualizado)
-      console.log('📝 Intentando actualizar pedidoId:', pedidoId)
-      setPedidos((prev) => {
-        console.log('🔄 Estado anterior:', prev)
-        const actualizado_local = prev.map((p) => (p.id === pedidoId
+      setPedidos((prev) =>
+        prev.map((p) => (p.id === pedidoId
           ? { ...p, estado: actualizado.estado, motivo_cancelacion: motivoCancelacion ?? p.motivo_cancelacion }
           : p))
-        console.log('✨ Estado nuevo:', actualizado_local)
-        return actualizado_local
-      })
-      toast.success('Estado actualizado correctamente')
+      )
+      toast.success('Estado actualizado')
     } catch {
       toast.error('Error al actualizar el estado')
     } finally {
@@ -162,7 +157,8 @@ export function useOrderActions(
         throw new Error(err.error ?? 'Error al eliminar el pedido')
       }
       setPedidos((prev) => prev.filter((p) => p.id !== pedidoId))
-      toast.success('Pedido eliminado correctamente')
+      toast.success('Pedido eliminado')
+      setTimeout(() => router.refresh(), 800)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Error al eliminar el pedido')
     } finally {
