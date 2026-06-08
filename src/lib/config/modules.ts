@@ -11,7 +11,8 @@ export type ModuleName =
   | 'delivery'
   | 'comprobantes'
   | 'salud'
-  | 'settings';
+  | 'settings'
+  | 'settings-2';
 
 const DEFAULT_ACTIVE_MODULES: ModuleName[] = [
   'dashboard',
@@ -21,7 +22,8 @@ const DEFAULT_ACTIVE_MODULES: ModuleName[] = [
   'catalog',
   'clientes',
   'finanzas',
-  'settings'
+  'settings',
+  'settings-2'
 ];
 
 export function isModuleEnabled(module: ModuleName): boolean {

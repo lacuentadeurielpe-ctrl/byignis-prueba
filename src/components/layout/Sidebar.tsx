@@ -67,7 +67,7 @@ const navGroups: NavGroup[] = [
       { label: 'Facturación', href: '/dashboard/comprobantes', icon: FileText, permiso: 'ver_caja_dia', moduleName: 'comprobantes' },
       { label: 'Finanzas', href: '/dashboard/finanzas', icon: BarChart2, permiso: 'ver_caja_dia', moduleName: 'finanzas' },
       { label: 'Salud',    href: '/dashboard/salud',    icon: Activity,  permiso: 'configurar_ferreteria', moduleName: 'salud' },
-      { label: 'Ajustes',  href: '/dashboard/settings', icon: Settings,  permiso: 'configurar_ferreteria', moduleName: 'settings' },
+      { label: 'Ajustes',  href: '/dashboard/settings-2', icon: Settings,  permiso: 'configurar_ferreteria', moduleName: 'settings-2' },
     ],
   },
 ]
