@@ -1,13 +1,14 @@
 ﻿'use client'
 
 import { useState, useEffect } from 'react'
-import { Truck, Plus, Trash2 } from 'lucide-react'
+import { Truck, Plus, Trash2, Copy, Check, ExternalLink } from 'lucide-react'
 
 interface Repartidor {
   id: string
   nombre: string
   telefono: string
   pin: string
+  token: string
   estado: string
 }
 
@@ -19,6 +20,24 @@ export default function RepartidoresTab() {
   const [telefono, setTelefono] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
+  const [copiado, setCopiado] = useState<string | null>(null)
+
+  function getPortalUrl(token: string) {
+    const base = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL ?? '')
+    return `${base}/delivery/${token}`
+  }
+
+  async function copiarLink(token: string) {
+    const url = getPortalUrl(token)
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiado(token)
+      setTimeout(() => setCopiado(null), 2000)
+    } catch {
+      // fallback para móviles sin clipboard API
+      prompt('Copia este link:', url)
+    }
+  }
 
   useEffect(() => {
     fetchRepartidores()
@@ -162,6 +181,7 @@ export default function RepartidoresTab() {
                 <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Nombre</th>
                 <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Teléfono</th>
                 <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">PIN</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Link de acceso</th>
                 <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Acción</th>
               </tr>
             </thead>
@@ -172,6 +192,33 @@ export default function RepartidoresTab() {
                   <td className="px-5 py-3.5 text-zinc-600 font-mono text-xs">{rep.telefono}</td>
                   <td className="px-5 py-3.5">
                     <code className="px-2.5 py-1.5 bg-amber-100 text-amber-700 text-xs font-bold rounded-lg">{rep.pin}</code>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {rep.token ? (
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={getPortalUrl(rep.token)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium underline underline-offset-2"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Abrir portal
+                        </a>
+                        <button
+                          onClick={() => copiarLink(rep.token)}
+                          title="Copiar link para compartir por WhatsApp"
+                          className="flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-600 transition"
+                        >
+                          {copiado === rep.token
+                            ? <><Check className="w-3 h-3 text-green-600" /> <span className="text-green-600">¡Copiado!</span></>
+                            : <><Copy className="w-3 h-3" /> Copiar</>
+                          }
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-zinc-400 italic">Sin token</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     <button

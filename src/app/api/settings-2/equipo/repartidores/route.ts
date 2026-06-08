@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   try {
     const { data, error } = await supabase
       .from('repartidores')
-      .select('id, nombre, telefono, pin, estado, zonas_asignadas, created_at')
+      .select('id, nombre, telefono, pin, token, estado, zonas_asignadas, created_at')
       .eq('ferreteria_id', session.ferreteriaId)
       .order('created_at', { ascending: false })
 
