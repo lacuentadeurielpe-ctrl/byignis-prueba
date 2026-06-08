@@ -22,6 +22,16 @@ export function useOrderActions(
 
     setActualizando(pedidoId)
     try {
+      // Optimistic update: cambiar UI al instante
+      setPedidos((prev) => prev.map((p) => p.id === pedidoId
+        ? {
+            ...p,
+            estado: nuevoEstado,
+            motivo_cancelacion: motivoCancelacion ?? p.motivo_cancelacion,
+          }
+        : p))
+
+      // Validar en el servidor (máquina de estados rechaza transiciones inválidas)
       const res = await fetch(`/api/orders/${pedidoId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -30,23 +40,18 @@ export function useOrderActions(
           ...(motivoCancelacion ? { motivo_cancelacion: motivoCancelacion } : {}),
         }),
       })
+
       if (!res.ok) {
         const err = await res.json()
         throw new Error(err.error ?? 'Error al actualizar el estado')
       }
-      const data = await res.json()
-      // Actualizar estado local directamente sin confiar en la respuesta del servidor
-      // Usamos el nuevo estado que conocemos desde el cliente
-      setPedidos((prev) => prev.map((p) => p.id === pedidoId
-        ? {
-            ...p,
-            estado: nuevoEstado,
-            motivo_cancelacion: motivoCancelacion ?? p.motivo_cancelacion,
-          }
-        : p))
+
       toast.success('Estado actualizado')
     } catch (error) {
+      // Si falla: recargar datos desde el servidor para sincronizar
       toast.error(error instanceof Error ? error.message : 'Error al actualizar el estado')
+      // El usuario verá el error y podrá recargar manualmente o los datos se sincronizarán con el realtime
+      setTimeout(() => router.refresh(), 2000)
     } finally {
       setActualizando(null)
       if (setCancelDialog) setCancelDialog(null)
