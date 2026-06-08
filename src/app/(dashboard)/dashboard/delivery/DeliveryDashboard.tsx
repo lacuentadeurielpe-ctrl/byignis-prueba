@@ -5,8 +5,11 @@ import { useRouter } from 'next/navigation'
 import {
   Truck, MapPin, Clock, Package, CheckCircle, Loader2,
   Route, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, CalendarClock,
+  ListOrdered, ShieldAlert,
 } from 'lucide-react'
 import { cn, formatPEN, formatFechaHoraLima } from '@/lib/utils'
+import ColaTab from './components/ColaTab'
+import IncidenciasTab from './components/IncidenciasTab'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -126,12 +129,16 @@ export default function DeliveryDashboard({
   initialEntregas,
   initialProgramados = [],
   confidenceMap = {},
+  colaCount = 0,
+  incidenciasCount = 0,
 }: {
   initialEntregas: EntregaDashboard[]
   initialProgramados?: PedidoProgramado[]
   confidenceMap?: Record<string, { confidence: number; source: string }>
+  colaCount?: number
+  incidenciasCount?: number
 }) {
-  const [tab, setTab]                 = useState<'vivo' | 'programados'>('vivo')
+  const [tab, setTab]                 = useState<'vivo' | 'programados' | 'cola' | 'incidencias'>('vivo')
   const [entregas, setEntregas]       = useState(initialEntregas)
   const [programados]                 = useState(initialProgramados)
   const [optimizando, setOptimizando] = useState<string | null>(null)
@@ -234,12 +241,12 @@ export default function DeliveryDashboard({
   return (
     <div className="space-y-6">
 
-      {/* Tabs: En vivo / Programados */}
-      <div className="flex gap-1 border-b border-zinc-200">
+      {/* Tabs: En vivo / Cola / Incidencias / Programados */}
+      <div className="flex gap-1 border-b border-zinc-200 overflow-x-auto">
         <button
           onClick={() => setTab('vivo')}
           className={cn(
-            'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors',
+            'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0',
             tab === 'vivo'
               ? 'border-zinc-950 text-zinc-950'
               : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'
@@ -254,9 +261,43 @@ export default function DeliveryDashboard({
           )}
         </button>
         <button
+          onClick={() => setTab('cola')}
+          className={cn(
+            'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0',
+            tab === 'cola'
+              ? 'border-zinc-950 text-zinc-950'
+              : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'
+          )}
+        >
+          <ListOrdered className="w-3.5 h-3.5" />
+          Cola
+          {colaCount > 0 && (
+            <span className="ml-0.5 text-[10px] bg-amber-500 text-white rounded-full px-1.5 py-0.5 font-semibold leading-none">
+              {colaCount}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setTab('incidencias')}
+          className={cn(
+            'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0',
+            tab === 'incidencias'
+              ? 'border-zinc-950 text-zinc-950'
+              : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'
+          )}
+        >
+          <ShieldAlert className="w-3.5 h-3.5" />
+          Incidencias
+          {incidenciasCount > 0 && (
+            <span className="ml-0.5 text-[10px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-semibold leading-none">
+              {incidenciasCount}
+            </span>
+          )}
+        </button>
+        <button
           onClick={() => setTab('programados')}
           className={cn(
-            'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors',
+            'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0',
             tab === 'programados'
               ? 'border-zinc-950 text-zinc-950'
               : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'
@@ -271,6 +312,12 @@ export default function DeliveryDashboard({
           )}
         </button>
       </div>
+
+      {/* ── Vista: Cola ──────────────────────────────────────────────────────── */}
+      {tab === 'cola' && <ColaTab />}
+
+      {/* ── Vista: Incidencias ───────────────────────────────────────────────── */}
+      {tab === 'incidencias' && <IncidenciasTab />}
 
       {/* ── Vista: Programados ──────────────────────────────────────────────── */}
       {tab === 'programados' && (

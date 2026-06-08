@@ -5,6 +5,7 @@ import {
   MapPin, Phone, Package, ChevronDown, CheckCircle, AlertTriangle,
   Loader2, RotateCcw, Siren, X, Inbox, BarChart2,
   FileText, Truck, CreditCard, BadgeCheck, Clock, Navigation, NavigationOff,
+  ExternalLink, Camera, Image as ImageIcon, XCircle,
 } from 'lucide-react'
 import PinModal from '@/components/ui/PinModal'
 import { cn, formatPEN, labelEstadoPago, colorEstadoPago } from '@/lib/utils'
@@ -69,6 +70,7 @@ const ESTADO_LABELS: Record<string, { label: string; icon: string; color: string
   en_preparacion: { label: 'En preparación', icon: '📦', color: 'text-amber-600'  },
   enviado:        { label: 'En camino',       icon: '🚚', color: 'text-orange-600' },
   entregado:      { label: 'Entregado',       icon: '✔️', color: 'text-green-600'  },
+  cancelado:      { label: 'Cancelado',       icon: '❌', color: 'text-red-600'    },
 }
 
 // labelEstadoPago / colorEstadoPago importados desde @/lib/utils (fuente única de verdad)
@@ -153,6 +155,36 @@ export default function DeliveryView({
 
   // Estado inline de cobro por pedido (sin modal)
   const [cobros, setCobros] = useState<Record<string, { monto: string; metodo: string }>>({})
+
+  // Estado de fotos por pedido: { pedidoId → urls[] }
+  const [fotosMap, setFotosMap] = useState<Record<string, string[]>>({})
+  const [subiendoFoto, setSubiendoFoto] = useState<string | null>(null) // pedidoId subiendo
+
+  async function subirFoto(pedidoId: string, file: File) {
+    setSubiendoFoto(pedidoId)
+    try {
+      const formData = new FormData()
+      formData.append('foto', file)
+      const res = await fetch(`/api/delivery/pedido/${pedidoId}/foto?token=${token}`, {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        alert(err.error ?? 'Error al subir la foto')
+        return
+      }
+      const data = await res.json()
+      setFotosMap((prev) => ({
+        ...prev,
+        [pedidoId]: [...(prev[pedidoId] ?? []), data.fotoUrl],
+      }))
+    } catch {
+      alert('Error de red al subir la foto')
+    } finally {
+      setSubiendoFoto(null)
+    }
+  }
 
   // Modal de incidencia / retorno / emergencia
   const [modal, setModal] = useState<{ pedidoId: string; tipo: 'incidencia' | 'retorno' | 'emergencia' } | null>(null)
@@ -426,6 +458,25 @@ export default function DeliveryView({
               <span>Incidencia: {INCIDENCIAS.find(i => i.value === pedido.incidencia_tipo)?.label ?? pedido.incidencia_tipo}</span>
             </div>
           )}
+
+          {/* Banner de cancelado */}
+          {pedido.estado === 'cancelado' && (
+            <div className="mt-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                <span className="text-xs text-red-700 font-medium">Este pedido fue cancelado por la tienda</span>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setPedidos(prev => prev.filter(p => p.id !== pedido.id))
+                }}
+                className="text-xs text-red-500 hover:text-red-700 font-medium shrink-0 underline"
+              >
+                Ok
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Cuerpo expandido */}
@@ -566,6 +617,58 @@ export default function DeliveryView({
                     </>
                   )}
                 </div>
+
+                {/* ── Cómo llegar + Foto ── */}
+                <div className="flex gap-2">
+                  {pedido.direccion_entrega && (
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(pedido.direccion_entrega)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-medium bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Cómo llegar
+                    </a>
+                  )}
+                  <label className={cn(
+                    'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-medium bg-zinc-100 border border-zinc-200 text-zinc-700 hover:bg-zinc-200 transition cursor-pointer',
+                    subiendoFoto === pedido.id && 'opacity-50 pointer-events-none'
+                  )}>
+                    {subiendoFoto === pedido.id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Camera className="w-3.5 h-3.5" />
+                    }
+                    {subiendoFoto === pedido.id ? 'Subiendo…' : 'Foto evidencia'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) subirFoto(pedido.id, file)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {/* Preview de fotos subidas */}
+                {(fotosMap[pedido.id]?.length ?? 0) > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {fotosMap[pedido.id].map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                        className="relative w-16 h-16 rounded-xl overflow-hidden border border-zinc-200 flex-shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
+                        <div className="absolute bottom-0 right-0 bg-black/40 rounded-tl-lg px-1">
+                          <ImageIcon className="w-2.5 h-2.5 text-white" />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
 
                 {/* ── Botones de acción ── */}
                 <div className="space-y-2">

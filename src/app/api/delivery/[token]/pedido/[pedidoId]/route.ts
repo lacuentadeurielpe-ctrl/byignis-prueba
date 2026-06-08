@@ -17,6 +17,7 @@ import {
   notificarFallida,
 } from '@/lib/notifications/delivery.notifications'
 import type { DeliveryNotificationContext } from '@/lib/notifications/types'
+import { inngest } from '@/lib/inngest/client'
 
 function adminClient() {
   return createClient(
@@ -209,6 +210,16 @@ export async function PATCH(
   if (accion === 'entregado' || accion === 'retorno') {
     recalcularETAsCola(repartidor.ferreteria_id, supabase)
       .catch((e) => console.error('[Delivery] recalcularETAsCola error:', e))
+
+    // Disparar Inngest para notificar al dueño sobre capacidad liberada
+    inngest.send({
+      name: 'delivery/cola.changed',
+      data: {
+        ferreteriaId: repartidor.ferreteria_id,
+        motivo: accion === 'entregado' ? 'entregado' : 'retorno',
+        pedidoId,
+      },
+    }).catch((e) => console.error('[Delivery] Error enviando evento cola.changed:', e))
   }
 
   // ── Si fue pago parcial → crear registro de crédito/deuda ─────────────────
@@ -265,11 +276,29 @@ export async function PATCH(
         repartidorNombre: repartidor.nombre as string,
       }
 
-      // ── "En camino" — multi-channel notification ──────────────────────────
+      // ── "En camino" — multi-channel notification + Inngest delay detector ──
       if (accion === 'cambiar_estado' && nuevo_estado === 'enviado' && telefono) {
         const etaMin = (pedidoActual as any).eta_minutos as number | null
         notificarEnRuta(notifCtx, etaMin, supabase)
           .catch(e => console.error('[Delivery] Error notif en_ruta:', e))
+
+        // Disparar Inngest para detectar retraso si ETA existe
+        if (etaMin && etaMin > 0) {
+          inngest.send({
+            name: 'delivery/pedido.enviado',
+            data: {
+              ferreteriaId: repartidor.ferreteria_id,
+              pedidoId,
+              entregaId: entregaIdParaTracking ?? '',
+              numeroPedido: (pedidoActual as any).numero_pedido as string,
+              etaMinutos: etaMin,
+              telefonoCliente: telefono,
+              telefonoWhatsapp: from,
+              nombreFerreteria: ferr?.nombre ?? '',
+              repartidorNombre: repartidor.nombre as string,
+            },
+          }).catch(e => console.error('[Delivery] Error enviando evento pedido.enviado:', e))
+        }
       }
 
       // ── "Entregado" — multi-channel notification ──────────────────────────

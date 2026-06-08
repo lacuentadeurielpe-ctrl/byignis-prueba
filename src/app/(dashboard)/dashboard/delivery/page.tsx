@@ -22,9 +22,31 @@ export default async function DeliveryPage() {
   const inicioHoy   = inicioDiaLima(0)
   const fin14dias   = inicioDiaLima(15)   // exclusivo → 14 días completos
 
-  const [entregas, pedidosProgramados] = await Promise.all([
+  const [entregas, pedidosProgramados, colaData, incidenciasData] = await Promise.all([
     deliveryRepo.obtenerEntregasDashboard(session.ferreteriaId, hoy),
     deliveryRepo.obtenerPedidosProgramados(session.ferreteriaId, inicioHoy, fin14dias),
+    // Count pedidos en cola (sin asignar)
+    supabase
+      .from('pedidos')
+      .select('id, entregas!left(repartidor_id, estado)', { count: 'exact' })
+      .eq('ferreteria_id', session.ferreteriaId)
+      .eq('modalidad', 'delivery')
+      .in('estado', ['confirmado', 'en_preparacion', 'listo_para_recojo'])
+      .then(({ data }) => {
+        const sinAsignar = (data ?? []).filter((p: any) => {
+          const activas = (p.entregas ?? []).filter((e: any) => !['entregado', 'fallida'].includes(e.estado))
+          return activas.every((e: any) => !e.repartidor_id)
+        })
+        return sinAsignar.length
+      }),
+    // Count incidencias activas
+    supabase
+      .from('pedidos')
+      .select('id', { count: 'exact', head: true })
+      .eq('ferreteria_id', session.ferreteriaId)
+      .not('incidencia_tipo', 'is', null)
+      .not('estado', 'in', '("entregado","cancelado","devuelto")')
+      .then(({ count }) => count ?? 0),
   ])
 
   // Fetch confidence data for active entregas (for IA badges in dashboard)
@@ -64,6 +86,8 @@ export default async function DeliveryPage() {
         initialEntregas={(entregas ?? []) as any}
         initialProgramados={(pedidosProgramados ?? []) as any}
         confidenceMap={confidenceMap}
+        colaCount={colaData as number}
+        incidenciasCount={incidenciasData as number}
       />
     </div>
   )
