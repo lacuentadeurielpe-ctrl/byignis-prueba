@@ -209,22 +209,22 @@ export default function PlacesAutocomplete({
       </div>
 
       {isOpen && suggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-zinc-200 rounded-lg shadow-lg z-50">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-zinc-300 rounded-lg shadow-xl z-50 max-w-full">
           <ul className="max-h-64 overflow-y-auto">
             {suggestions.map((suggestion, idx) => (
               <li key={idx}>
                 <button
                   type="button"
                   onClick={() => handleSelectSuggestion(suggestion)}
-                  className="w-full text-left px-4 py-3 hover:bg-indigo-50 transition-colors border-b border-zinc-100 last:border-b-0"
+                  className="w-full text-left px-4 py-3 hover:bg-blue-100 active:bg-blue-200 transition-colors border-b border-zinc-200 last:border-b-0"
                 >
                   <div className="flex items-start gap-3">
-                    <MapPin className="w-4 h-4 text-zinc-400 mt-0.5 flex-shrink-0" />
+                    <MapPin className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-zinc-900 truncate">
+                      <p className="text-sm font-semibold text-gray-900 truncate">
                         {suggestion.main_text}
                       </p>
-                      <p className="text-xs text-zinc-500 truncate">
+                      <p className="text-xs text-gray-700 truncate">
                         {suggestion.secondary_text}
                       </p>
                     </div>

@@ -206,7 +206,7 @@ export default function LocalesForm() {
                               initial={{ opacity: 0, scale: 0.95 }}
                               animate={{ opacity: 1, scale: 1 }}
                               exit={{ opacity: 0, scale: 0.95 }}
-                              className="absolute right-0 mt-1 w-40 bg-white border border-zinc-200 rounded-lg shadow-lg z-10 overflow-hidden"
+                              className="absolute right-0 mt-1 w-40 bg-white border border-zinc-200 rounded-lg shadow-lg z-50 overflow-hidden"
                             >
                               <button
                                 onClick={() => handleOpenModal(local)}
@@ -215,9 +215,14 @@ export default function LocalesForm() {
                                 <Edit2 className="w-4 h-4" /> Editar
                               </button>
                               <button
-                                onClick={() => handleDelete(local.id, local.nombre, local.es_principal)}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  e.preventDefault()
+                                  handleDelete(local.id, local.nombre, local.es_principal)
+                                }}
                                 disabled={deleting === local.id || local.es_principal}
-                                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                               >
                                 <Trash2 className="w-4 h-4" />
                                 {deleting === local.id ? 'Eliminando...' : 'Eliminar'}
