@@ -99,3 +99,48 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   return NextResponse.json(data)
 }
+
+// DELETE /api/clientes/[id] — eliminar cliente (solo dueño)
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSessionInfo()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  // Solo dueño puede eliminar clientes
+  if (session.rol !== 'dueno') {
+    return NextResponse.json({ error: 'No tienes permisos para eliminar clientes' }, { status: 403 })
+  }
+
+  const supabase = await createClient()
+  const { id } = await params
+
+  try {
+    // Verificar que el cliente existe y pertenece a la ferretería
+    const { data: cliente, error: getError } = await supabase
+      .from('clientes')
+      .select('id')
+      .eq('id', id)
+      .eq('ferreteria_id', session.ferreteriaId)
+      .single()
+
+    if (getError || !cliente) {
+      return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
+    }
+
+    // Eliminar cliente (en cascada por configuración de BD)
+    const { error: deleteError } = await supabase
+      .from('clientes')
+      .delete()
+      .eq('id', id)
+      .eq('ferreteria_id', session.ferreteriaId)
+
+    if (deleteError) {
+      console.error('Error deleting cliente:', deleteError)
+      return NextResponse.json({ error: deleteError.message }, { status: 500 })
+    }
+
+    return NextResponse.json(null, { status: 204 })
+  } catch (err) {
+    console.error('Error in DELETE /api/clientes/[id]:', err)
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+  }
+}
