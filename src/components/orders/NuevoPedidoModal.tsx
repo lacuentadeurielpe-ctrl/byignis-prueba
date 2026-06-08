@@ -36,9 +36,10 @@ interface NuevoPedidoModalProps {
   productos: Producto[]
   zonas: Zona[]
   onClose: () => void
+  onPedidoCreado?: (pedido: any) => void
 }
 
-export default function NuevoPedidoModal({ productos, zonas, onClose }: NuevoPedidoModalProps) {
+export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCreado }: NuevoPedidoModalProps) {
   const router = useRouter()
   const [items, setItems] = useState<ItemCarrito[]>([])
   const [busqueda, setBusqueda] = useState('')
@@ -211,7 +212,8 @@ export default function NuevoPedidoModal({ productos, zonas, onClose }: NuevoPed
         throw new Error(body.error ?? 'Error al crear pedido')
       }
 
-      const { id: pedidoId } = await res.json()
+      const pedidoCreado = await res.json()
+      const pedidoId = pedidoCreado.id
 
       // Si el dueño lo crea como confirmado Y no es programado, disparar comprobante
       if (estadoInicial === 'confirmado' && !esProgramado) {
@@ -222,7 +224,13 @@ export default function NuevoPedidoModal({ productos, zonas, onClose }: NuevoPed
         })
       }
 
-      router.refresh()
+      // Llamar callback para agregar el pedido a la lista sin recargar
+      if (onPedidoCreado) {
+        onPedidoCreado(pedidoCreado)
+      } else {
+        // Fallback si no se proporciona callback
+        router.refresh()
+      }
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido')

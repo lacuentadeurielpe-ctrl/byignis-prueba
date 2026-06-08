@@ -17,7 +17,10 @@ export async function POST(request: Request) {
   try {
     const body: PedidoPayload = await request.json()
     const pedido = await ordersService.crearPedido(body)
-    return NextResponse.json({ id: pedido.id, numero_pedido: pedido.numero_pedido }, { status: 201 })
+    // Obtener el pedido completo con relaciones para la UI
+    const ventasRepo = new VentasRepository(supabase)
+    const pedidoCompleto = await ventasRepo.obtenerPedidoPorId(session.ferreteriaId, pedido.id)
+    return NextResponse.json(pedidoCompleto, { status: 201 })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: error.message.includes('requerid') ? 400 : 500 })
   }

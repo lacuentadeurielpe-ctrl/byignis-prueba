@@ -242,10 +242,26 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
 
       {/* Modales (Ocultos) */}
       {modalNuevo && (
-        <NuevoPedidoModal onClose={() => { setModalNuevo(false); router.refresh() }} productos={productos} zonas={zonas} />
+        <NuevoPedidoModal
+          onClose={() => setModalNuevo(false)}
+          onPedidoCreado={(pedido) => {
+            setPedidos((prev) => [pedido, ...prev])
+            setSelectedOrderId(pedido.id)
+          }}
+          productos={productos}
+          zonas={zonas}
+        />
       )}
       {modalVoz && (
-        <PedidoVozModal onClose={() => { setModalVoz(false); router.refresh() }} productos={productos} zonas={zonas} />
+        <PedidoVozModal
+          onClose={() => setModalVoz(false)}
+          onPedidoCreado={(pedido) => {
+            setPedidos((prev) => [pedido, ...prev])
+            setSelectedOrderId(pedido.id)
+          }}
+          productos={productos}
+          zonas={zonas}
+        />
       )}
       {modalEditar && (
         <EditarPedidoModal pedido={modalEditar} onClose={() => { setModalEditar(null); router.refresh() }} productos={productos} zonas={zonas} />

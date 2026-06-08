@@ -30,6 +30,7 @@ interface PedidoVozModalProps {
   productos: Producto[]
   zonas: Zona[]
   onClose: () => void
+  onPedidoCreado?: (pedido: any) => void
 }
 
 // ── Sub-componente: badge de confianza ────────────────────────────────────────
@@ -44,7 +45,7 @@ function ConfianzaBadge({ c }: { c: ItemParseado['confianza'] }) {
 
 type Paso = 'escuchar' | 'interpretando' | 'confirmar'
 
-export default function PedidoVozModal({ productos, zonas, onClose }: PedidoVozModalProps) {
+export default function PedidoVozModal({ productos, zonas, onClose, onPedidoCreado }: PedidoVozModalProps) {
   const router = useRouter()
 
   // ── Estado de pasos
@@ -214,7 +215,12 @@ export default function PedidoVozModal({ productos, zonas, onClose }: PedidoVozM
         throw new Error(body.error ?? 'Error al crear pedido')
       }
 
-      router.refresh()
+      const pedidoCreado = await res.json()
+      if (onPedidoCreado) {
+        onPedidoCreado(pedidoCreado)
+      } else {
+        router.refresh()
+      }
       onClose()
     } catch (e) {
       setErrorGuardar(e instanceof Error ? e.message : 'Error desconocido')
