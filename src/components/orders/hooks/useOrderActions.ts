@@ -40,7 +40,6 @@ export function useOrderActions(
           ? { ...p, estado: actualizado.estado, motivo_cancelacion: motivoCancelacion ?? p.motivo_cancelacion }
           : p))
       )
-      router.refresh()
       toast.success('Estado actualizado correctamente')
     } catch {
       toast.error('Error al actualizar el estado')
@@ -158,7 +157,7 @@ export function useOrderActions(
         throw new Error(err.error ?? 'Error al eliminar el pedido')
       }
       setPedidos((prev) => prev.filter((p) => p.id !== pedidoId))
-      router.refresh()
+      toast.success('Pedido eliminado correctamente')
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Error al eliminar el pedido')
     } finally {

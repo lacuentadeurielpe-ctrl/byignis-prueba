@@ -93,15 +93,14 @@ export default function OrderDetailPane({
             </button>
           )}
           {pedido.estado === 'en_preparacion' && pedido.modalidad === 'delivery' && (
-            // Modal simple para asignar repartidor
             <select
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 shadow-sm cursor-pointer outline-none"
+              className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 shadow-sm cursor-pointer outline-none min-w-[160px]"
               onChange={(e) => {
                 if(e.target.value) actions.asignarRepartidor(pedido.id, e.target.value)
-                e.target.value = "" // reset
+                e.target.value = ""
               }}
             >
-              <option value="">Enviar con...</option>
+              <option value="">🚚 Enviar con...</option>
               {repartidores.filter(r => r.activo).map(r => (
                 <option key={r.id} value={r.id}>{r.nombre}</option>
               ))}

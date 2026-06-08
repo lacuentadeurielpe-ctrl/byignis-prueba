@@ -138,7 +138,6 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
             if (!res.ok) throw new Error()
             setCotizaciones((prev) => prev.filter((c) => c.id !== id))
             setExpandido(null)
-            router.refresh()
             toast.success('Cotización eliminada')
           } catch {
             toast.error('Error al eliminar la cotización')
@@ -188,7 +187,6 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
         prev.map((c) => c.id === cot.id ? { ...c, estado: 'enviada' } : c)
       )
       setExpandido(null)
-      router.refresh()
       toast.success('Cotización aprobada y enviada')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al aprobar')
@@ -212,7 +210,6 @@ export default function CotizacionesTable({ cotizaciones: inicial, productos = [
       )
       setConfirmandoRechazo(null)
       setExpandido(null)
-      router.refresh()
       toast.success('Cotización rechazada')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al rechazar')

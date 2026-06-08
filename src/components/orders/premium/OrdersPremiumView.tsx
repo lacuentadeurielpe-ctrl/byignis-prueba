@@ -176,7 +176,7 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
 
         <div className="flex flex-wrap items-center gap-2">
           {nuevoPedidoAlert && (
-            <button onClick={() => { router.refresh(); setNuevoPedidoAlert(false); setSelectedOrderId(null) }} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-medium hover:bg-zinc-800 transition-all animate-pulse shadow-md">
+            <button onClick={() => { setNuevoPedidoAlert(false); router.refresh() }} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-medium hover:bg-zinc-800 transition-all animate-pulse shadow-md">
               <Bell className="w-4 h-4" /> Hay nuevos pedidos
             </button>
           )}
