@@ -94,7 +94,7 @@ export async function proxy(request: NextRequest) {
     const envVar = process.env.NEXT_PUBLIC_ACTIVE_MODULES
     const activeList = envVar
       ? envVar.split(',').map(m => m.trim())
-      : ['dashboard', 'pos', 'ventas', 'chat', 'catalog', 'clientes', 'finanzas', 'settings', 'settings-2']
+      : ['dashboard', 'pos', 'ventas', 'chat', 'catalog', 'clientes', 'delivery', 'finanzas', 'settings', 'settings-2']
 
     if (!activeList.includes(moduleName)) {
       const url = request.nextUrl.clone()
