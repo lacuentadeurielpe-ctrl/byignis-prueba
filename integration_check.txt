@@ -1,0 +1,42 @@
+VERIFICACIÓN DE INTEGRACIONES EN CÓDIGO
+======================================
+
+Buscando archivos consumidores de settings...
+
+=== NEGOCIO: Consumidores de ferreterias.nombre ===
+src/app/(dashboard)/dashboard/finanzas/page.tsx
+src/app/(dashboard)/dashboard/settings/page.tsx
+src/app/api/compras/[id]/pdf/route.ts
+src/app/api/comprobantes/[id]/pdf/route.ts
+src/app/api/cotizaciones/[id]/aprobar/route.ts
+
+=== HORARIOS: Consumidores de dias_atencion ===
+src/app/(dashboard)/dashboard/salud/page.tsx
+src/app/(dashboard)/dashboard/settings/page.tsx
+src/app/(dashboard)/dashboard/settings-2/sections/negocio/components/HorariosForm.tsx
+src/app/api/settings/route.ts
+src/app/api/settings-2/negocio/horarios/route.ts
+
+=== PAGOS: Consumidores de metodos_pago_activos ===
+src/app/(dashboard)/dashboard/settings/page.tsx
+src/app/(dashboard)/dashboard/settings-2/sections/negocio/components/PagosMetodosForm.tsx
+src/app/api/settings/route.ts
+src/app/api/settings-2/negocio/pagos/route.ts
+src/components/settings/SettingsForm.tsx
+
+=== BOT: Consumidores de bot_instrucciones ===
+src/app/(dashboard)/dashboard/settings-2/sections/bot/components/BotPerfilTab.tsx
+src/app/api/settings-2/bot/perfil/route.ts
+
+=== DELIVERY: Consumidores de zonas_delivery ===
+src/app/(dashboard)/dashboard/delivery/DeliveryDashboard.tsx
+src/app/api/delivery/[token]/route.ts
+src/app/api/settings-2/delivery/zonas/route.ts
+src/app/delivery/[token]/DeliveryView.tsx
+src/components/orders/EditarPedidoModal.tsx
+
+=== INTEGRACIONES: Consumidores de integraciones_conectadas ===
+src/app/api/settings-2/integraciones/maps/route.ts
+src/app/api/settings-2/integraciones/mercadopago/route.ts
+src/app/api/settings-2/integraciones/nubefact/route.ts
+src/app/api/settings-2/integraciones/ycloud/route.ts

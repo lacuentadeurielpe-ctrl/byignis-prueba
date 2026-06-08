@@ -49,33 +49,44 @@ export default function AvanzadoModulosTab() {
     }
   }
 
-  if (loading) return <div className="text-sm text-zinc-500">Cargando...</div>
+  if (loading) return <div className="text-sm text-zinc-500 py-8 text-center">Cargando...</div>
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-zinc-600">Selecciona qué módulos deseas activar</p>
-      <div className="space-y-3">
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold text-zinc-900">Módulos Disponibles</h3>
+        <p className="text-xs text-zinc-500 mt-1">Activa o desactiva los módulos que necesitas para tu negocio</p>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
         {MODULOS.map(mod => (
-          <label key={mod.id} className="flex items-start gap-3 p-3 border border-zinc-200 rounded-lg cursor-pointer hover:bg-zinc-50">
+          <label
+            key={mod.id}
+            className="flex items-start gap-4 p-5 border border-zinc-200 rounded-xl cursor-pointer hover:border-indigo-200 hover:bg-indigo-50/30 transition group"
+          >
             <input
               type="checkbox"
               checked={modulos.includes(mod.id)}
               onChange={() => toggleModulo(mod.id)}
-              className="mt-1 w-4 h-4 border-zinc-300 rounded"
+              className="mt-1 w-5 h-5 border-zinc-300 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
             />
-            <div>
-              <p className="font-medium text-sm text-zinc-900">{mod.label}</p>
-              <p className="text-xs text-zinc-600">{mod.desc}</p>
+            <div className="flex-1">
+              <p className="font-semibold text-sm text-zinc-900 group-hover:text-indigo-700 transition">{mod.label}</p>
+              <p className="text-xs text-zinc-600 mt-1">{mod.desc}</p>
+            </div>
+            <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition ${modulos.includes(mod.id) ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}>
+              {modulos.includes(mod.id) ? '✓' : '○'}
             </div>
           </label>
         ))}
       </div>
+
       <button
         onClick={handleSave}
         disabled={isSaving}
-        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg disabled:opacity-50"
+        className="w-full px-4 py-3 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-300 disabled:cursor-not-allowed rounded-lg transition"
       >
-        {isSaving ? 'Guardando...' : 'Guardar'}
+        {isSaving ? '⏳ Guardando cambios...' : '✓ Guardar cambios'}
       </button>
     </div>
   )

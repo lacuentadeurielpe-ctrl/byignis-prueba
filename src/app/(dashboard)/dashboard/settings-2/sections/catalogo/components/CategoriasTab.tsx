@@ -87,17 +87,25 @@ export default function CategoriasTab() {
     }
   }
 
-  if (loading) return <div className="text-sm text-zinc-500">Cargando...</div>
+  if (loading) return <div className="text-sm text-zinc-500 py-8 text-center">Cargando...</div>
 
   return (
-    <div className="space-y-4">
-      {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg">{error}</div>}
+    <div className="space-y-5">
+      {error && (
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg flex items-start gap-3">
+          <span className="flex-shrink-0 font-bold">⚠️</span>
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="flex justify-between items-center">
-        <h3 className="font-medium text-zinc-900">Categorías ({categorias.length})</h3>
+        <div>
+          <h3 className="font-semibold text-zinc-900">Categorías</h3>
+          <p className="text-xs text-zinc-500 mt-1">{categorias.length} categoría{categorias.length !== 1 ? 's' : ''} configurada{categorias.length !== 1 ? 's' : ''}</p>
+        </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg flex items-center gap-2"
+          className="px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 transition"
         >
           <Plus className="w-4 h-4" />
           Agregar
@@ -105,38 +113,41 @@ export default function CategoriasTab() {
       </div>
 
       {showForm && (
-        <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-3">
+        <div className="p-5 bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl space-y-4">
           <input
             type="text"
             placeholder="Nombre categoría"
             value={nombre}
             onChange={e => setNombre(e.target.value)}
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
           <input
             type="text"
             placeholder="Descripción"
             value={descripcion}
             onChange={e => setDescripcion(e.target.value)}
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
           <input
             type="text"
             placeholder="Icono (emoji)"
             value={icono}
             onChange={e => setIcono(e.target.value)}
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-center text-2xl"
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm text-center text-3xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             maxLength={2}
           />
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button
               onClick={handleAdd}
               disabled={isSaving}
-              className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg disabled:opacity-50"
+              className="flex-1 px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white rounded-lg transition"
             >
-              Guardar
+              {isSaving ? 'Guardando...' : 'Guardar'}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-1.5 text-sm border border-zinc-200 rounded-lg">
+            <button
+              onClick={() => setShowForm(false)}
+              className="flex-1 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 border border-zinc-200 rounded-lg transition"
+            >
               Cancelar
             </button>
           </div>
@@ -144,22 +155,32 @@ export default function CategoriasTab() {
       )}
 
       {categorias.length === 0 ? (
-        <div className="p-8 text-center text-zinc-500">
-          <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>No hay categorías</p>
+        <div className="p-12 text-center border border-zinc-200 rounded-xl bg-zinc-50">
+          <Package className="w-10 h-10 mx-auto mb-3 text-zinc-400" />
+          <p className="text-sm text-zinc-600 font-medium">No hay categorías</p>
+          <p className="text-xs text-zinc-500 mt-1">Agrega una nueva categoría para comenzar</p>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {categorias.map(cat => (
-            <div key={cat.id} className="p-4 border border-zinc-200 rounded-lg flex justify-between items-start">
-              <div>
-                <p className="text-2xl">{cat.icono}</p>
-                <p className="font-medium text-zinc-900">{cat.nombre}</p>
-                {cat.descripcion && <p className="text-sm text-zinc-600 mt-1">{cat.descripcion}</p>}
+            <div
+              key={cat.id}
+              className="p-5 border border-zinc-200 rounded-xl bg-white hover:border-indigo-200 hover:shadow-md hover:shadow-indigo-100/40 transition-all group"
+            >
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex-1">
+                  <p className="text-3xl mb-2 group-hover:scale-110 transition duration-200">{cat.icono}</p>
+                  <p className="font-semibold text-zinc-900 group-hover:text-indigo-700 transition">{cat.nombre}</p>
+                  {cat.descripcion && <p className="text-xs text-zinc-600 mt-2 line-clamp-2">{cat.descripcion}</p>}
+                </div>
+                <button
+                  onClick={() => handleDelete(cat.id)}
+                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition flex-shrink-0"
+                  title="Eliminar categoría"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-              <button onClick={() => handleDelete(cat.id)} className="p-1 text-rose-600 hover:bg-rose-50 rounded">
-                <Trash2 className="w-4 h-4" />
-              </button>
             </div>
           ))}
         </div>

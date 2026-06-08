@@ -75,15 +75,18 @@ export default function DeliveryZonasTab() {
     } catch (err) {}
   }
 
-  if (loading) return <div className="text-sm text-zinc-500">Cargando...</div>
+  if (loading) return <div className="text-sm text-zinc-500 py-8 text-center">Cargando...</div>
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex justify-between items-center">
-        <h3 className="font-medium text-zinc-900">Zonas ({zonas.length})</h3>
+        <div>
+          <h3 className="font-semibold text-zinc-900">Zonas de Entrega</h3>
+          <p className="text-xs text-zinc-500 mt-1">{zonas.length} zona{zonas.length !== 1 ? 's' : ''} configurada{zonas.length !== 1 ? 's' : ''}</p>
+        </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg flex items-center gap-2"
+          className="px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 transition"
         >
           <Plus className="w-4 h-4" />
           Agregar
@@ -91,46 +94,51 @@ export default function DeliveryZonasTab() {
       </div>
 
       {showForm && (
-        <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-3">
+        <div className="p-5 bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl space-y-4">
           <input
             type="text"
-            placeholder="Nombre zona"
+            placeholder="Nombre zona (ej: Centro, Sureste)"
             value={nombre}
             onChange={e => setNombre(e.target.value)}
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
+          <div className="grid grid-cols-2 gap-4">
+            <input
+              type="number"
+              placeholder="Radio (km)"
+              value={radioKm}
+              onChange={e => setRadioKm(e.target.value)}
+              step="0.5"
+              className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+            <input
+              type="number"
+              placeholder="ETA (minutos)"
+              value={etaMinutos}
+              onChange={e => setEtaMinutos(e.target.value)}
+              className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
           <input
             type="number"
-            placeholder="Radio (km)"
-            value={radioKm}
-            onChange={e => setRadioKm(e.target.value)}
-            step="0.5"
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
-          />
-          <input
-            type="number"
-            placeholder="ETA (minutos)"
-            value={etaMinutos}
-            onChange={e => setEtaMinutos(e.target.value)}
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
-          />
-          <input
-            type="number"
-            placeholder="Costo delivery"
+            placeholder="Costo delivery (S/)"
             value={costoDelivery}
             onChange={e => setCostoDelivery(e.target.value)}
             step="0.01"
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button
               onClick={handleAdd}
               disabled={isSaving}
-              className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg disabled:opacity-50"
+              className="flex-1 px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white rounded-lg transition"
             >
-              Guardar
+              {isSaving ? 'Guardando...' : 'Guardar'}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-1.5 text-sm border border-zinc-200 rounded-lg">
+            <button
+              onClick={() => setShowForm(false)}
+              className="flex-1 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 border border-zinc-200 rounded-lg transition"
+            >
               Cancelar
             </button>
           </div>
@@ -138,31 +146,36 @@ export default function DeliveryZonasTab() {
       )}
 
       {zonas.length === 0 ? (
-        <div className="p-8 text-center text-zinc-500">
-          <MapPin className="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>No hay zonas configuradas</p>
+        <div className="p-12 text-center border border-zinc-200 rounded-xl bg-zinc-50">
+          <MapPin className="w-10 h-10 mx-auto mb-3 text-zinc-400" />
+          <p className="text-sm text-zinc-600 font-medium">No hay zonas configuradas</p>
+          <p className="text-xs text-zinc-500 mt-1">Agrega tu primera zona de entrega</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200">
+        <div className="overflow-x-auto rounded-xl border border-zinc-200 shadow-sm">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-50 border-b">
+            <thead className="bg-gradient-to-r from-zinc-50 to-white border-b border-zinc-200">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Zona</th>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Radio</th>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">ETA</th>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Costo</th>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Acción</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Zona</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Radio</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">ETA</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Costo</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Acción</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-zinc-100">
               {zonas.map(zona => (
-                <tr key={zona.id} className="border-b hover:bg-zinc-50">
-                  <td className="px-4 py-3 font-medium">{zona.nombre}</td>
-                  <td className="px-4 py-3">{zona.radio_km} km</td>
-                  <td className="px-4 py-3">{zona.eta_minutos} min</td>
-                  <td className="px-4 py-3">S/ {zona.costo_delivery}</td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => handleDelete(zona.id)} className="p-1 text-rose-600 hover:bg-rose-50 rounded">
+                <tr key={zona.id} className="hover:bg-zinc-50 transition">
+                  <td className="px-5 py-3.5 font-semibold text-zinc-900">{zona.nombre}</td>
+                  <td className="px-5 py-3.5 text-zinc-600">{zona.radio_km} km</td>
+                  <td className="px-5 py-3.5 text-zinc-600 font-mono">{zona.eta_minutos} min</td>
+                  <td className="px-5 py-3.5 font-bold text-emerald-600">S/ {zona.costo_delivery.toFixed(2)}</td>
+                  <td className="px-5 py-3.5">
+                    <button
+                      onClick={() => handleDelete(zona.id)}
+                      className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                      title="Eliminar zona"
+                    >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>

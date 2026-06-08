@@ -53,10 +53,10 @@ export default function IntegrationStatusBadge({ status, message }: IntegrationS
   const config = STATUS_CONFIG[status]
 
   return (
-    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm ${config.bgColor}`}>
-      <span className={config.color}>{config.icon}</span>
+    <div className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium ${config.bgColor} shadow-sm`}>
+      <span className={`${config.color} flex-shrink-0`}>{config.icon}</span>
       <span className={config.color}>{config.label}</span>
-      {message && <span className="text-xs text-zinc-600">— {message}</span>}
+      {message && <span className="text-xs text-zinc-500 ml-1">({message})</span>}
     </div>
   )
 }

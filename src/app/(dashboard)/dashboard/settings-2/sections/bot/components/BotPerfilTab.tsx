@@ -37,37 +37,41 @@ export default function BotPerfilTab() {
     }
   }
 
-  if (loading) return <div className="text-sm text-zinc-500">Cargando...</div>
+  if (loading) return <div className="text-sm text-zinc-500 py-8 text-center">Cargando...</div>
 
   return (
-    <div className="space-y-4 max-w-2xl">
-      <div>
-        <label className="block text-sm font-medium text-zinc-700 mb-2">Nombre del Bot</label>
-        <input
-          type="text"
-          value={nombre}
-          onChange={e => setNombre(e.target.value)}
-          placeholder="ej: AsistenteFerrería"
-          className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
-        />
-      </div>
+    <div className="space-y-6 max-w-2xl">
+      <div className="p-5 bg-white border border-zinc-200 rounded-xl">
+        <div className="mb-4">
+          <label className="block text-sm font-semibold text-zinc-900 mb-3">Nombre del Bot</label>
+          <input
+            type="text"
+            value={nombre}
+            onChange={e => setNombre(e.target.value)}
+            placeholder="ej: AsistenteFerrería, Vendedor IA"
+            className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          />
+          <p className="text-xs text-zinc-500 mt-2">Este nombre aparecerá en las conversaciones de WhatsApp</p>
+        </div>
 
-      <div>
-        <label className="block text-sm font-medium text-zinc-700 mb-2">Instrucciones Base</label>
-        <textarea
-          value={instrucciones}
-          onChange={e => setInstrucciones(e.target.value)}
-          placeholder="Define el comportamiento del bot..."
-          className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm h-32"
-        />
+        <div>
+          <label className="block text-sm font-semibold text-zinc-900 mb-3">Instrucciones Base</label>
+          <textarea
+            value={instrucciones}
+            onChange={e => setInstrucciones(e.target.value)}
+            placeholder="Escribe las instrucciones que guiarán el comportamiento del bot. Por ejemplo: eres un vendedor amable, responde en español, ofrece alternativas, etc."
+            className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent h-40 resize-none"
+          />
+          <p className="text-xs text-zinc-500 mt-2">Estas instrucciones afectarán cómo responde el bot a los clientes</p>
+        </div>
       </div>
 
       <button
         onClick={handleSave}
         disabled={isSaving}
-        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg disabled:opacity-50"
+        className="w-full px-4 py-3 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-300 disabled:cursor-not-allowed rounded-lg transition"
       >
-        {isSaving ? 'Guardando...' : 'Guardar'}
+        {isSaving ? '⏳ Guardando cambios...' : '✓ Guardar cambios'}
       </button>
     </div>
   )

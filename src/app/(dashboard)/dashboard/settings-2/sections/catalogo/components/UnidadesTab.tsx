@@ -84,17 +84,25 @@ export default function UnidadesTab() {
     }
   }
 
-  if (loading) return <div className="text-sm text-zinc-500">Cargando...</div>
+  if (loading) return <div className="text-sm text-zinc-500 py-8 text-center">Cargando...</div>
 
   return (
-    <div className="space-y-4">
-      {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg">{error}</div>}
+    <div className="space-y-5">
+      {error && (
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg flex items-start gap-3">
+          <span className="flex-shrink-0 font-bold">⚠️</span>
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="flex justify-between items-center">
-        <h3 className="font-medium text-zinc-900">Unidades de Medida ({unidades.length})</h3>
+        <div>
+          <h3 className="font-semibold text-zinc-900">Unidades de Medida</h3>
+          <p className="text-xs text-zinc-500 mt-1">{unidades.length} unidad{unidades.length !== 1 ? 'es' : ''} configurada{unidades.length !== 1 ? 's' : ''}</p>
+        </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg flex items-center gap-2"
+          className="px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 transition"
         >
           <Plus className="w-4 h-4" />
           Agregar
@@ -102,13 +110,13 @@ export default function UnidadesTab() {
       </div>
 
       {showForm && (
-        <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-3">
+        <div className="p-5 bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl space-y-4">
           <input
             type="text"
             placeholder="Nombre (ej: Metro, Kilo, Pieza)"
             value={nombre}
             onChange={e => setNombre(e.target.value)}
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
           <input
             type="number"
@@ -116,17 +124,20 @@ export default function UnidadesTab() {
             value={conversion}
             onChange={e => setConversion(e.target.value)}
             step="0.01"
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button
               onClick={handleAdd}
               disabled={isSaving}
-              className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg disabled:opacity-50"
+              className="flex-1 px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white rounded-lg transition"
             >
-              Guardar
+              {isSaving ? 'Guardando...' : 'Guardar'}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-1.5 text-sm border border-zinc-200 rounded-lg">
+            <button
+              onClick={() => setShowForm(false)}
+              className="flex-1 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 border border-zinc-200 rounded-lg transition"
+            >
               Cancelar
             </button>
           </div>
@@ -134,27 +145,32 @@ export default function UnidadesTab() {
       )}
 
       {unidades.length === 0 ? (
-        <div className="p-8 text-center text-zinc-500">
-          <Ruler className="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>No hay unidades configuradas</p>
+        <div className="p-12 text-center border border-zinc-200 rounded-xl bg-zinc-50">
+          <Ruler className="w-10 h-10 mx-auto mb-3 text-zinc-400" />
+          <p className="text-sm text-zinc-600 font-medium">No hay unidades configuradas</p>
+          <p className="text-xs text-zinc-500 mt-1">Agrega una nueva unidad para comenzar</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200">
+        <div className="overflow-x-auto rounded-xl border border-zinc-200 shadow-sm">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-50 border-b border-zinc-200">
+            <thead className="bg-gradient-to-r from-zinc-50 to-white border-b border-zinc-200">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Nombre</th>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Conversión</th>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Acción</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Nombre</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Conversión</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Acción</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-zinc-100">
               {unidades.map(unidad => (
-                <tr key={unidad.id} className="border-b border-zinc-100 hover:bg-zinc-50">
-                  <td className="px-4 py-3 font-medium">{unidad.nombre}</td>
-                  <td className="px-4 py-3 text-zinc-600">{unidad.conversion_base}x</td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => handleDelete(unidad.id)} className="p-1 text-rose-600 hover:bg-rose-50 rounded">
+                <tr key={unidad.id} className="hover:bg-zinc-50 transition">
+                  <td className="px-5 py-3.5 font-medium text-zinc-900">{unidad.nombre}</td>
+                  <td className="px-5 py-3.5 text-zinc-600 font-mono">{unidad.conversion_base}x</td>
+                  <td className="px-5 py-3.5">
+                    <button
+                      onClick={() => handleDelete(unidad.id)}
+                      className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                      title="Eliminar unidad"
+                    >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>

@@ -156,57 +156,64 @@ export default function Settings2Hub() {
     <div>
       <SettingsHeader
         title="Configuración"
-        description="Gestiona todos los aspectos de tu ferretería desde aquí"
+        description="Panel de control centralizado para tu ferretería"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="p-8 max-w-7xl mx-auto space-y-8">
         {/* Setup Checklist */}
-        <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
           <button
             onClick={() => setExpandedChecklist(!expandedChecklist)}
-            className="w-full px-6 py-4 border-b border-zinc-100 bg-zinc-50 hover:bg-zinc-100 transition flex items-center justify-between"
+            className="w-full px-6 py-5 border-b border-zinc-100 bg-gradient-to-r from-zinc-50 to-white hover:from-zinc-100 hover:to-zinc-50 transition flex items-center justify-between"
           >
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-sm font-bold text-zinc-900">Setup Checklist</h2>
-                <div className="flex items-center gap-2">
-                  <div className="w-24 h-2 bg-zinc-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-600" style={{ width: `${progress}%` }} />
+            <div className="flex items-center gap-5 flex-1">
+              <div className="flex items-center gap-3 flex-1">
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-sm font-bold text-zinc-900">Setup Inicial</h2>
+                  <div className="h-5 px-2.5 bg-indigo-100 text-indigo-700 rounded-full flex items-center">
+                    <span className="text-xs font-bold">{completed}/{CHECKLIST.length}</span>
                   </div>
-                  <span className="text-xs font-bold text-zinc-600">{progress}%</span>
+                </div>
+                <div className="flex items-center gap-2 ml-2">
+                  <div className="w-32 h-2.5 bg-zinc-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-300" style={{ width: `${progress}%` }} />
+                  </div>
+                  <span className="text-xs font-bold text-zinc-700 min-w-10">{progress}%</span>
                 </div>
               </div>
             </div>
             {expandedChecklist ? (
-              <ChevronUp className="w-5 h-5 text-zinc-400" />
+              <ChevronUp className="w-5 h-5 text-zinc-400 flex-shrink-0" />
             ) : (
-              <ChevronDown className="w-5 h-5 text-zinc-400" />
+              <ChevronDown className="w-5 h-5 text-zinc-400 flex-shrink-0" />
             )}
           </button>
 
           {expandedChecklist && (
-            <div className="divide-y divide-zinc-100">
-              {CHECKLIST.map(item => (
-                <div key={item.id} className="p-4 hover:bg-zinc-50 transition">
-                  <Link href={item.href} className="flex items-start gap-4">
-                    <div className="mt-1">
-                      {item.completed ? (
-                        <div className="w-5 h-5 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center">
-                          <span className="text-emerald-700 text-xs font-bold">✓</span>
-                        </div>
-                      ) : (
-                        <div className="w-5 h-5 rounded-full border-2 border-zinc-300" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className={`text-sm font-medium ${item.completed ? 'text-zinc-900 line-through' : 'text-indigo-600'}`}>
-                        {item.title}
-                      </p>
-                      <p className="text-xs text-zinc-500 mt-0.5">{item.description}</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-zinc-300 mt-1 flex-shrink-0" />
-                  </Link>
-                </div>
+            <div className="divide-y divide-zinc-100 bg-white">
+              {CHECKLIST.map((item, idx) => (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className="px-6 py-4 hover:bg-indigo-50 transition flex items-start gap-4 group"
+                >
+                  <div className="mt-0.5 flex-shrink-0">
+                    {item.completed ? (
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 border-2 border-emerald-400 flex items-center justify-center shadow-sm">
+                        <span className="text-emerald-700 text-sm font-bold">✓</span>
+                      </div>
+                    ) : (
+                      <div className="w-6 h-6 rounded-full border-2 border-zinc-300 group-hover:border-indigo-400 transition" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium transition ${item.completed ? 'text-zinc-500 line-through' : 'text-zinc-900 group-hover:text-indigo-600'}`}>
+                      {item.title}
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-1">{item.description}</p>
+                  </div>
+                  {!item.completed && <ArrowRight className="w-5 h-5 text-indigo-400 flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition" />}
+                </Link>
               ))}
             </div>
           )}
@@ -214,50 +221,75 @@ export default function Settings2Hub() {
 
         {/* Module Status Grid */}
         <div>
-          <h3 className="text-sm font-bold text-zinc-900 mb-4">Estado de Módulos</h3>
+          <h3 className="text-sm font-bold text-zinc-900 mb-5">Módulos de Configuración</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {MODULES.map(module => (
-              <Link
-                key={module.id}
-                href={module.href}
-                className={`border rounded-xl p-4 transition hover:shadow-md ${STATUS_COLORS[module.status]}`}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-2xl">{module.icon}</span>
-                  <span className="text-xl">{module.statusLabel}</span>
-                </div>
-                <p className="text-sm font-semibold text-zinc-900">{module.name}</p>
-                {module.statusDetail && (
-                  <p className={`text-xs mt-2 ${STATUS_TEXT[module.status]}`}>{module.statusDetail}</p>
-                )}
-                {module.count && (
-                  <div className="mt-3 inline-block px-2 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full">
-                    {module.count} alertas
+            {MODULES.map(module => {
+              const statusBg = {
+                completo: 'bg-emerald-50 border-emerald-200 hover:border-emerald-300 hover:shadow-emerald-100',
+                incompleto: 'bg-zinc-50 border-zinc-200 hover:border-zinc-300 hover:shadow-zinc-100',
+                alerta: 'bg-amber-50 border-amber-200 hover:border-amber-300 hover:shadow-amber-100',
+              }[module.status]
+
+              const statusIndicator = {
+                completo: { color: 'text-emerald-600', bg: 'bg-emerald-100' },
+                incompleto: { color: 'text-zinc-600', bg: 'bg-zinc-100' },
+                alerta: { color: 'text-amber-600', bg: 'bg-amber-100' },
+              }[module.status]
+
+              return (
+                <Link
+                  key={module.id}
+                  href={module.href}
+                  className={`border rounded-xl p-5 transition hover:shadow-md group cursor-pointer ${statusBg}`}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <span className="text-3xl group-hover:scale-110 transition duration-200">{module.icon}</span>
+                    <div className={`w-7 h-7 rounded-full ${statusIndicator.bg} flex items-center justify-center`}>
+                      <span className={`text-sm font-bold ${statusIndicator.color}`}>{module.statusLabel}</span>
+                    </div>
                   </div>
-                )}
-              </Link>
-            ))}
+                  <p className="text-sm font-semibold text-zinc-900 group-hover:text-indigo-600 transition">{module.name}</p>
+                  {module.statusDetail && (
+                    <p className={`text-xs mt-2 ${STATUS_TEXT[module.status]} line-clamp-2`}>{module.statusDetail}</p>
+                  )}
+                  {module.count && (
+                    <div className="mt-4 inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 text-amber-700 text-[11px] font-bold rounded-full">
+                      <span>⚠️</span>
+                      {module.count} activo{module.count !== '1' ? 's' : ''}
+                    </div>
+                  )}
+                </Link>
+              )
+            })}
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="text-sm font-bold text-blue-900 mb-2">Próximas acciones recomendadas</h4>
-              <ul className="space-y-2 text-sm text-blue-800">
-                <li>
-                  • Completa tu configuración de RUC para habilitar facturación automática →{' '}
-                  <Link href="/dashboard/settings-2/finanzas" className="font-bold text-blue-700 hover:underline">
-                    Ir a Finanzas
-                  </Link>
+        {/* Recommended Actions */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <AlertCircle className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm font-bold text-zinc-900 mb-4">Acciones recomendadas</h4>
+              <ul className="space-y-3">
+                <li className="flex items-start gap-3 text-sm text-zinc-700 group">
+                  <span className="text-blue-600 font-bold flex-shrink-0 mt-0.5">1.</span>
+                  <div className="flex-1">
+                    Completa tu RUC para habilitar facturación automática
+                    <Link href="/dashboard/settings-2/finanzas" className="ml-2 text-blue-600 font-semibold hover:text-blue-700 inline-flex items-center gap-1 group-hover:gap-2 transition">
+                      Ir <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  </div>
                 </li>
-                <li>
-                  • Revisa el estado de tu token Mercado Pago, vence en 8 días →{' '}
-                  <Link href="/dashboard/settings-2/integraciones" className="font-bold text-blue-700 hover:underline">
-                    Ir a Integraciones
-                  </Link>
+                <li className="flex items-start gap-3 text-sm text-zinc-700 group">
+                  <span className="text-blue-600 font-bold flex-shrink-0 mt-0.5">2.</span>
+                  <div className="flex-1">
+                    Revisa tu token Mercado Pago (vence en 8 días)
+                    <Link href="/dashboard/settings-2/integraciones" className="ml-2 text-blue-600 font-semibold hover:text-blue-700 inline-flex items-center gap-1 group-hover:gap-2 transition">
+                      Ir <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  </div>
                 </li>
               </ul>
             </div>

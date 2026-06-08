@@ -1,0 +1,122 @@
+AUDITORÍA: SETTINGS 2.0 - INTEGRACIONES CON MÓDULOS
+
+=== FASE 1: ARQUITECTURA BASE ===
+✅ Database: Tablas creadas
+  - ferreterias (extensiones para configs)
+  - integraciones_conectadas
+  - integracion_logs
+  - miembros_ferreteria
+  - repartidores
+  - zonas_delivery
+  - categorias_producto
+  - descuentos_tiers
+  - unidades_medida
+  - productos_complementarios
+  - vehiculos_delivery
+
+✅ Componentes Base:
+  - SettingsSidebar.tsx (navegación)
+  - SettingsHeader.tsx (breadcrumbs)
+  - FormSection.tsx (wrapper formularios)
+  - StatusIndicator.tsx (badges)
+
+=== FASE 2: NEGOCIO & FINANZAS ===
+
+NEGOCIO:
+├─ General Form
+│  ├─ Campos: nombre, telefono, direccion, email, logo_url, color_comprobante
+│  └─ API: /api/settings-2/negocio/general → ferreterias table
+├─ Horarios Form
+│  ├─ Campos: dias_atencion, horario_apertura, horario_cierre, mensajes
+│  └─ API: /api/settings-2/negocio/horarios → ferreterias table
+└─ Pagos Form
+   ├─ Campos: metodos_pago_activos, datos_yape, datos_plin, datos_transferencia
+   └─ API: /api/settings-2/negocio/pagos → ferreterias table
+
+FINANZAS:
+└─ Facturación Form
+   ├─ Campos: ruc, razon_social, regimen_tributario, series, nubefact_modo
+   └─ API: /api/settings-2/finanzas/facturacion → ferreterias table
+
+=== FASE 3: INTEGRACIONES ===
+
+YCloud:
+├─ Config: api_key, webhook_secret, telefono_whatsapp
+├─ Storage: integraciones_conectadas table
+└─ Consumidor: bot/message-handler.ts (webhook handler)
+
+Nubefact:
+├─ Config: token, modo (prueba/produccion), url_ruta
+├─ Storage: integraciones_conectadas + ferreterias (nubefact_modo)
+└─ Consumidor: lib/sunat/nubefact.ts (invoice generator)
+
+Mercado Pago:
+├─ Config: access_token, public_key, user_id
+├─ Storage: integraciones_conectadas table
+└─ Consumidor: api/pagos/mercadopago/* (payment APIs)
+
+Google Maps:
+├─ Config: api_key, servicios
+├─ Storage: integraciones_conectadas table
+└─ Consumidor: lib/delivery/maps.ts (geocoding, routes)
+
+=== FASE 4: EQUIPO & CATÁLOGO ===
+
+EQUIPO:
+├─ Empleados
+│  ├─ Storage: miembros_ferreteria table
+│  └─ Consumidor: auth/roles.ts (session info, permisos)
+├─ Repartidores
+│  ├─ Storage: repartidores table
+│  └─ Consumidor: delivery portal (auth via PIN)
+└─ Permisos (placeholder)
+   └─ Consumidor: future - role matrix
+
+CATÁLOGO:
+├─ Categorías
+│  ├─ Storage: categorias_producto table
+│  └─ Consumidor: bot/intent-parser (product recommendations)
+├─ Descuentos Tiers
+│  ├─ Storage: descuentos_tiers table
+│  └─ Consumidor: vendedor/pricing.ts (volume discounts)
+└─ Unidades
+   ├─ Storage: unidades_medida table
+   └─ Consumidor: productos page (unit conversion)
+
+=== FASE 5: BOT & DELIVERY ===
+
+BOT:
+├─ Perfil: bot_nombre, bot_instrucciones
+│  └─ Consumidor: ai/deepseek.ts (system prompt)
+├─ Agentes: bot_agentes_activos array
+│  └─ Consumidor: bot/agents/* (agent routing)
+├─ Complementarios: productos_complementarios table
+│  └─ Consumidor: bot/upsell.ts (recommend products)
+└─ Comportamiento: margen_minimo, debounce, grace_period, autoclose
+   └─ Consumidor: bot/negotiation.ts (pricing rules)
+
+DELIVERY:
+├─ Zonas: zonas_delivery table
+│  ├─ Consumidor: delivery/zone-matcher.ts (area detection)
+│  └─ Consumidor: dashboard/delivery (zone display)
+└─ Vehículos: vehiculos_delivery table
+   └─ Consumidor: repartidor/assignment.ts (vehicle tracking)
+
+=== FASE 6: AVANZADO ===
+
+Módulos:
+├─ Storage: ferreterias.modulos_activos array
+└─ Consumidor: middleware/routing.ts (feature gates)
+
+Políticas:
+├─ permitir_venta_sin_stock
+│  └─ Consumidor: vendedor/checkout.ts (validation)
+├─ requiere_aprobacion_credito
+│  └─ Consumidor: vendedor/credit-check.ts (credit validation)
+└─ margen_minimo_descuento
+   └─ Consumidor: vendedor/pricing.ts (discount limits)
+
+Logs:
+├─ Storage: integracion_logs table
+└─ Consumidor: superadmin/audit-dashboard (compliance)
+

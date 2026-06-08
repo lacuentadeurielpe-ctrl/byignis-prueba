@@ -7,13 +7,13 @@ interface LayoutProps {
 
 export default function Settings2Layout({ children }: LayoutProps) {
   return (
-    <div className="flex h-screen bg-zinc-50">
+    <div className="flex h-screen bg-white">
       {/* Sidebar */}
       <SettingsSidebar />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto">{children}</main>
+      <div className="flex-1 flex flex-col overflow-hidden border-l border-zinc-200">
+        <main className="flex-1 overflow-y-auto bg-gradient-to-b from-zinc-50 to-white">{children}</main>
       </div>
     </div>
   )

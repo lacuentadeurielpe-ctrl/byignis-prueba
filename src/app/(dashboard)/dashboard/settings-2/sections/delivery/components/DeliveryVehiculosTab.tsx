@@ -65,15 +65,18 @@ export default function DeliveryVehiculosTab() {
     } catch (err) {}
   }
 
-  if (loading) return <div className="text-sm text-zinc-500">Cargando...</div>
+  if (loading) return <div className="text-sm text-zinc-500 py-8 text-center">Cargando...</div>
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex justify-between items-center">
-        <h3 className="font-medium text-zinc-900">Vehículos ({vehiculos.length})</h3>
+        <div>
+          <h3 className="font-semibold text-zinc-900">Vehículos</h3>
+          <p className="text-xs text-zinc-500 mt-1">{vehiculos.length} vehículo{vehiculos.length !== 1 ? 's' : ''} registrado{vehiculos.length !== 1 ? 's' : ''}</p>
+        </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg flex items-center gap-2"
+          className="px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 transition"
         >
           <Plus className="w-4 h-4" />
           Agregar
@@ -81,11 +84,11 @@ export default function DeliveryVehiculosTab() {
       </div>
 
       {showForm && (
-        <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-3">
+        <div className="p-5 bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl space-y-4">
           <select
             value={tipo}
             onChange={e => setTipo(e.target.value)}
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           >
             <option value="moto">Motocicleta</option>
             <option value="auto">Auto</option>
@@ -97,17 +100,20 @@ export default function DeliveryVehiculosTab() {
             placeholder="Placa (ej: ABC-123)"
             value={placa}
             onChange={e => setPlaca(e.target.value.toUpperCase())}
-            className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm"
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent uppercase font-mono"
           />
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button
               onClick={handleAdd}
               disabled={isSaving}
-              className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg disabled:opacity-50"
+              className="flex-1 px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white rounded-lg transition"
             >
-              Guardar
+              {isSaving ? 'Guardando...' : 'Guardar'}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-3 py-1.5 text-sm border border-zinc-200 rounded-lg">
+            <button
+              onClick={() => setShowForm(false)}
+              className="flex-1 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 border border-zinc-200 rounded-lg transition"
+            >
               Cancelar
             </button>
           </div>
@@ -115,29 +121,38 @@ export default function DeliveryVehiculosTab() {
       )}
 
       {vehiculos.length === 0 ? (
-        <div className="p-8 text-center text-zinc-500">
-          <Truck className="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>No hay vehículos configurados</p>
+        <div className="p-12 text-center border border-zinc-200 rounded-xl bg-zinc-50">
+          <Truck className="w-10 h-10 mx-auto mb-3 text-zinc-400" />
+          <p className="text-sm text-zinc-600 font-medium">No hay vehículos configurados</p>
+          <p className="text-xs text-zinc-500 mt-1">Agrega tu primer vehículo para comenzar</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200">
+        <div className="overflow-x-auto rounded-xl border border-zinc-200 shadow-sm">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-50 border-b">
+            <thead className="bg-gradient-to-r from-zinc-50 to-white border-b border-zinc-200">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Tipo</th>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Placa</th>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Asignado a</th>
-                <th className="px-4 py-3 text-left font-semibold text-zinc-700">Acción</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Tipo</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Placa</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Asignado a</th>
+                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Acción</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-zinc-100">
               {vehiculos.map(veh => (
-                <tr key={veh.id} className="border-b hover:bg-zinc-50">
-                  <td className="px-4 py-3 font-medium capitalize">{veh.tipo}</td>
-                  <td className="px-4 py-3 font-mono">{veh.placa}</td>
-                  <td className="px-4 py-3 text-zinc-600">{veh.repartidor_id ? 'Asignado' : 'Sin asignar'}</td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => handleDelete(veh.id)} className="p-1 text-rose-600 hover:bg-rose-50 rounded">
+                <tr key={veh.id} className="hover:bg-zinc-50 transition">
+                  <td className="px-5 py-3.5 font-semibold capitalize text-zinc-900">{veh.tipo}</td>
+                  <td className="px-5 py-3.5 font-mono font-bold text-indigo-600">{veh.placa}</td>
+                  <td className="px-5 py-3.5">
+                    <span className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg ${veh.repartidor_id ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-600'}`}>
+                      {veh.repartidor_id ? '✓ Asignado' : '○ Sin asignar'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <button
+                      onClick={() => handleDelete(veh.id)}
+                      className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                      title="Eliminar vehículo"
+                    >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>

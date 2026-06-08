@@ -10,24 +10,28 @@ interface SettingsHeaderProps {
 
 export default function SettingsHeader({ title, description, breadcrumbs }: SettingsHeaderProps) {
   return (
-    <div className="border-b border-zinc-200 bg-white sticky top-0 z-40">
-      <div className="px-6 py-4">
+    <div className="border-b border-zinc-200 bg-gradient-to-r from-white via-zinc-50/50 to-white sticky top-0 z-40">
+      <div className="px-8 py-6 max-w-7xl mx-auto">
         {/* Breadcrumbs */}
         {breadcrumbs && breadcrumbs.length > 0 && (
-          <div className="flex items-center gap-2 text-sm text-zinc-500 mb-3">
+          <div className="flex items-center gap-2 text-xs font-medium text-zinc-500 mb-4">
             {breadcrumbs.map((crumb, idx) => (
               <div key={idx} className="flex items-center gap-2">
-                {idx > 0 && <ChevronRight className="w-4 h-4" />}
-                <span>{crumb.label}</span>
+                {idx > 0 && <ChevronRight className="w-3.5 h-3.5 text-zinc-300" />}
+                <span className={idx === breadcrumbs.length - 1 ? 'text-zinc-700 font-semibold' : ''}>
+                  {crumb.label}
+                </span>
               </div>
             ))}
           </div>
         )}
 
-        {/* Title */}
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900">{title}</h1>
-          {description && <p className="text-sm text-zinc-500 mt-1">{description}</p>}
+        {/* Title & Description */}
+        <div className="flex items-baseline justify-between gap-4">
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold text-zinc-900">{title}</h1>
+            {description && <p className="text-sm text-zinc-600 mt-2">{description}</p>}
+          </div>
         </div>
       </div>
     </div>

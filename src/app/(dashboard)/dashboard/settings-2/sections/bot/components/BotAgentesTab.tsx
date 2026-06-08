@@ -11,13 +11,21 @@ export default function BotAgentesTab() {
   return (
     <div className="space-y-3">
       {AGENTES.map(agente => (
-        <div key={agente.id} className="p-4 border border-zinc-200 rounded-lg flex items-start gap-3">
-          <input type="checkbox" defaultChecked className="mt-1 w-4 h-4 border-zinc-300 rounded" />
-          <div>
-            <p className="font-medium text-sm text-zinc-900">{agente.label}</p>
-            <p className="text-xs text-zinc-600 mt-1">{agente.desc}</p>
+        <label
+          key={agente.id}
+          className="p-5 border border-zinc-200 rounded-xl flex items-start gap-4 cursor-pointer hover:border-indigo-200 hover:bg-indigo-50/30 transition group"
+        >
+          <input
+            type="checkbox"
+            defaultChecked
+            className="mt-1 w-5 h-5 border-zinc-300 rounded accent-indigo-600 cursor-pointer flex-shrink-0"
+          />
+          <div className="flex-1">
+            <p className="font-semibold text-sm text-zinc-900 group-hover:text-indigo-700 transition">{agente.label}</p>
+            <p className="text-xs text-zinc-600 mt-2">{agente.desc}</p>
           </div>
-        </div>
+          <div className="flex-shrink-0 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg">Activo</div>
+        </label>
       ))}
     </div>
   )
