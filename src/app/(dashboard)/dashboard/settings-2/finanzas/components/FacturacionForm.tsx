@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { FileText } from 'lucide-react'
@@ -21,10 +21,10 @@ interface FacturacionFormData {
 }
 
 const REGIMENES = [
-  { id: 'rer', label: 'RÃ©gimen Especial (RER)' },
-  { id: 'rmt', label: 'RÃ©gimen MYPE Tributario (RMT)' },
-  { id: 'rus', label: 'RÃ©gimen Ãšnico Simplificado (RUS)' },
-  { id: 'general', label: 'RÃ©gimen General' },
+  { id: 'rer', label: 'Régimen Especial (RER)' },
+  { id: 'rmt', label: 'Régimen MYPE Tributario (RMT)' },
+  { id: 'rus', label: 'Régimen Único Simplificado (RUS)' },
+  { id: 'general', label: 'Régimen General' },
 ]
 
 export default function FacturacionForm() {
@@ -48,19 +48,19 @@ export default function FacturacionForm() {
     fetchData()
   }, [])
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleChange = (field: string, value: any) => {
     setData(prev => ({ ...prev, [field]: value }))
     setIsDirty(true)
   }
 
   const handleSave = async () => {
-    // Validar RUC/tipo
     if (data.tipo_ruc === 'ruc10' && data.ruc && data.ruc.length !== 10) {
-      alert('RUC debe tener 10 dÃ­gitos')
+      alert('RUC debe tener 10 dígitos')
       return
     }
     if (data.tipo_ruc === 'ruc20' && data.ruc && data.ruc.length !== 11) {
-      alert('RUC debe tener 11 dÃ­gitos')
+      alert('RUC debe tener 11 dígitos')
       return
     }
 
@@ -72,7 +72,7 @@ export default function FacturacionForm() {
 
   return (
     <FormSection
-      title="ConfiguraciÃ³n de Facturas"
+      title="Configuración de Facturas"
       description="Datos tributarios y series de comprobantes"
       icon={<FileText className="w-5 h-5" />}
       onSave={handleSave}
@@ -91,8 +91,8 @@ export default function FacturacionForm() {
             className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="sin_ruc">Sin RUC</option>
-            <option value="ruc10">RUC 10 dÃ­gitos</option>
-            <option value="ruc20">RUC 11 dÃ­gitos</option>
+            <option value="ruc10">RUC 10 dígitos</option>
+            <option value="ruc20">RUC 11 dígitos</option>
           </select>
         </div>
 
@@ -104,13 +104,13 @@ export default function FacturacionForm() {
               value={data.ruc || ''}
               onChange={e => handleChange('ruc', e.target.value)}
               className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder={data.tipo_ruc === 'ruc10' ? '10 dÃ­gitos' : '11 dÃ­gitos'}
+              placeholder={data.tipo_ruc === 'ruc10' ? '10 dígitos' : '11 dígitos'}
             />
           </div>
         )}
 
         <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-2">RazÃ³n Social</label>
+          <label className="block text-sm font-medium text-zinc-700 mb-2">Razón Social</label>
           <input
             type="text"
             value={data.razon_social || ''}
@@ -132,7 +132,7 @@ export default function FacturacionForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-2">RÃ©gimen Tributario</label>
+          <label className="block text-sm font-medium text-zinc-700 mb-2">Régimen Tributario</label>
           <select
             value={data.regimen_tributario || 'general'}
             onChange={e => handleChange('regimen_tributario', e.target.value)}
@@ -214,9 +214,9 @@ export default function FacturacionForm() {
             className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="prueba">Pruebas (sandbox)</option>
-            <option value="produccion">ProducciÃ³n</option>
+            <option value="produccion">Producción</option>
           </select>
-          <p className="text-xs text-zinc-500 mt-1">Cambia a ProducciÃ³n cuando hayas probado todo</p>
+          <p className="text-xs text-zinc-500 mt-1">Cambia a Producción cuando hayas probado todo</p>
         </div>
       </div>
     </FormSection>

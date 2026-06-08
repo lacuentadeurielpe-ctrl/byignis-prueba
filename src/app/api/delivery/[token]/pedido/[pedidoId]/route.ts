@@ -10,6 +10,13 @@ import { createClient } from '@supabase/supabase-js'
 import { enviarMensaje } from '@/lib/whatsapp/ycloud'
 import { getYCloudApiKey } from '@/lib/tenant'
 import { recalcularETAsCola } from '@/lib/delivery/assignment'
+import { completarPrediccion } from '@/lib/delivery/intelligence'
+import {
+  notificarEnRuta,
+  notificarEntregado,
+  notificarFallida,
+} from '@/lib/notifications/delivery.notifications'
+import type { DeliveryNotificationContext } from '@/lib/notifications/types'
 
 function adminClient() {
   return createClient(
@@ -158,10 +165,10 @@ export async function PATCH(
   }
 
   if (accion === 'entregado') {
-    // Calcular duración real (desde salio_at)
+    // Calcular duración real (desde salio_at) + completar predicción IA
     supabase
       .from('entregas')
-      .select('salio_at')
+      .select('id, salio_at')
       .eq('pedido_id', pedidoId)
       .eq('ferreteria_id', repartidor.ferreteria_id)
       .maybeSingle()
@@ -179,6 +186,12 @@ export async function PATCH(
           .eq('pedido_id', pedidoId)
           .eq('ferreteria_id', repartidor.ferreteria_id)
           .then(({ error: e }) => { if (e) console.error('[Delivery] Error sync entrega entregado:', e.message) })
+
+        // Backfill prediction with real duration for ML training
+        if (ent?.id && duracionReal != null) {
+          completarPrediccion(ent.id as string, duracionReal, repartidor.ferreteria_id, supabase)
+            .catch(e => console.error('[Delivery] Error completando predicción:', e))
+        }
       })
   }
 
@@ -230,50 +243,49 @@ export async function PATCH(
     }
   }
 
-  // ── Notificaciones WhatsApp (fire-and-forget) ─────────────────────────────
+  // ── Notificaciones multi-canal + WhatsApp legacy (fire-and-forget) ──────────
   if (ferr?.telefono_whatsapp) {
     getYCloudApiKey(repartidor.ferreteria_id).then((apiKey) => {
       if (!apiKey) return
       const from = ferr.telefono_whatsapp.replace(/^\+/, '')
+      const telefono = (pedidoActual.clientes as any)?.telefono ?? pedidoActual.telefono_cliente
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
 
-      // ── Notificación "en camino" al cliente — con link de tracking ────────
-      if (accion === 'cambiar_estado' && nuevo_estado === 'enviado') {
-        const telefono = (pedidoActual.clientes as any)?.telefono ?? pedidoActual.telefono_cliente
-        if (telefono) {
-          const etaMin = (pedidoActual as any).eta_minutos as number | null
-          const etaTexto = etaMin
-            ? (etaMin < 60
-                ? `~${etaMin} min`
-                : `~${Math.floor(etaMin / 60)}h${etaMin % 60 > 0 ? ` ${etaMin % 60}min` : ''}`)
-            : 'en breve'
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-          const trackingLink = entregaIdParaTracking
-            ? `\n📍 Sigue tu entrega en vivo: ${appUrl}/tracking/${entregaIdParaTracking}`
-            : ''
-          enviarMensaje({
-            from, to: telefono,
-            texto: `🚚 *${ferr.nombre}*\n\nTu pedido *${pedidoActual.numero_pedido}* ya está *en camino*.\n⏱ ETA: *${etaTexto}* 🎯${trackingLink}\n\n¡Prepárate para recibirlo!`,
-            apiKey,
-          }).catch((e) => console.error('[Delivery] Error notif en camino:', e))
-        }
+      // Build notification context for multi-channel dispatch
+      const notifCtx: DeliveryNotificationContext = {
+        ferreteriaId: repartidor.ferreteria_id,
+        entregaId: entregaIdParaTracking ?? '',
+        pedidoId,
+        numeroPedido: pedidoActual.numero_pedido as string,
+        nombreFerreteria: ferr.nombre ?? '',
+        telefonoWhatsapp: from,
+        telefonoCliente: telefono ?? '',
+        apiKey,
+        trackingUrl: entregaIdParaTracking ? `${appUrl}/tracking/${entregaIdParaTracking}` : undefined,
+        repartidorNombre: repartidor.nombre as string,
       }
 
-      if (accion === 'entregado') {
-        const telefono = (pedidoActual.clientes as any)?.telefono ?? pedidoActual.telefono_cliente
-        if (telefono) {
-          const pagoInfo = update.estado_pago === 'pagado'
-            ? `\nPago: ✅ Confirmado`
-            : update.estado_pago === 'credito_activo'
-            ? `\nPago: ⏳ Pendiente (cobro parcial registrado)`
-            : ''
-          enviarMensaje({
-            from, to: telefono,
-            texto: `🎉 *${ferr.nombre}*\n\nSu pedido *${pedidoActual.numero_pedido}* ha sido *entregado*. ¡Esperamos que todo sea de su agrado! 🙏${pagoInfo}`,
-            apiKey,
-          }).catch((e) => console.error('[Delivery] Error notificando entrega:', e))
-        }
+      // ── "En camino" — multi-channel notification ──────────────────────────
+      if (accion === 'cambiar_estado' && nuevo_estado === 'enviado' && telefono) {
+        const etaMin = (pedidoActual as any).eta_minutos as number | null
+        notificarEnRuta(notifCtx, etaMin, supabase)
+          .catch(e => console.error('[Delivery] Error notif en_ruta:', e))
       }
 
+      // ── "Entregado" — multi-channel notification ──────────────────────────
+      if (accion === 'entregado' && telefono) {
+        notificarEntregado(notifCtx, supabase)
+          .catch(e => console.error('[Delivery] Error notif entregado:', e))
+      }
+
+      // ── "Retorno/Fallida" — multi-channel notification to client ──────────
+      if (accion === 'retorno' && telefono) {
+        const motivo = incidencia_desc ?? 'Pedido retornado a tienda'
+        notificarFallida(notifCtx, motivo, supabase)
+          .catch(e => console.error('[Delivery] Error notif fallida:', e))
+      }
+
+      // ── Incidencia/retorno — notify OWNER via WhatsApp (direct) ───────────
       if ((accion === 'incidencia' || accion === 'retorno') && ferr?.telefono_dueno) {
         const labelInc: Record<string, string> = {
           cliente_ausente:   'Cliente no estaba',

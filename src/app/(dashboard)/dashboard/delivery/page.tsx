@@ -27,6 +27,26 @@ export default async function DeliveryPage() {
     deliveryRepo.obtenerPedidosProgramados(session.ferreteriaId, inicioHoy, fin14dias),
   ])
 
+  // Fetch confidence data for active entregas (for IA badges in dashboard)
+  const entregaIds = (entregas ?? [])
+    .filter((e: { estado: string }) => ['pendiente', 'carga', 'en_ruta'].includes(e.estado))
+    .map((e: { id: string }) => e.id)
+
+  let confidenceMap: Record<string, { confidence: number; source: string }> = {}
+  if (entregaIds.length > 0) {
+    const { data: predictions } = await supabase
+      .from('delivery_predictions')
+      .select('entrega_id, confidence, eta_source')
+      .in('entrega_id', entregaIds)
+
+    confidenceMap = Object.fromEntries(
+      (predictions ?? []).map((p: { entrega_id: string; confidence: number; eta_source: string }) => [
+        p.entrega_id,
+        { confidence: p.confidence, source: p.eta_source },
+      ])
+    )
+  }
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       {/* Encabezado */}
@@ -43,6 +63,7 @@ export default async function DeliveryPage() {
       <DeliveryDashboard
         initialEntregas={(entregas ?? []) as any}
         initialProgramados={(pedidosProgramados ?? []) as any}
+        confidenceMap={confidenceMap}
       />
     </div>
   )

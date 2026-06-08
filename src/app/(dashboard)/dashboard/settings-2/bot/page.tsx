@@ -25,7 +25,7 @@ export default function BotPage() {
       <SettingsHeader
         title="Bot IA"
         description="Configura la personalidad y comportamiento del asistente"
-        breadcrumbs={[{ label: 'ConfiguraciÃ³n' }, { label: 'Bot' }]}
+        breadcrumbs={[{ label: 'Configuración' }, { label: 'Bot' }]}
       />
 
       <div className="p-6 max-w-6xl space-y-6">

@@ -15,6 +15,11 @@ import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import { enviarMensaje, enviarDocumento, enviarImagen } from '@/lib/whatsapp/ycloud'
 import { withTimeout } from '@/lib/utils'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
+import { geocodificarDireccion } from '@/lib/delivery/geocoding'
+import { calcularETAInteligente, registrarPrediccion } from '@/lib/delivery/intelligence'
+import { crearEntrega } from '@/lib/delivery/assignment'
+import { notificarAsignacion } from '@/lib/notifications/delivery.notifications'
+import type { DeliveryNotificationContext } from '@/lib/notifications/types'
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -694,6 +699,84 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       }
     } catch (e) {
       console.error('[crear_pedido] Error instrucciones pago:', e)
+    }
+
+    // ── Logística de delivery: ETA inteligente + entrega + notificación ──────
+    if (modalidad === 'delivery' && direccionEntrega) {
+      ;(async () => {
+        try {
+          const { data: ferr } = await ctx.supabase
+            .from('ferreterias')
+            .select('lat, lng, nombre, telefono_whatsapp')
+            .eq('id', ctx.ferreteriaId)
+            .single()
+
+          if (!ferr?.lat || !ferr?.lng) return
+
+          const coords = await geocodificarDireccion(direccionEntrega, (ferr as unknown as { nombre?: string }).nombre ?? 'Lima')
+          if (!coords) return
+
+          const { count: cola } = await ctx.supabase
+            .from('pedidos')
+            .select('id', { count: 'exact', head: true })
+            .eq('ferreteria_id', ctx.ferreteriaId)
+            .eq('modalidad', 'delivery')
+            .in('estado', ['confirmado', 'en_preparacion', 'enviado'])
+
+          const etaResult = await calcularETAInteligente({
+            ferreteriaId: ctx.ferreteriaId,
+            ferreteriaLat: ferr.lat as number,
+            ferreteriaLng: ferr.lng as number,
+            clienteLat: coords.lat,
+            clienteLng: coords.lng,
+            zonaDeliveryId: zonaId,
+            pedidosEnCola: Math.max(0, (cola ?? 1) - 1),
+            supabase: ctx.supabase,
+          })
+
+          await ctx.supabase
+            .from('pedidos')
+            .update({ eta_minutos: etaResult.etaMinutos, cliente_lat: coords.lat, cliente_lng: coords.lng })
+            .eq('id', pedidoId)
+            .eq('ferreteria_id', ctx.ferreteriaId)
+
+          const entregaId = await crearEntrega({
+            ferreteriaId: ctx.ferreteriaId,
+            pedidoId,
+            repartidorId: null,
+            etaMinutos: etaResult.etaMinutos,
+            supabase: ctx.supabase,
+          })
+
+          if (entregaId) {
+            await registrarPrediccion({
+              ferreteriaId: ctx.ferreteriaId,
+              entregaId,
+              pedidoId,
+              zonaDeliveryId: zonaId,
+              result: etaResult,
+              supabase: ctx.supabase,
+            })
+
+            const telefonoWA = (ferr as unknown as { telefono_whatsapp?: string }).telefono_whatsapp
+            if (telefonoWA) {
+              const notifCtx: DeliveryNotificationContext = {
+                ferreteriaId: ctx.ferreteriaId,
+                entregaId,
+                pedidoId,
+                numeroPedido: (pedido as unknown as { numero_pedido: string }).numero_pedido,
+                nombreFerreteria: (ferr as unknown as { nombre?: string }).nombre ?? '',
+                telefonoWhatsapp: telefonoWA.replace(/^\+/, ''),
+                telefonoCliente: ctx.telefonoCliente,
+                apiKey: ctx.ycloudApiKey,
+              }
+              await notificarAsignacion(notifCtx, etaResult.etaMinutos, ctx.supabase)
+            }
+          }
+        } catch (e) {
+          console.error('[crear_pedido] Error logística delivery:', e)
+        }
+      })()
     }
 
     return {

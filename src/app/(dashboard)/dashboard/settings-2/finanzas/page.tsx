@@ -8,8 +8,8 @@ export default function FinanzasPage() {
     <div>
       <SettingsHeader
         title="Finanzas"
-        description="ConfiguraciÃ³n de facturaciÃ³n y plan SaaS"
-        breadcrumbs={[{ label: 'ConfiguraciÃ³n' }, { label: 'Finanzas' }]}
+        description="Configuración de facturación y plan SaaS"
+        breadcrumbs={[{ label: 'Configuración' }, { label: 'Finanzas' }]}
       />
 
       <div className="p-6 max-w-4xl space-y-6">

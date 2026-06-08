@@ -96,12 +96,40 @@ function groupByRepartidor(entregas: EntregaDashboard[]): GrupoRepartidor[] {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
+function ConfidenceBadge({ confidence, source }: { confidence: number; source: string }) {
+  if (source === 'google') {
+    return (
+      <span title={`Google Routes · ${Math.round(confidence * 100)}% confianza`}
+        className="text-[9px] px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 font-medium border border-emerald-200">
+        IA ●
+      </span>
+    )
+  }
+  if (source === 'zone_avg') {
+    return (
+      <span title={`Historial zona · ${Math.round(confidence * 100)}% confianza`}
+        className="text-[9px] px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium border border-indigo-200">
+        IA ●
+      </span>
+    )
+  }
+  // haversine / cold start
+  return (
+    <span title="Estimación base · sin datos históricos"
+      className="text-[9px] px-1 py-0.5 rounded bg-zinc-100 text-zinc-500 font-medium border border-zinc-200">
+      ETA
+    </span>
+  )
+}
+
 export default function DeliveryDashboard({
   initialEntregas,
   initialProgramados = [],
+  confidenceMap = {},
 }: {
   initialEntregas: EntregaDashboard[]
   initialProgramados?: PedidoProgramado[]
+  confidenceMap?: Record<string, { confidence: number; source: string }>
 }) {
   const [tab, setTab]                 = useState<'vivo' | 'programados'>('vivo')
   const [entregas, setEntregas]       = useState(initialEntregas)
@@ -494,6 +522,12 @@ export default function DeliveryDashboard({
                                   <Clock className="w-2.5 h-2.5" />
                                   {formatEta(etaMin)}
                                 </span>
+                              )}
+                              {e.estado !== 'entregado' && confidenceMap[e.id] && (
+                                <ConfidenceBadge
+                                  confidence={confidenceMap[e.id].confidence}
+                                  source={confidenceMap[e.id].source}
+                                />
                               )}
                             </div>
                           </div>

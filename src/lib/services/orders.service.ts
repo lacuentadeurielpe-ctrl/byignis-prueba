@@ -3,7 +3,7 @@ import { VentasRepository, ItemPedidoInput, PedidoInput } from '../db/repositori
 import { ChatRepository } from '../db/repositories/chat'
 import { DeliveryRepository } from '../db/repositories/logistica'
 import { geocodificarDireccion } from '../delivery/geocoding'
-import { calcularETA } from '../delivery/eta'
+import { calcularETAInteligente, registrarPrediccion } from '../delivery/intelligence'
 import { crearEntrega } from '../delivery/assignment'
 import { normalizarTelefono } from '../utils'
 import { OrderStateService } from './order-state.service'
@@ -132,6 +132,8 @@ export class OrdersService {
 
       let etaMinutos: number | null = null
 
+      let etaResult: Awaited<ReturnType<typeof calcularETAInteligente>> | null = null
+
       if (ferreteria?.lat && ferreteria?.lng) {
         const coords = await geocodificarDireccion(dirEta, ferreteria.nombre ?? 'Perú')
         if (coords) {
@@ -139,16 +141,18 @@ export class OrdersService {
           const velocidadKmh = vehiculos?.[0]?.velocidad_promedio_kmh ?? 30
           const cola = await this.deliveryRepo.contarEntregasEnCola(this.ferreteriaId, pedidoId)
 
-          const eta = await calcularETA({
+          etaResult = await calcularETAInteligente({
+            ferreteriaId: this.ferreteriaId,
             ferreteriaLat: ferreteria.lat,
             ferreteriaLng: ferreteria.lng,
             clienteLat: coords.lat,
             clienteLng: coords.lng,
             velocidadKmh,
             pedidosEnCola: cola ?? 0,
+            supabase: this.supabase,
           })
 
-          etaMinutos = eta.tiempoTotalMin
+          etaMinutos = etaResult.etaMinutos
           await this.supabase
             .from('pedidos')
             .update({ eta_minutos: etaMinutos, cliente_lat: coords.lat, cliente_lng: coords.lng })
@@ -157,13 +161,24 @@ export class OrdersService {
         }
       }
 
-      await crearEntrega({
+      const entregaId = await crearEntrega({
         ferreteriaId: this.ferreteriaId,
         pedidoId: pedidoId,
         repartidorId: null,
         etaMinutos,
         supabase: this.supabase,
       })
+
+      // Register prediction for training
+      if (entregaId && etaResult) {
+        registrarPrediccion({
+          ferreteriaId: this.ferreteriaId,
+          entregaId,
+          pedidoId,
+          result: etaResult,
+          supabase: this.supabase,
+        }).catch(e => console.error('[OrdersService] Error registrando predicción:', e))
+      }
     } catch (e) {
       console.error('[OrdersService] Error al iniciar logística', e)
     }

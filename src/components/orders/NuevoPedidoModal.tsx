@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn, matchesFuzzy } from '@/lib/utils'
-import { X, Plus, Trash2, Search, Loader2, Package, Check, CalendarClock, ScanLine } from 'lucide-react'
+import { X, Plus, Trash2, Search, Loader2, Package, Check, CalendarClock, ScanLine, Clock } from 'lucide-react'
 import ScannerModal from '@/components/ui/ScannerModal'
 import { toast } from 'sonner'
 
@@ -57,6 +57,16 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
 
   const [estadoInicial, setEstadoInicial] = useState<'pendiente' | 'confirmado'>('confirmado')
 
+  // ETA preview (debounced)
+  const [etaPreview, setEtaPreview] = useState<{
+    etaMinutos: number
+    distanciaKm: number
+    confidence: number
+    source: string
+  } | null>(null)
+  const [etaLoading, setEtaLoading] = useState(false)
+  const etaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Fase V: entrega programada
   const [esProgramado, setEsProgramado] = useState(false)
   const [fechaProgramada, setFechaProgramada] = useState('')   // "YYYY-MM-DDTHH:MM" local Lima
@@ -109,6 +119,40 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [productos])
+
+  // ── ETA Preview debounced ────────────────────────────────────────────────
+  const fetchEtaPreview = useCallback(async (dir: string, zona: string) => {
+    if (dir.trim().length < 8) { setEtaPreview(null); return }
+    setEtaLoading(true)
+    try {
+      const res = await fetch('/api/delivery/intelligence/eta-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ direccion: dir.trim(), zona_delivery_id: zona || null }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setEtaPreview(data)
+      } else {
+        setEtaPreview(null)
+      }
+    } catch {
+      setEtaPreview(null)
+    } finally {
+      setEtaLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (modalidad !== 'delivery') { setEtaPreview(null); return }
+    if (etaDebounceRef.current) clearTimeout(etaDebounceRef.current)
+    if (direccion.trim().length < 8) { setEtaPreview(null); setEtaLoading(false); return }
+    setEtaLoading(true)
+    etaDebounceRef.current = setTimeout(() => {
+      fetchEtaPreview(direccion, zonaId)
+    }, 800)
+    return () => { if (etaDebounceRef.current) clearTimeout(etaDebounceRef.current) }
+  }, [direccion, zonaId, modalidad, fetchEtaPreview])
 
   // Mínimo = ahora + 30 min (redondeado a los próximos 15 min) en Lima
   const minFechaProgramada = (() => {
@@ -478,6 +522,31 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
                     placeholder="Jr. Los Ferreros 123, Miraflores"
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 transition"
                   />
+                  {/* ETA Preview badge */}
+                  <div className="mt-1.5 h-6 flex items-center">
+                    {etaLoading && (
+                      <span className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Calculando ETA...
+                      </span>
+                    )}
+                    {!etaLoading && etaPreview && (
+                      <span className={cn(
+                        'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border',
+                        etaPreview.source === 'google'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : etaPreview.source === 'zone_avg'
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                          : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                      )}>
+                        <Clock className="w-3 h-3" />
+                        ~{etaPreview.etaMinutos} min · {etaPreview.distanciaKm} km
+                        <span className="opacity-60">
+                          {etaPreview.source === 'google' ? '· Google' : etaPreview.source === 'zone_avg' ? '· Historial IA' : '· Estimado'}
+                        </span>
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {zonas.length > 0 && (
                   <div>

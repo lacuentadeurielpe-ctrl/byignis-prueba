@@ -1,16 +1,17 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
-import { Truck } from 'lucide-react'
 import SettingsHeader from '../components/SettingsHeader'
 import DeliveryZonasTab from './components/DeliveryZonasTab'
 import DeliveryVehiculosTab from './components/DeliveryVehiculosTab'
+import DeliveryIntelligenceTab from './components/DeliveryIntelligenceTab'
 
-type Tab = 'zonas' | 'vehiculos'
+type Tab = 'zonas' | 'vehiculos' | 'inteligencia'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'zonas', label: 'Zonas de Entrega' },
-  { id: 'vehiculos', label: 'VehÃ­culos' },
+  { id: 'vehiculos', label: 'Vehículos' },
+  { id: 'inteligencia', label: 'Inteligencia IA' },
 ]
 
 export default function DeliveryPage() {
@@ -20,8 +21,8 @@ export default function DeliveryPage() {
     <div>
       <SettingsHeader
         title="Delivery"
-        description="Gestiona zonas y vehÃ­culos de entrega"
-        breadcrumbs={[{ label: 'ConfiguraciÃ³n' }, { label: 'Delivery' }]}
+        description="Gestiona zonas, vehículos e inteligencia de entregas"
+        breadcrumbs={[{ label: 'Configuración' }, { label: 'Delivery' }]}
       />
 
       <div className="p-6 max-w-6xl space-y-6">
@@ -46,6 +47,7 @@ export default function DeliveryPage() {
         <div className="pt-4">
           {activeTab === 'zonas' && <DeliveryZonasTab />}
           {activeTab === 'vehiculos' && <DeliveryVehiculosTab />}
+          {activeTab === 'inteligencia' && <DeliveryIntelligenceTab />}
         </div>
       </div>
     </div>
