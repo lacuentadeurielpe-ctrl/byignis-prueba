@@ -97,7 +97,7 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="w-full max-w-2xl bg-white rounded-t-3xl shadow-2xl overflow-y-auto max-h-[90vh]"
+        className="w-full max-w-4xl bg-white md:rounded-2xl rounded-t-3xl shadow-2xl overflow-y-auto max-h-[90vh]"
       >
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between px-6 py-4 bg-white border-b border-zinc-200">
@@ -120,7 +120,7 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
         {/* Content */}
         <div className="p-6 space-y-6">
           {/* Nombre y Código */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-2">
                 Nombre del local *
@@ -200,7 +200,7 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
               <Clock className="w-4 h-4" /> Horario de atención
             </label>
 
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <div>
                 <label className="text-xs text-zinc-600 mb-1.5 block">Apertura</label>
                 <input
@@ -223,7 +223,7 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
 
             <div className="space-y-2">
               <p className="text-xs text-zinc-600 font-medium">Días de atención</p>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {DIAS_SEMANA_ARR.map(dia => (
                   <button
                     key={dia}
@@ -260,7 +260,7 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white border-t border-zinc-200 px-6 py-4 flex gap-3">
+        <div className="sticky bottom-0 bg-white border-t border-zinc-200 px-6 py-4 flex gap-3 flex-col-reverse sm:flex-row">
           <button
             onClick={onClose}
             className="flex-1 px-4 py-2.5 text-sm font-medium text-zinc-700 bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50 transition-colors"
