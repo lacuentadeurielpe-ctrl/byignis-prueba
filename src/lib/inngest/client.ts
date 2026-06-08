@@ -12,8 +12,8 @@
 import { Inngest } from 'inngest'
 
 export const inngest = new Inngest({
-  id: 'ferrobot',
-  name: 'FerroBot',
+  id: 'byignis-prueba',
+  name: 'Byignis Prueba',
 })
 
 // ── Tipos de eventos ─────────────────────────────────────────────────────────
