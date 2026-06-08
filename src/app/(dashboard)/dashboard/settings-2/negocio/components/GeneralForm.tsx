@@ -12,7 +12,6 @@ interface GeneralFormData {
   email?: string
   logo_url?: string
   color_comprobante?: string
-  ruc?: string
   tipo_establecimiento?: string
 }
 
@@ -81,20 +80,6 @@ export default function GeneralForm() {
                 className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="Ej: Ferretería El Maestro"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-2">
-                RUC (SUNAT)
-              </label>
-              <input
-                type="text"
-                value={data.ruc || ''}
-                onChange={e => handleChange('ruc', e.target.value)}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Ej: 20123456789"
-              />
-              <p className="text-xs text-zinc-500 mt-1">11 dígitos sin guiones</p>
             </div>
 
             <div>

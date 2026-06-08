@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     // Obtener datos de ferreterias
     const { data, error } = await supabase
       .from('ferreterias')
-      .select('nombre, telefono_whatsapp, direccion, email, logo_url, color_comprobante, ruc, tipo_establecimiento')
+      .select('nombre, telefono_whatsapp, direccion, email, logo_url, color_comprobante, tipo_establecimiento')
       .eq('id', session.ferreteriaId)
       .single()
 
@@ -60,14 +60,13 @@ export async function PATCH(request: Request) {
     if (body.email !== undefined) updateData.email = body.email
     if (body.logo_url !== undefined) updateData.logo_url = body.logo_url
     if (body.color_comprobante !== undefined) updateData.color_comprobante = body.color_comprobante
-    if (body.ruc !== undefined) updateData.ruc = body.ruc
     if (body.tipo_establecimiento !== undefined) updateData.tipo_establecimiento = body.tipo_establecimiento
 
     const { data, error } = await supabase
       .from('ferreterias')
       .update(updateData)
       .eq('id', session.ferreteriaId)
-      .select('nombre, telefono_whatsapp, direccion, email, logo_url, color_comprobante, ruc, tipo_establecimiento')
+      .select('nombre, telefono_whatsapp, direccion, email, logo_url, color_comprobante, tipo_establecimiento')
       .single()
 
     if (error) {
