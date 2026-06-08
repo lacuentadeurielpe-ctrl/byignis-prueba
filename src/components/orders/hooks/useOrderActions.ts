@@ -34,15 +34,19 @@ export function useOrderActions(
         const err = await res.json()
         throw new Error(err.error ?? 'Error al actualizar el estado')
       }
-      const actualizado = await res.json()
-      setPedidos((prev) =>
-        prev.map((p) => (p.id === pedidoId
-          ? { ...p, estado: actualizado.estado, motivo_cancelacion: motivoCancelacion ?? p.motivo_cancelacion }
-          : p))
-      )
+      const data = await res.json()
+      // Actualizar estado local directamente sin confiar en la respuesta del servidor
+      // Usamos el nuevo estado que conocemos desde el cliente
+      setPedidos((prev) => prev.map((p) => p.id === pedidoId
+        ? {
+            ...p,
+            estado: nuevoEstado,
+            motivo_cancelacion: motivoCancelacion ?? p.motivo_cancelacion,
+          }
+        : p))
       toast.success('Estado actualizado')
-    } catch {
-      toast.error('Error al actualizar el estado')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar el estado')
     } finally {
       setActualizando(null)
       if (setCancelDialog) setCancelDialog(null)
