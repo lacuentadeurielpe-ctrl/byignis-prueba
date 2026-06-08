@@ -14,18 +14,20 @@ interface NavItem {
   count?: string | number
 }
 
+const BASE = '/dashboard/settings-2/sections'
+
 const SECTIONS: NavItem[] = [
   {
     id: 'negocio',
     label: 'Negocio',
-    href: '/dashboard/settings-2/negocio',
+    href: `${BASE}/negocio`,
     icon: <Building2 className="w-5 h-5" />,
     status: 'completo',
   },
   {
     id: 'integraciones',
     label: 'Integraciones',
-    href: '/dashboard/settings-2/integraciones',
+    href: `${BASE}/integraciones`,
     icon: <Zap className="w-5 h-5" />,
     status: 'alerta',
     count: 3,
@@ -33,42 +35,42 @@ const SECTIONS: NavItem[] = [
   {
     id: 'equipo',
     label: 'Equipo',
-    href: '/dashboard/settings-2/equipo',
+    href: `${BASE}/equipo`,
     icon: <Users className="w-5 h-5" />,
     status: 'completo',
   },
   {
     id: 'finanzas',
     label: 'Finanzas',
-    href: '/dashboard/settings-2/finanzas',
+    href: `${BASE}/finanzas`,
     icon: <DollarSign className="w-5 h-5" />,
     status: 'completo',
   },
   {
     id: 'bot',
     label: 'Bot AI',
-    href: '/dashboard/settings-2/bot',
+    href: `${BASE}/bot`,
     icon: <Bot className="w-5 h-5" />,
     status: 'completo',
   },
   {
     id: 'catalogo',
     label: 'Catálogo',
-    href: '/dashboard/settings-2/catalogo',
+    href: `${BASE}/catalogo`,
     icon: <Package className="w-5 h-5" />,
     status: 'completo',
   },
   {
     id: 'delivery',
     label: 'Delivery',
-    href: '/dashboard/settings-2/delivery',
+    href: `${BASE}/delivery`,
     icon: <Truck className="w-5 h-5" />,
     status: 'completo',
   },
   {
     id: 'avanzado',
     label: 'Avanzado',
-    href: '/dashboard/settings-2/avanzado',
+    href: `${BASE}/avanzado`,
     icon: <Settings className="w-5 h-5" />,
     status: 'incompleto',
   },
