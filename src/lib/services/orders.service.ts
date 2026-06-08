@@ -135,7 +135,11 @@ export class OrdersService {
       let etaResult: Awaited<ReturnType<typeof calcularETAInteligente>> | null = null
 
       if (ferreteria?.lat && ferreteria?.lng) {
-        const coords = await geocodificarDireccion(dirEta, ferreteria.nombre ?? 'Perú')
+        const coords = await geocodificarDireccion(
+          dirEta,
+          ferreteria.nombre ?? 'Perú',
+          { lat: ferreteria.lat, lng: ferreteria.lng, radiusKm: 80 },
+        )
         if (coords) {
           const vehiculos = await this.deliveryRepo.listarVehiculosActivos(this.ferreteriaId)
           const velocidadKmh = vehiculos?.[0]?.velocidad_promedio_kmh ?? 30

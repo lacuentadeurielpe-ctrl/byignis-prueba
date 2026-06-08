@@ -80,9 +80,15 @@ export async function POST(request: Request) {
   }
 
   // Geocodificar dirección del cliente
+  // Pasamos las coords del local como bias: Google priorizará resultados
+  // cerca de la ferretería (ideal para direcciones coloquiales locales).
+  // Si la dirección es de otra región, Google igual la encuentra.
   const coords = await geocodificarDireccion(
     direccion.trim(),
-    (ferreteria?.nombre as string | null) ?? 'Lima',
+    (ferreteria?.nombre as string | null) ?? 'Perú',
+    ferreteriaLat && ferreteriaLng
+      ? { lat: ferreteriaLat, lng: ferreteriaLng, radiusKm: 80 }
+      : undefined,
   )
 
   if (!coords) {

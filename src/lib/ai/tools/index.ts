@@ -713,7 +713,11 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
 
           if (!ferr?.lat || !ferr?.lng) return
 
-          const coords = await geocodificarDireccion(direccionEntrega, (ferr as unknown as { nombre?: string }).nombre ?? 'Lima')
+          const coords = await geocodificarDireccion(
+            direccionEntrega,
+            (ferr as unknown as { nombre?: string }).nombre ?? 'Lima',
+            { lat: ferr.lat, lng: ferr.lng, radiusKm: 80 },
+          )
           if (!coords) return
 
           const { count: cola } = await ctx.supabase
