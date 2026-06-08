@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { formatPEN, formatFecha, matchesFuzzy } from '@/lib/utils'
-import { Search, X, Users, ChevronRight, Pencil, Building2, UserX, User } from 'lucide-react'
+import { formatPEN, formatFecha } from '@/lib/utils'
+import { Users, ChevronRight, Pencil, Building2, UserX, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import EditarClienteModal from './EditarClienteModal'
 
@@ -50,17 +50,7 @@ export default function ClientesTable({
   esDueno: boolean
 }) {
   const [clientes, setClientes] = useState(inicial)
-  const [busqueda, setBusqueda] = useState('')
   const [editando, setEditando] = useState<ClienteResumen | null>(null)
-
-  const filtrados = useMemo(() => {
-    return clientes.filter((c) =>
-      matchesFuzzy(
-        `${c.nombre ?? ''} ${c.alias ?? ''} ${c.telefono ?? ''} ${c.dni_ruc ?? ''} ${c.tags.join(' ')}`,
-        busqueda
-      )
-    )
-  }, [clientes, busqueda])
 
   function handleGuardado(
     clienteId: string,
@@ -73,26 +63,10 @@ export default function ClientesTable({
 
   return (
     <div>
-      {/* Búsqueda */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-        <input
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar por nombre, alias, teléfono, DNI/RUC…"
-          className="w-full pl-9 pr-9 py-2.5 text-sm border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-zinc-900 transition"
-        />
-        {busqueda && (
-          <button onClick={() => setBusqueda('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-
-      {filtrados.length === 0 ? (
+      {clientes.length === 0 ? (
         <div className="text-center py-16">
           <Users className="w-10 h-10 mx-auto mb-3 text-zinc-200" />
-          <p className="text-sm text-zinc-400">{busqueda ? 'Sin resultados' : 'No hay clientes aún'}</p>
+          <p className="text-sm text-zinc-400">No hay clientes</p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-zinc-100 overflow-hidden">
@@ -110,13 +84,18 @@ export default function ClientesTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
-              {filtrados.map((c) => (
+              {clientes.map((c) => (
                 <tr key={c.id} className="hover:bg-zinc-50 transition group">
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-2">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="font-semibold text-zinc-900">{c.nombre || c.alias || '—'}</p>
+                          <Link
+                            href={`/dashboard/clientes/${c.id}`}
+                            className="font-semibold text-indigo-600 hover:text-indigo-700 hover:underline transition"
+                          >
+                            {c.nombre || c.alias || '—'}
+                          </Link>
                           <BadgeTipo tipo={c.tipo} />
                           {c.tags.length > 0 && c.tags.slice(0, 2).map((tag) => (
                             <span key={tag} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100">
@@ -147,7 +126,13 @@ export default function ClientesTable({
                   </td>
 
                   <td className="px-3 py-3.5 text-center">
-                    <span className="text-sm font-bold text-zinc-700">{c.totalPedidos}</span>
+                    <Link
+                      href={`/dashboard/clientes/${c.id}?tab=historial`}
+                      className="inline-block text-sm font-bold text-indigo-600 hover:text-indigo-700 hover:underline transition"
+                      title="Ver historial de pedidos"
+                    >
+                      {c.totalPedidos}
+                    </Link>
                     {c.totalPedidos > c.pedidosCompletados && (
                       <span className="text-[10px] text-zinc-400 block">
                         ({c.totalPedidos - c.pedidosCompletados} cancel.)
@@ -157,16 +142,32 @@ export default function ClientesTable({
 
                   {esDueno && (
                     <td className="px-4 py-3.5 text-right hidden sm:table-cell">
-                      <span className="text-sm font-bold text-zinc-900 tabular-nums">
-                        {c.totalGastado > 0 ? formatPEN(c.totalGastado) : <span className="text-zinc-300 font-normal">—</span>}
-                      </span>
+                      {c.totalGastado > 0 ? (
+                        <Link
+                          href={`/dashboard/clientes/${c.id}?tab=overview`}
+                          className="inline-block text-sm font-bold text-indigo-600 hover:text-indigo-700 hover:underline transition tabular-nums"
+                          title="Ver resumen de gastos"
+                        >
+                          {formatPEN(c.totalGastado)}
+                        </Link>
+                      ) : (
+                        <span className="text-zinc-300 font-normal">—</span>
+                      )}
                     </td>
                   )}
 
                   <td className="px-4 py-3.5 text-right hidden lg:table-cell">
-                    <span className="text-xs text-zinc-400">
-                      {c.ultimoPedido ? formatFecha(c.ultimoPedido) : '—'}
-                    </span>
+                    {c.ultimoPedido ? (
+                      <Link
+                        href={`/dashboard/clientes/${c.id}?tab=historial`}
+                        className="inline-block text-xs text-indigo-600 hover:text-indigo-700 hover:underline transition"
+                        title="Ver historial de pedidos"
+                      >
+                        {formatFecha(c.ultimoPedido)}
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-zinc-400">—</span>
+                    )}
                   </td>
 
                   <td className="px-3 py-3.5">
@@ -192,11 +193,6 @@ export default function ClientesTable({
               ))}
             </tbody>
           </table>
-          {busqueda && (
-            <p className="text-xs text-zinc-400 text-center py-3 border-t border-zinc-50">
-              {filtrados.length} de {clientes.length} clientes
-            </p>
-          )}
         </div>
       )}
 

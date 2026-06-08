@@ -1,4 +1,5 @@
 // Historial completo de un cliente (CRM Profile)
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { redirect, notFound } from 'next/navigation'
@@ -53,16 +54,18 @@ export default async function ClienteDetallePage({ params }: Props) {
   }
 
   return (
-    <ClienteDetalleView
-      cliente={cliente}
-      pedidos={pedidos || []}
-      cotizaciones={cotizaciones || []}
-      creditos={creditos || []}
-      conversacion={conversacion ? { ...conversacion, mensajes } : null}
-      oportunidades={oportunidades || []}
-      notas={notas || []}
-      esDueno={session.rol === 'dueno'}
-      userId={session.userId}
-    />
+    <Suspense fallback={<div className="p-6">Cargando...</div>}>
+      <ClienteDetalleView
+        cliente={cliente}
+        pedidos={pedidos || []}
+        cotizaciones={cotizaciones || []}
+        creditos={creditos || []}
+        conversacion={conversacion ? { ...conversacion, mensajes } : null}
+        oportunidades={oportunidades || []}
+        notas={notas || []}
+        esDueno={session.rol === 'dueno'}
+        userId={session.userId}
+      />
+    </Suspense>
   )
 }

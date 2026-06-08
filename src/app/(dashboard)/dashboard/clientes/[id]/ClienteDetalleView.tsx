@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Phone, MessageSquare, Mail, Building2, UserX, User, MapPin, Edit3 } from 'lucide-react'
 import { cn, formatPEN, formatFecha } from '@/lib/utils'
@@ -44,9 +45,18 @@ export default function ClienteDetalleView({
   esDueno,
   userId
 }: ClienteDetalleViewProps) {
-  const [activeTab, setActiveTab] = useState<typeof TABS[number]['id']>('overview')
+  const searchParams = useSearchParams()
+  const initialTab = (searchParams.get('tab') || 'overview') as typeof TABS[number]['id']
+  const [activeTab, setActiveTab] = useState<typeof TABS[number]['id']>(initialTab)
   const [cliente, setCliente] = useState(initCliente)
   const [modalEditar, setModalEditar] = useState(false)
+
+  useEffect(() => {
+    const tab = searchParams.get('tab') as typeof TABS[number]['id']
+    if (tab && TABS.some(t => t.id === tab)) {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
 
   const pedidosCompletados = pedidos.filter(p => p.estado !== 'cancelado')
   const totalGastado = pedidosCompletados.reduce((s, p) => s + (p.total || 0), 0)
