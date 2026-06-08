@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { X, MapPin, Clock, Phone, Tag } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import PlacesAutocomplete from './PlacesAutocomplete'
-import type { Local, LocalFormData, GooglePlacesResult, DIAS_SEMANA } from '@/types/locales'
+import LocalMapPicker from './LocalMapPicker'
+import type { Local, LocalFormData, DIAS_SEMANA } from '@/types/locales'
 import { DIAS_SEMANA_LABELS } from '@/types/locales'
 
 interface LocalModalProps {
@@ -44,17 +44,6 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
 
   const handleChange = (field: keyof LocalFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
-  }
-
-  const handleSelectPlace = (result: GooglePlacesResult) => {
-    setFormData(prev => ({
-      ...prev,
-      direccion: result.descripcion,
-      lat: result.lat,
-      lng: result.lng,
-      place_id: result.place_id,
-    }))
-    setHasCoordinates(true)
   }
 
   const toggleDia = (dia: (typeof DIAS_SEMANA)[number]) => {
@@ -173,25 +162,20 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
             />
           </div>
 
-          {/* Dirección y ubicación */}
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-2 flex items-center gap-2">
-              <MapPin className="w-4 h-4" /> Dirección *
-            </label>
-            <PlacesAutocomplete
-              value={formData.direccion}
-              onChange={dir => handleChange('direccion', dir)}
-              onSelect={handleSelectPlace}
-              placeholder="Buscar dirección con Google Maps..."
-            />
-            {hasCoordinates && (
-              <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                <p className="text-xs text-emerald-700">
-                  ✓ Coordenadas detectadas: ({formData.lat?.toFixed(4)}, {formData.lng?.toFixed(4)})
-                </p>
-              </div>
-            )}
-          </div>
+          {/* Dirección y ubicación con mapa interactivo */}
+          <LocalMapPicker
+            onLocationChange={result => {
+              handleChange('direccion', result.direccion)
+              handleChange('lat', result.lat)
+              handleChange('lng', result.lng)
+              handleChange('place_id', result.place_id)
+              setHasCoordinates(true)
+            }}
+            initialDireccion={formData.direccion}
+            initialLat={formData.lat}
+            initialLng={formData.lng}
+            autoSave={true}
+          />
 
           {/* Contacto */}
           <div>
