@@ -37,8 +37,8 @@ export default async function ClienteDetallePage({ params }: Props) {
     clientesRepo.obtenerCotizacionesDeCliente(session.ferreteriaId, id),
     clientesRepo.obtenerCreditosDeCliente(session.ferreteriaId, id),
     chatRepo.obtenerConversacionReciente(session.ferreteriaId, id),
-    clientesRepo.obtenerOportunidadesDeCliente(session.ferreteriaId, id),
-    clientesRepo.obtenerNotasDeCliente(session.ferreteriaId, id),
+    clientesRepo.obtenerOportunidadesDeCliente(session.ferreteriaId, id).catch(() => []),
+    clientesRepo.obtenerNotasDeCliente(session.ferreteriaId, id).catch(() => []),
   ])
 
   // Cargar últimos mensajes si hay conversación

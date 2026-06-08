@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, Phone, Users, MessageCircle, Loader2, Send } from 'lucide-react'
+import { FileText, Phone, Users, MessageCircle, Loader2, Send, Trash2 } from 'lucide-react'
 import { formatFecha } from '@/lib/utils'
 
 interface NotaCRM {
@@ -16,19 +16,32 @@ interface Props {
   clienteId: string
   notasCRM: NotaCRM[]
   userId: string
+  esDueno: boolean
 }
 
-export default function TabNotas({ clienteId, notasCRM: iniciales, userId }: Props) {
+export default function TabNotas({ clienteId, notasCRM: iniciales, userId, esDueno }: Props) {
   const [notas, setNotas] = useState<NotaCRM[]>(iniciales)
   const [nuevaNota, setNuevaNota] = useState('')
   const [tipoNota, setTipoNota] = useState<NotaCRM['tipo']>('nota')
   const [enviando, setEnviando] = useState(false)
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null)
 
   const TIPO_ICONS = {
     nota: { icon: FileText, color: 'text-amber-500', bg: 'bg-amber-100', label: 'Nota' },
     llamada: { icon: Phone, color: 'text-blue-500', bg: 'bg-blue-100', label: 'Llamada' },
     reunion: { icon: Users, color: 'text-indigo-500', bg: 'bg-indigo-100', label: 'Reunión' },
     whatsapp: { icon: MessageCircle, color: 'text-emerald-500', bg: 'bg-emerald-100', label: 'WhatsApp' },
+  }
+
+  async function eliminarNota(notaId: string) {
+    if (!confirm('¿Eliminar esta nota?')) return
+    setEliminandoId(notaId)
+    try {
+      await fetch(`/api/clientes/${clienteId}/notas/${notaId}`, { method: 'DELETE' })
+      setNotas(prev => prev.filter(n => n.id !== notaId))
+    } finally {
+      setEliminandoId(null)
+    }
   }
 
   async function agregarNota() {
@@ -132,8 +145,23 @@ export default function TabNotas({ clienteId, notasCRM: iniciales, userId }: Pro
                         <time className="text-xs font-medium text-zinc-400">{formatFecha(nota.created_at)}</time>
                       </div>
                       <p className="text-sm text-zinc-700 whitespace-pre-wrap">{nota.contenido}</p>
-                      <div className="mt-3 text-xs text-zinc-400 font-medium">
-                        Registrado por: <span className="text-zinc-600">{esMio ? 'Tú' : 'Usuario'}</span>
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className="text-xs text-zinc-400 font-medium">
+                          Registrado por: <span className="text-zinc-600">{esMio ? 'Tú' : 'Usuario'}</span>
+                        </span>
+                        {(esMio || esDueno) && (
+                          <button
+                            onClick={() => eliminarNota(nota.id)}
+                            disabled={eliminandoId === nota.id}
+                            className="p-1 text-zinc-300 hover:text-rose-500 transition rounded"
+                            title="Eliminar nota"
+                          >
+                            {eliminandoId === nota.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />
+                            }
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

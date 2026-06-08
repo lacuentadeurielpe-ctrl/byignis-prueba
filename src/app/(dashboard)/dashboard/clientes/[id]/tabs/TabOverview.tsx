@@ -1,7 +1,7 @@
 'use client'
 
 import { formatPEN, formatFecha, labelEstadoPedido, colorEstadoPedido } from '@/lib/utils'
-import { ShoppingCart, FileText, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { ShoppingCart, FileText, AlertCircle, Target } from 'lucide-react'
 
 interface Props {
   pedidos: any[]
@@ -9,14 +9,17 @@ interface Props {
   creditos: any[]
   cliente: any
   esDueno: boolean
+  oportunidades?: any[]
 }
 
-export default function TabOverview({ pedidos, cotizaciones, creditos, cliente, esDueno }: Props) {
+export default function TabOverview({ pedidos, cotizaciones, creditos, cliente, esDueno, oportunidades = [] }: Props) {
   const pedidosRecientes = pedidos.slice(0, 5)
   const cotizacionesRecientes = cotizaciones.slice(0, 5)
 
   const deudaTotal = creditos.reduce((s, c) => s + (c.monto_total - c.monto_pagado), 0)
   const creditosVencidos = creditos.filter(c => c.estado === 'vencido' || (c.estado === 'activo' && new Date(c.fecha_limite) < new Date()))
+  const oportunidadesAbiertas = oportunidades.filter(o => o.estado === 'lead' || o.estado === 'negociacion')
+  const valorPipeline = oportunidadesAbiertas.reduce((s, o) => s + (o.valor_estimado * o.probabilidad_cierre / 100), 0)
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -58,6 +61,36 @@ export default function TabOverview({ pedidos, cotizaciones, creditos, cliente, 
             </div>
           </div>
         </div>
+
+        {/* Pipeline CRM */}
+        {oportunidades.length > 0 && (
+          <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-sm">
+            <h3 className="text-sm font-bold text-zinc-900 mb-4 flex items-center gap-2">
+              <Target className="w-4 h-4 text-indigo-500" /> Pipeline CRM
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-zinc-500">Oportunidades abiertas</span>
+                <span className="text-sm font-bold text-zinc-900">{oportunidadesAbiertas.length}</span>
+              </div>
+              {valorPipeline > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-zinc-500">Valor ponderado</span>
+                  <span className="text-sm font-bold text-indigo-600">{formatPEN(valorPipeline)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-zinc-500">Ganadas</span>
+                <span className="text-sm font-medium text-emerald-600">{oportunidades.filter(o => o.estado === 'ganado').length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-zinc-500">Perdidas</span>
+                <span className="text-sm font-medium text-rose-500">{oportunidades.filter(o => o.estado === 'perdido').length}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Columna Derecha: Timeline Reciente */}

@@ -61,7 +61,7 @@ export class ClientesRepository {
   async obtenerCotizacionesDeCliente(ferreteriaId: string, clienteId: string) {
     const { data, error } = await this.supabase
       .from('cotizaciones')
-      .select('id, numero_cotizacion, estado, total, created_at')
+      .select('id, estado, total, created_at')
       .eq('cliente_id', clienteId)
       .eq('ferreteria_id', ferreteriaId)
       .order('created_at', { ascending: false })

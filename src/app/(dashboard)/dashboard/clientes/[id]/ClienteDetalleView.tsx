@@ -10,6 +10,7 @@ import TabCuentaCorriente from './tabs/TabCuentaCorriente'
 import TabHistorial from './tabs/TabHistorial'
 import TabConversacion from './tabs/TabConversacion'
 import TabNotas from './tabs/TabNotas'
+import TabOportunidades from './tabs/TabOportunidades'
 
 interface ClienteDetalleViewProps {
   cliente: any
@@ -28,7 +29,8 @@ const TABS = [
   { id: 'cuenta', label: 'Cta. Corriente' },
   { id: 'historial', label: 'Historial' },
   { id: 'chat', label: 'Conversación' },
-  { id: 'notas', label: 'CRM / Notas' },
+  { id: 'oportunidades', label: 'Oportunidades' },
+  { id: 'notas', label: 'Notas' },
 ] as const
 
 export default function ClienteDetalleView({
@@ -178,12 +180,13 @@ export default function ClienteDetalleView({
       {/* Tab Content */}
       <div className="mb-12">
         {activeTab === 'overview' && (
-          <TabOverview 
-            pedidos={pedidos} 
-            cotizaciones={cotizaciones} 
-            creditos={creditos} 
+          <TabOverview
+            pedidos={pedidos}
+            cotizaciones={cotizaciones}
+            creditos={creditos}
             cliente={cliente}
             esDueno={esDueno}
+            oportunidades={oportunidades}
           />
         )}
         {activeTab === 'cuenta' && (
@@ -204,11 +207,19 @@ export default function ClienteDetalleView({
             conversacion={conversacion}
           />
         )}
+        {activeTab === 'oportunidades' && (
+          <TabOportunidades
+            clienteId={cliente.id}
+            oportunidadesIniciales={oportunidades}
+            esDueno={esDueno}
+          />
+        )}
         {activeTab === 'notas' && (
-          <TabNotas 
+          <TabNotas
             clienteId={cliente.id}
             notasCRM={notas}
             userId={userId}
+            esDueno={esDueno}
           />
         )}
       </div>
