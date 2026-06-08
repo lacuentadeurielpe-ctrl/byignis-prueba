@@ -63,9 +63,12 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
     distanciaKm: number
     confidence: number
     source: string
+    coordsCliente?: { lat: number; lng: number }
+    direccionResuelta?: string | null
   } | null>(null)
   const [etaLoading, setEtaLoading] = useState(false)
   const [etaError, setEtaError] = useState<string | null>(null)
+  const [showMapPopover, setShowMapPopover] = useState(false)
   const etaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Fase V: entrega programada
@@ -136,6 +139,7 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
         const data = await res.json()
         setEtaPreview(data)
         setEtaError(null)
+        setShowMapPopover(false)
       } else {
         const body = await res.json().catch(() => ({}))
         setEtaPreview(null)
@@ -290,11 +294,12 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
     }
   }
 
-  // Cerrar sugerencias al hacer click fuera
+  // Cerrar sugerencias y map popover al hacer click fuera
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       const target = e.target as HTMLElement
       if (!target.closest('[data-busqueda]')) setMostrarSugerencias(false)
+      if (!target.closest('[data-eta-popover]')) setShowMapPopover(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -529,8 +534,8 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
                     placeholder="Jr. Los Ferreros 123, Miraflores"
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 transition"
                   />
-                  {/* ETA Preview badge */}
-                  <div className="mt-1.5 min-h-6 flex items-center">
+                  {/* ETA Preview badge + Map Popover */}
+                  <div className="mt-1.5 min-h-6 flex items-center relative" data-eta-popover>
                     {etaLoading && (
                       <span className="flex items-center gap-1.5 text-xs text-zinc-400">
                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -538,26 +543,77 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
                       </span>
                     )}
                     {!etaLoading && etaPreview && (
-                      <span className={cn(
-                        'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border',
-                        etaPreview.source === 'google'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : etaPreview.source === 'zone_avg'
-                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                          : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                      )}>
+                      <button
+                        type="button"
+                        onClick={() => setShowMapPopover(v => !v)}
+                        className={cn(
+                          'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border transition hover:brightness-95 active:scale-95',
+                          etaPreview.source === 'google'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : etaPreview.source === 'zone_avg'
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                        )}
+                      >
                         <Clock className="w-3 h-3" />
                         ~{etaPreview.etaMinutos} min · {etaPreview.distanciaKm} km
                         <span className="opacity-60">
                           {etaPreview.source === 'google' ? '· Google' : etaPreview.source === 'zone_avg' ? '· Historial IA' : '· Estimado'}
                         </span>
-                      </span>
+                        <span className="opacity-40 ml-0.5">📍</span>
+                      </button>
                     )}
                     {!etaLoading && !etaPreview && etaError && (
                       <span className="text-xs text-amber-500 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         {etaError}
                       </span>
+                    )}
+
+                    {/* Map Popover */}
+                    {showMapPopover && etaPreview?.coordsCliente && (
+                      <div className="absolute top-8 left-0 z-50 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden w-72">
+                        {/* Static map */}
+                        <div className="relative">
+                          {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? (
+                            <img
+                              src={`https://maps.googleapis.com/maps/api/staticmap?center=${etaPreview.coordsCliente.lat},${etaPreview.coordsCliente.lng}&zoom=16&size=560x240&scale=2&markers=color:red%7C${etaPreview.coordsCliente.lat},${etaPreview.coordsCliente.lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&style=feature:poi|visibility:off`}
+                              alt="Ubicación del cliente"
+                              className="w-full h-36 object-cover"
+                            />
+                          ) : (
+                            <iframe
+                              src={`https://www.openstreetmap.org/export/embed.html?bbox=${etaPreview.coordsCliente.lng - 0.005},${etaPreview.coordsCliente.lat - 0.005},${etaPreview.coordsCliente.lng + 0.005},${etaPreview.coordsCliente.lat + 0.005}&layer=mapnik&marker=${etaPreview.coordsCliente.lat},${etaPreview.coordsCliente.lng}`}
+                              className="w-full h-36 border-0"
+                            />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setShowMapPopover(false)}
+                            className="absolute top-1.5 right-1.5 w-6 h-6 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow text-gray-500 hover:text-gray-700 transition"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {/* Address info */}
+                        <div className="px-3 py-2.5">
+                          <p className="text-xs font-medium text-gray-800 leading-snug">
+                            {etaPreview.direccionResuelta ?? direccion}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {etaPreview.coordsCliente.lat.toFixed(5)}, {etaPreview.coordsCliente.lng.toFixed(5)}
+                          </p>
+                          <a
+                            href={`https://www.google.com/maps?q=${etaPreview.coordsCliente.lat},${etaPreview.coordsCliente.lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-2 flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium transition"
+                          >
+                            <span>Abrir en Google Maps</span>
+                            <span>↗</span>
+                          </a>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

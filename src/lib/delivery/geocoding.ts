@@ -20,6 +20,7 @@ const USER_AGENT        = 'FerroBot/1.0 (ferrobot-flax.vercel.app; contacto@ferr
 export interface Coordenadas {
   lat: number
   lng: number
+  direccionResuelta?: string   // formatted_address de Google (cuando disponible)
 }
 
 /** Bias de ubicación para Google Geocoding — prioriza resultados dentro del radio */
@@ -86,7 +87,11 @@ async function geocodificarConGoogle(
 
     if (data.status === 'OK' && data.results.length > 0) {
       const { lat, lng } = data.results[0].geometry.location
-      return { lat, lng }
+      return {
+        lat,
+        lng,
+        direccionResuelta: data.results[0].formatted_address,
+      }
     }
 
     // ZERO_RESULTS u otro status no-OK

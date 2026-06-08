@@ -120,6 +120,7 @@ export async function POST(request: Request) {
     distanciaKm: result.distanciaKm,
     confidence: result.confidence,
     source: result.source,
-    coordsCliente: coords,
+    coordsCliente: { lat: coords.lat, lng: coords.lng },
+    direccionResuelta: coords.direccionResuelta ?? null,
   })
 }
