@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { MapPin, Plus, MoreVertical, Star, Clock, Phone, Edit2, Trash2, AlertCircle } from 'lucide-react'
+import { MapPin, Plus, MoreVertical, Star, Clock, Phone, Edit2, Trash2, AlertCircle, Map } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import FormSection from '../../components/FormSection'
 import LocalModal from './LocalModal'
+import LocalesMapModal from './LocalesMapModal'
+import DistanciaCalculator from './DistanciaCalculator'
 import type { Local } from '@/types/locales'
 
 export default function LocalesForm() {
@@ -15,6 +17,8 @@ export default function LocalesForm() {
   const [editingLocal, setEditingLocal] = useState<Local | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [showMapModal, setShowMapModal] = useState(false)
+  const [showDistanciaCalculator, setShowDistanciaCalculator] = useState(false)
 
   useEffect(() => {
     fetchLocales()
@@ -114,6 +118,38 @@ export default function LocalesForm() {
             </div>
           ) : (
             <>
+              {/* Botones de control */}
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setShowMapModal(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+                >
+                  <Map className="w-4 h-4" /> Ver mapa
+                </button>
+                <button
+                  onClick={() => setShowDistanciaCalculator(!showDistanciaCalculator)}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors"
+                >
+                  <MapPin className="w-4 h-4" /> Calcular distancias
+                </button>
+              </div>
+
+              {/* Calculadora de distancias (expandible) */}
+              {showDistanciaCalculator && (
+                <div className="p-4 border border-emerald-200 bg-emerald-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-emerald-900">📏 Calcular distancias</h3>
+                    <button
+                      onClick={() => setShowDistanciaCalculator(false)}
+                      className="text-xs text-emerald-700 hover:text-emerald-900 underline"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                  <DistanciaCalculator locales={locales} />
+                </div>
+              )}
+
               <div className="space-y-3">
                 <AnimatePresence>
                   {locales.map(local => (
@@ -244,7 +280,7 @@ export default function LocalesForm() {
         </div>
       </FormSection>
 
-      {/* Modal */}
+      {/* Modales */}
       <AnimatePresence>
         {modalOpen && (
           <LocalModal
@@ -252,6 +288,9 @@ export default function LocalesForm() {
             onClose={handleCloseModal}
             onSuccess={handleSuccess}
           />
+        )}
+        {showMapModal && (
+          <LocalesMapModal locales={locales} onClose={() => setShowMapModal(false)} />
         )}
       </AnimatePresence>
     </>
