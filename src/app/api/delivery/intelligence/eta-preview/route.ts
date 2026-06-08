@@ -29,18 +29,35 @@ export async function POST(request: Request) {
   // Obtener coordenadas de la ferretería
   const { data: ferreteria } = await supabase
     .from('ferreterias')
-    .select('lat, lng, nombre')
+    .select('lat, lng, nombre, direccion')
     .eq('id', session.ferreteriaId)
     .single()
 
-  if (!ferreteria?.lat || !ferreteria?.lng) {
-    return NextResponse.json({ error: 'La ferretería no tiene coordenadas configuradas' }, { status: 422 })
+  let ferreteriaLat = ferreteria?.lat as number | null
+  let ferreteriaLng = ferreteria?.lng as number | null
+
+  // Si no tiene coords, intentar geocodificar la dirección del negocio
+  if (!ferreteriaLat || !ferreteriaLng) {
+    const direccionNegocio = (ferreteria?.direccion as string | null) ?? null
+    if (direccionNegocio) {
+      const coords = await geocodificarDireccion(direccionNegocio, 'Lima, Perú')
+      if (coords) {
+        ferreteriaLat = coords.lat
+        ferreteriaLng = coords.lng
+      }
+    }
+  }
+
+  // Último fallback: centro de Lima
+  if (!ferreteriaLat || !ferreteriaLng) {
+    ferreteriaLat = -12.0464
+    ferreteriaLng = -77.0428
   }
 
   // Geocodificar dirección del cliente
   const coords = await geocodificarDireccion(
     direccion.trim(),
-    (ferreteria.nombre as string | null) ?? 'Lima',
+    (ferreteria?.nombre as string | null) ?? 'Lima',
   )
 
   if (!coords) {
@@ -58,8 +75,8 @@ export async function POST(request: Request) {
   // Calcular ETA inteligente
   const result = await calcularETAInteligente({
     ferreteriaId: session.ferreteriaId,
-    ferreteriaLat: ferreteria.lat as number,
-    ferreteriaLng: ferreteria.lng as number,
+    ferreteriaLat: ferreteriaLat,
+    ferreteriaLng: ferreteriaLng,
     clienteLat: coords.lat,
     clienteLng: coords.lng,
     zonaDeliveryId: zona_delivery_id ?? null,

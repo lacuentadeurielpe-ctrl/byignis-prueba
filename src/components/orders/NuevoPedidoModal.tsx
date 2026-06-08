@@ -65,6 +65,7 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
     source: string
   } | null>(null)
   const [etaLoading, setEtaLoading] = useState(false)
+  const [etaError, setEtaError] = useState<string | null>(null)
   const etaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Fase V: entrega programada
@@ -122,8 +123,9 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
 
   // ── ETA Preview debounced ────────────────────────────────────────────────
   const fetchEtaPreview = useCallback(async (dir: string, zona: string) => {
-    if (dir.trim().length < 8) { setEtaPreview(null); return }
+    if (dir.trim().length < 8) { setEtaPreview(null); setEtaError(null); return }
     setEtaLoading(true)
+    setEtaError(null)
     try {
       const res = await fetch('/api/delivery/intelligence/eta-preview', {
         method: 'POST',
@@ -133,21 +135,26 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
       if (res.ok) {
         const data = await res.json()
         setEtaPreview(data)
+        setEtaError(null)
       } else {
+        const body = await res.json().catch(() => ({}))
         setEtaPreview(null)
+        setEtaError(body.error ?? 'No se pudo calcular el ETA')
       }
     } catch {
       setEtaPreview(null)
+      setEtaError('Error de conexión')
     } finally {
       setEtaLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    if (modalidad !== 'delivery') { setEtaPreview(null); return }
+    if (modalidad !== 'delivery') { setEtaPreview(null); setEtaError(null); return }
     if (etaDebounceRef.current) clearTimeout(etaDebounceRef.current)
-    if (direccion.trim().length < 8) { setEtaPreview(null); setEtaLoading(false); return }
+    if (direccion.trim().length < 8) { setEtaPreview(null); setEtaError(null); setEtaLoading(false); return }
     setEtaLoading(true)
+    setEtaError(null)
     etaDebounceRef.current = setTimeout(() => {
       fetchEtaPreview(direccion, zonaId)
     }, 800)
@@ -523,7 +530,7 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 transition"
                   />
                   {/* ETA Preview badge */}
-                  <div className="mt-1.5 h-6 flex items-center">
+                  <div className="mt-1.5 min-h-6 flex items-center">
                     {etaLoading && (
                       <span className="flex items-center gap-1.5 text-xs text-zinc-400">
                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -544,6 +551,12 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
                         <span className="opacity-60">
                           {etaPreview.source === 'google' ? '· Google' : etaPreview.source === 'zone_avg' ? '· Historial IA' : '· Estimado'}
                         </span>
+                      </span>
+                    )}
+                    {!etaLoading && !etaPreview && etaError && (
+                      <span className="text-xs text-amber-500 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {etaError}
                       </span>
                     )}
                   </div>
