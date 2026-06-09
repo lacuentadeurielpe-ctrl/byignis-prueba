@@ -10,7 +10,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { enviarMensaje } from '@/lib/whatsapp/ycloud'
 import { getYCloudApiKey } from '@/lib/tenant'
 import { crearEntrega } from '@/lib/delivery/assignment'
-import { inicioDiaLima, finDiaLima } from '@/lib/tiempo'
+// (tiempo utils unused after cron window refactor)
 
 function adminClient() {
   return createAdminClient(
@@ -29,19 +29,19 @@ export async function GET(request: Request) {
 
   const supabase = adminClient()
 
-  // Ventana: hoy completo en Lima (00:00 Lima → 00:00 Lima siguiente día)
-  // El cron corre a las 6am Lima — activa los pedidos programados para HOY.
-  const inicioHoy = inicioDiaLima(0)   // 00:00 Lima hoy → UTC
-  const finHoy    = finDiaLima(0)      // 00:00 Lima mañana → UTC (límite exclusivo)
+  // Ventana: todos los pedidos cuya fecha ya pasó O es hoy (hasta fin del día Lima).
+  // Incluye pedidos atrasados de días anteriores que no fueron activados en su momento.
+  // El cron corre a las 6am Lima pero también se puede llamar manualmente.
+  const ahoraUtc = new Date().toISOString()
 
-  // Buscar pedidos programados cuya fecha de entrega cae hoy (Lima)
+  // Buscar pedidos programados cuya fecha de entrega YA PASÓ o es hoy (Lima).
+  // Usar lte(ahora) captura: pedidos de días anteriores (vencidos) + pedidos de hoy ya exigibles.
   // FERRETERÍA AISLADA: la query usa admin client — filtrar por estado + rango fecha
   const { data: pedidosProgramados, error } = await supabase
     .from('pedidos')
     .select('id, numero_pedido, modalidad, ferreteria_id, telefono_cliente, nombre_cliente, total, eta_minutos, ferreterias(nombre, telefono_whatsapp, telefono_dueno)')
     .eq('estado', 'programado')
-    .gte('fecha_entrega_programada', inicioHoy)
-    .lt('fecha_entrega_programada', finHoy)
+    .lte('fecha_entrega_programada', ahoraUtc)
 
   if (error) {
     console.error('[cron/activar-programados] Error buscando pedidos:', error)
