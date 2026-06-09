@@ -205,6 +205,12 @@ export default function DeliveryView({
   // Modal de incidencia / retorno / emergencia
   const [modal, setModal] = useState<{ pedidoId: string; tipo: 'incidencia' | 'retorno' | 'emergencia' } | null>(null)
 
+  // PIN gate de entrada — si el repartidor tiene PIN, se verifica al abrir el portal
+  const [pinEntradaVerificado, setPinEntradaVerificado] = useState(!tienePin)
+  const [pinEntradaError, setPinEntradaError]           = useState('')
+  const [pinEntradaLoading, setPinEntradaLoading]       = useState(false)
+  const [pinEntradaValor, setPinEntradaValor]           = useState('')
+
   // PIN gate para cobros con deuda
   const [pinPendiente, setPinPendiente] = useState<PedidoDelivery | null>(null)
   const [pinVerificado, setPinVerificado] = useState(false)
@@ -749,6 +755,70 @@ export default function DeliveryView({
   const totalCobradoHoy  = cobrosHoy.reduce((s, c) => s + (c.cobrado_monto ?? 0), 0)
   const totalEsperadoHoy = cobrosHoy.reduce((s, c) => s + c.total, 0)
   const entregasHoy      = cobrosHoy.length
+
+  // ── PIN Gate de entrada ────────────────────────────────────────────────────
+  async function verificarPinEntrada() {
+    if (!pinEntradaValor.trim()) return
+    setPinEntradaLoading(true)
+    setPinEntradaError('')
+    try {
+      const res = await fetch(`/api/delivery/${token}/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinEntradaValor }),
+      })
+      if (res.ok) {
+        setPinEntradaVerificado(true)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setPinEntradaError(data.error ?? 'PIN incorrecto')
+        setPinEntradaValor('')
+      }
+    } catch {
+      setPinEntradaError('Error de conexión. Intenta de nuevo.')
+    } finally {
+      setPinEntradaLoading(false)
+    }
+  }
+
+  if (!pinEntradaVerificado) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl border border-zinc-200 shadow-lg p-8 w-full max-w-sm text-center">
+          <div className="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Truck className="w-7 h-7 text-orange-500" />
+          </div>
+          <h2 className="text-lg font-bold text-zinc-900 mb-1">{nombre || 'Portal Repartidor'}</h2>
+          <p className="text-sm text-zinc-500 mb-6">{ferreteriaNombre}</p>
+          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Ingresa tu PIN</p>
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={6}
+            value={pinEntradaValor}
+            onChange={e => setPinEntradaValor(e.target.value.replace(/\D/g, ''))}
+            onKeyDown={e => e.key === 'Enter' && verificarPinEntrada()}
+            placeholder="••••"
+            className="w-full text-center text-2xl font-mono tracking-[0.5em] px-4 py-3 border-2 border-zinc-200 rounded-xl focus:outline-none focus:border-orange-400 transition mb-3"
+            autoFocus
+          />
+          {pinEntradaError && (
+            <p className="text-xs text-red-500 mb-3 flex items-center justify-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> {pinEntradaError}
+            </p>
+          )}
+          <button
+            onClick={verificarPinEntrada}
+            disabled={pinEntradaLoading || !pinEntradaValor}
+            className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold rounded-xl transition flex items-center justify-center gap-2"
+          >
+            {pinEntradaLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Entrar
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
