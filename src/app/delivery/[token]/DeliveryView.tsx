@@ -154,7 +154,17 @@ export default function DeliveryView({
   }, [])
 
   // Estado inline de cobro por pedido (sin modal)
-  const [cobros, setCobros] = useState<Record<string, { monto: string; metodo: string }>>({})
+  // Inicializar con el total del pedido para órdenes sin pagar,
+  // evitando que el repartidor confirme sin registrar el cobro.
+  const [cobros, setCobros] = useState<Record<string, { monto: string; metodo: string }>>(() => {
+    const initial: Record<string, { monto: string; metodo: string }> = {}
+    inicialAsignados.forEach(p => {
+      if (p.estado_pago !== 'pagado') {
+        initial[p.id] = { monto: p.total.toFixed(2), metodo: '' }
+      }
+    })
+    return initial
+  })
 
   // Estado de fotos por pedido: { pedidoId → urls[] }
   const [fotosMap, setFotosMap] = useState<Record<string, string[]>>({})
@@ -342,6 +352,13 @@ export default function DeliveryView({
       if (pedidoCompleto) {
         setPedidos(prev => [...prev, pedidoCompleto])
         setDisponibles(prev => prev.filter(p => p.id !== pedidoId))
+        // Pre-llenar monto cobrado con el total si el pedido no está pagado
+        if (pedidoCompleto.estado_pago !== 'pagado') {
+          setCobros(prev => ({
+            ...prev,
+            [pedidoId]: { monto: pedidoCompleto.total.toFixed(2), metodo: '' },
+          }))
+        }
         setTab('mis_pedidos')
         setExpandido(pedidoId)
       }
