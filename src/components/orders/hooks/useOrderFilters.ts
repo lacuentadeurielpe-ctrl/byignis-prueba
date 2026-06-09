@@ -1,10 +1,19 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { matchesFuzzy } from '@/lib/utils'
 
 export function useOrderFilters(pedidos: any[]) {
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroFecha, setFiltroFecha] = useState('')
+
+  // Debounce la búsqueda 200ms para no correr Levenshtein en cada tecla (BUG-007)
+  const [busquedaDelay, setBusquedaDelay] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setBusquedaDelay(busqueda), 200)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [busqueda])
 
   function estaEnRango(fecha: string, rango: string): boolean {
     if (!rango) return true
@@ -30,14 +39,15 @@ export function useOrderFilters(pedidos: any[]) {
       const nombreCliente = p.clientes?.nombre ?? p.nombre_cliente ?? ''
       const telefono = p.clientes?.telefono ?? p.telefono_cliente ?? ''
 
-      const matchBusqueda = matchesFuzzy(`${nombreCliente} ${telefono} ${p.numero_pedido}`, busqueda)
+      // Usa busquedaDelay (debounced) en vez de busqueda para evitar Levenshtein en cada tecla
+      const matchBusqueda = matchesFuzzy(`${nombreCliente} ${telefono} ${p.numero_pedido}`, busquedaDelay)
 
       const matchEstado = !filtroEstado || p.estado === filtroEstado
       const matchFecha = estaEnRango(p.created_at, filtroFecha)
 
       return matchBusqueda && matchEstado && matchFecha
     })
-  }, [pedidos, busqueda, filtroEstado, filtroFecha])
+  }, [pedidos, busquedaDelay, filtroEstado, filtroFecha])
 
   const hayFiltros = busqueda || filtroEstado || filtroFecha
 

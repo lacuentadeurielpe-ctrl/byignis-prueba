@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn, matchesFuzzy } from '@/lib/utils'
 import { X, Plus, Trash2, Search, Loader2, Package, Check, CalendarClock, ScanLine, Clock } from 'lucide-react'
@@ -47,6 +47,13 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
   const [itemManual, setItemManual] = useState({ nombre: '', unidad: 'und', cantidad: 1, precio: 0 })
   const [modoManual, setModoManual] = useState(false)
   const busquedaRef = useRef<HTMLInputElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [busquedaDelay, setBusquedaDelay] = useState('')
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setBusquedaDelay(busqueda), 150)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [busqueda])
 
   const [nombreCliente, setNombreCliente] = useState('')
   const [telefonoCliente, setTelefonoCliente] = useState('')
@@ -176,11 +183,12 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const sugerencias = busqueda.trim().length >= 1
-    ? productos.filter((p) =>
-        matchesFuzzy(p.nombre, busqueda) && p.stock > 0
-      ).slice(0, 8)
-    : []
+  // useMemo + busquedaDelay: evita correr Levenshtein en cada tecla (BUG-007)
+  const sugerencias = useMemo(() => {
+    const q = busquedaDelay.trim()
+    if (q.length < 1) return []
+    return productos.filter((p) => matchesFuzzy(p.nombre, q) && p.stock > 0).slice(0, 8)
+  }, [busquedaDelay, productos])
 
   const total = items.reduce((s, i) => s + i.cantidad * i.precio_unitario, 0)
 

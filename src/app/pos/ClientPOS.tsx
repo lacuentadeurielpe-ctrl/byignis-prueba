@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 import { matchesFuzzy, formatPEN } from '@/lib/utils'
 import {
   ArrowLeft, ScanLine, Search, Package, Trash2,
@@ -35,6 +35,16 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId, n
   const busquedaRef = useRef<HTMLInputElement>(null)
   const scanBuffer = useRef('')
   const lastKeyTime = useRef(0)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Búsqueda con debounce (150ms) para no correr Levenshtein en cada tecla ──
+  // busquedaDelay se actualiza 150ms después de que el usuario deja de escribir.
+  const [busquedaDelay, setBusquedaDelay] = useState(busqueda)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setBusquedaDelay(busqueda), 150)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [busqueda])
 
   // Fecha mínima = ahora + 30min redondeado a 15min
   const minFechaProgramada = (() => {
@@ -254,9 +264,12 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId, n
     }
   }
 
-  const sugerencias = busqueda.trim().length >= 1
-    ? productos.filter(p => matchesFuzzy(p.nombre, busqueda) || p.codigo_barras === busqueda).slice(0, 8)
-    : []
+  // Filtrado memoizado con debounce — evita correr Levenshtein en cada tecla (BUG-007)
+  const sugerencias = useMemo(() => {
+    const q = busquedaDelay.trim()
+    if (q.length < 1) return []
+    return productos.filter(p => matchesFuzzy(p.nombre, q) || p.codigo_barras === q).slice(0, 8)
+  }, [busquedaDelay, productos])
 
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row bg-zinc-50 overflow-hidden font-sans">
