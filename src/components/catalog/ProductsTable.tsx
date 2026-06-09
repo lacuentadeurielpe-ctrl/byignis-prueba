@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Pencil, Trash2, ToggleLeft, ToggleRight, Tag, Loader2, TrendingUp, AlertTriangle, Copy, Receipt, Printer } from 'lucide-react'
@@ -89,6 +89,30 @@ export default function ProductsTable({ productos: initialProductos, categorias:
   const [loadingEliminar, setLoadingEliminar] = useState(false)
   const [modalDuplicados, setModalDuplicados] = useState(false)
   const [modalEtiqueta, setModalEtiqueta] = useState<Producto | null>(null)
+
+  // Cuenta pares de nombres idénticos (ignorando tildes/mayúsculas) para colorear el botón
+  const numeroDuplicados = useMemo(() => {
+    function norm(s: string) {
+      return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, '').trim()
+    }
+    const usados = new Set<string>()
+    let count = 0
+    for (let i = 0; i < productos.length; i++) {
+      if (usados.has(productos[i].id)) continue
+      for (let j = i + 1; j < productos.length; j++) {
+        if (usados.has(productos[j].id)) continue
+        const na = norm(productos[i].nombre)
+        const nb = norm(productos[j].nombre)
+        if (na && na === nb) {
+          usados.add(productos[i].id)
+          usados.add(productos[j].id)
+          count++
+          break
+        }
+      }
+    }
+    return count
+  }, [productos])
 
   const scanBuffer = useRef('')
   const lastKeyTime = useRef(0)
@@ -220,8 +244,21 @@ export default function ProductsTable({ productos: initialProductos, categorias:
         <button onClick={() => setModalCategorias(true)} className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-600 hover:bg-zinc-50 transition font-medium">
           <Tag className="w-3.5 h-3.5" /> Categorías
         </button>
-        <button onClick={() => setModalDuplicados(true)} className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-sm text-amber-700 hover:bg-amber-100 transition font-medium">
-          <Copy className="w-3.5 h-3.5" /> Duplicados
+        <button
+          onClick={() => setModalDuplicados(true)}
+          className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm transition font-medium ${
+            numeroDuplicados > 0
+              ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+              : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50'
+          }`}
+        >
+          <Copy className="w-3.5 h-3.5" />
+          Duplicados
+          {numeroDuplicados > 0 && (
+            <span className="ml-0.5 text-[10px] font-bold bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full leading-none">
+              {numeroDuplicados}
+            </span>
+          )}
         </button>
         <button
           onClick={toggleIgv}

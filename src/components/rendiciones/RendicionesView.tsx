@@ -38,7 +38,11 @@ export default function RendicionesView({
   const [rendiciones, setRendiciones] = useState(inicial)
   const [generando, setGenerando] = useState(false)
   const [confirmando, setConfirmando] = useState<string | null>(null)
-  const [form, setForm] = useState({ repartidor_id: '', fecha: new Date().toISOString().slice(0, 10) })
+  // Fecha actual en zona horaria de Lima (UTC-5) — evita que after 7pm UTC se muestre el día siguiente
+  const [form, setForm] = useState({
+    repartidor_id: '',
+    fecha: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' }),
+  })
   const [mostrarForm, setMostrarForm] = useState(false)
 
   async function generarRendicion(e: React.FormEvent) {

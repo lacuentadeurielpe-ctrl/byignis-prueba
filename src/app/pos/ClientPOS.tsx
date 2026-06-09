@@ -478,15 +478,35 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
                 <button
                   key={p.id}
                   onClick={() => agregarItem(p)}
-                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-white rounded-xl transition group border border-transparent hover:border-zinc-200 hover:shadow-sm"
+                  className={cn(
+                    'w-full flex items-center gap-3 p-3 text-left rounded-xl transition group border hover:shadow-sm',
+                    p.stock === 0
+                      ? 'border-amber-200 bg-amber-50/60 hover:bg-amber-50 hover:border-amber-300'
+                      : 'border-transparent hover:bg-white hover:border-zinc-200'
+                  )}
                 >
-                  <div className="w-9 h-9 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-zinc-900 group-hover:text-white transition">
+                  <div className={cn(
+                    'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition',
+                    p.stock === 0
+                      ? 'bg-amber-100 text-amber-500 group-hover:bg-amber-500 group-hover:text-white'
+                      : 'bg-zinc-100 group-hover:bg-zinc-900 group-hover:text-white'
+                  )}>
                     <Package className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="font-bold text-sm text-zinc-900 truncate">{p.nombre}</h4>
-                    <p className="text-xs text-zinc-500">Stk: {p.stock} · {formatPEN(p.precio_base)}</p>
+                    <p className="text-xs">
+                      <span className={p.stock === 0 ? 'text-amber-600 font-semibold' : 'text-zinc-500'}>
+                        Stk: {p.stock}{p.stock === 0 ? ' — sin stock' : ''}
+                      </span>
+                      <span className="text-zinc-400"> · {formatPEN(p.precio_base)}</span>
+                    </p>
                   </div>
+                  {p.stock === 0 && (
+                    <span className="shrink-0 text-[9px] font-bold bg-amber-200 text-amber-700 px-1.5 py-0.5 rounded-full leading-none">
+                      0
+                    </span>
+                  )}
                 </button>
               )) : (
                 <p className="text-center text-sm text-zinc-500 py-8">No hay resultados</p>
