@@ -131,12 +131,16 @@ export default function DeliveryDashboard({
   confidenceMap = {},
   colaCount = 0,
   incidenciasCount = 0,
+  sinZonas = false,
+  sinVehiculos = false,
 }: {
   initialEntregas: EntregaDashboard[]
   initialProgramados?: PedidoProgramado[]
   confidenceMap?: Record<string, { confidence: number; source: string }>
   colaCount?: number
   incidenciasCount?: number
+  sinZonas?: boolean
+  sinVehiculos?: boolean
 }) {
   const [tab, setTab]                 = useState<'vivo' | 'programados' | 'cola' | 'incidencias'>('vivo')
   const [entregas, setEntregas]       = useState(initialEntregas)
@@ -240,6 +244,29 @@ export default function DeliveryDashboard({
 
   return (
     <div className="space-y-6">
+
+      {/* ── Banner de configuración pendiente ── */}
+      {(sinZonas || sinVehiculos) && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">Delivery sin configuración completa</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              {sinZonas && sinVehiculos
+                ? 'No tienes zonas de delivery ni vehículos configurados. Los pedidos delivery no tendrán zona ni ETA asignados.'
+                : sinZonas
+                ? 'No tienes zonas de delivery configuradas. Los pedidos no tendrán zona ni cálculo de costo por zona.'
+                : 'No tienes vehículos configurados. Los pedidos no podrán asignarse a un repartidor con vehículo.'}
+            </p>
+            <a
+              href="/dashboard/settings-2/delivery"
+              className="inline-block mt-2 text-xs font-semibold text-amber-700 underline hover:text-amber-900"
+            >
+              Configurar delivery →
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Tabs: En vivo / Cola / Incidencias / Programados */}
       <div className="flex gap-1 border-b border-zinc-200 overflow-x-auto">

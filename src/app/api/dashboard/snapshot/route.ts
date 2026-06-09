@@ -34,8 +34,11 @@ export async function GET(request: Request) {
       ventasRepo.obtenerPedidosActivosPipeline(fid) // Solo para conteo rápido
     ])
 
-    const ingresosHoy = (pedidosHoy ?? []).filter((p: any) => p.estado !== 'cancelado').reduce((s, p) => s + (p.total ?? 0), 0)
-    const ingresosAyer = (pedidosAyer ?? []).filter((p: any) => p.estado !== 'cancelado').reduce((s, p) => s + (p.total ?? 0), 0)
+    // Excluimos los mismos estados que dashboard_kpi_rango para que ambas cifras sean consistentes:
+    // pendiente (no confirmado), cancelado (nulo), programado (aún no activo)
+    const ESTADOS_EXCLUIR_INGRESOS = new Set(['pendiente', 'cancelado', 'programado'])
+    const ingresosHoy = (pedidosHoy ?? []).filter((p: any) => !ESTADOS_EXCLUIR_INGRESOS.has(p.estado)).reduce((s, p) => s + (p.total ?? 0), 0)
+    const ingresosAyer = (pedidosAyer ?? []).filter((p: any) => !ESTADOS_EXCLUIR_INGRESOS.has(p.estado)).reduce((s, p) => s + (p.total ?? 0), 0)
     
     // Calcular porcentaje de cambio
     let pctCmbHoy = 0

@@ -615,7 +615,7 @@ export default function DeliveryView({
                       {/* Monto */}
                       <div>
                         <label className="text-xs text-zinc-500 font-medium mb-1 block">
-                          Monto cobrado <span className="text-zinc-400">(deja vacío si ya está pagado)</span>
+                          Monto cobrado al entregar
                         </label>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-400 font-medium">S/</span>
@@ -627,6 +627,12 @@ export default function DeliveryView({
                             className="w-full pl-9 pr-3 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
                           />
                         </div>
+                        {/* Aviso cuando no hay monto registrado */}
+                        {montoNum === 0 && (
+                          <p className="mt-1.5 text-[11px] text-amber-600 flex items-center gap-1">
+                            ⚠️ Sin monto — el pedido quedará como <strong>pago pendiente</strong>
+                          </p>
+                        )}
                       </div>
 
                       {/* Aviso de cobro parcial */}

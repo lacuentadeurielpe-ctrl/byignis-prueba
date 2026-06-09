@@ -53,15 +53,17 @@ export async function POST(request: Request) {
   // Límites UTC correctos para el día Lima solicitado
   const { inicio: inicioUtc, fin: finUtc } = limaDiaAUTC(fechaDia)
 
-  // Sum up cobrado_monto from entregado pedidos for this repartidor on this day
+  // Sum up cobrado_monto from entregado pedidos for this repartidor on this day.
+  // Filtramos por updated_at (no created_at) porque updated_at se actualiza
+  // al marcar el pedido como 'entregado', capturando la fecha real de entrega.
   const { data: pedidosDia } = await supabase
     .from('pedidos')
     .select('total, cobrado_monto')
     .eq('ferreteria_id', session.ferreteriaId)
     .eq('repartidor_id', repartidor_id)
     .eq('estado', 'entregado')
-    .gte('created_at', inicioUtc)
-    .lt('created_at', finUtc)
+    .gte('updated_at', inicioUtc)
+    .lt('updated_at', finUtc)
 
   const monto_esperado = pedidosDia?.reduce((s, p) => s + (p.total ?? 0), 0) ?? 0
   const monto_recibido = pedidosDia?.reduce((s, p) => s + (p.cobrado_monto ?? 0), 0) ?? 0

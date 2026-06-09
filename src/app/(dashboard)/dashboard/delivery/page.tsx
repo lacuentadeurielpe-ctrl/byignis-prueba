@@ -22,7 +22,7 @@ export default async function DeliveryPage() {
   const inicioHoy   = inicioDiaLima(0)
   const fin14dias   = inicioDiaLima(15)   // exclusivo → 14 días completos
 
-  const [entregas, pedidosProgramados, colaData, incidenciasData] = await Promise.all([
+  const [entregas, pedidosProgramados, colaData, incidenciasData, zonasCount, vehiculosCount] = await Promise.all([
     deliveryRepo.obtenerEntregasDashboard(session.ferreteriaId, hoy),
     deliveryRepo.obtenerPedidosProgramados(session.ferreteriaId, inicioHoy, fin14dias),
     // Count pedidos en cola (sin asignar)
@@ -46,6 +46,17 @@ export default async function DeliveryPage() {
       .eq('ferreteria_id', session.ferreteriaId)
       .not('incidencia_tipo', 'is', null)
       .not('estado', 'in', '("entregado","cancelado","devuelto")')
+      .then(({ count }) => count ?? 0),
+    // ── Setup checks: zonas y vehículos configurados ──
+    supabase
+      .from('zonas_delivery')
+      .select('id', { count: 'exact', head: true })
+      .eq('ferreteria_id', session.ferreteriaId)
+      .then(({ count }) => count ?? 0),
+    supabase
+      .from('vehiculos')
+      .select('id', { count: 'exact', head: true })
+      .eq('ferreteria_id', session.ferreteriaId)
       .then(({ count }) => count ?? 0),
   ])
 
@@ -88,6 +99,8 @@ export default async function DeliveryPage() {
         confidenceMap={confidenceMap}
         colaCount={colaData as number}
         incidenciasCount={incidenciasData as number}
+        sinZonas={(zonasCount as number) === 0}
+        sinVehiculos={(vehiculosCount as number) === 0}
       />
     </div>
   )

@@ -1,10 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import { cn, formatPEN } from '@/lib/utils'
-import { CheckCircle2, Plus, Loader2, TrendingUp, TrendingDown, Minus, ClipboardList } from 'lucide-react'
+import { cn, formatPEN, labelEstadoPago, colorEstadoPago } from '@/lib/utils'
+import { CheckCircle2, Plus, Loader2, TrendingUp, TrendingDown, Minus, ClipboardList, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Rol } from '@/lib/auth/roles'
 import type { PermisoMap } from '@/lib/auth/permisos'
+
+interface PedidoDetalle {
+  id: string
+  numero_pedido: string
+  nombre_cliente: string
+  total: number
+  cobrado_monto: number | null
+  cobrado_metodo: string | null
+  estado_pago: string
+  updated_at: string
+  clientes: { nombre: string | null } | null
+}
 
 interface Rendicion {
   id: string
@@ -44,6 +56,31 @@ export default function RendicionesView({
     fecha: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' }),
   })
   const [mostrarForm, setMostrarForm] = useState(false)
+
+  // ── Vista de detalle: pedidos que componen cada rendición ──
+  const [expandidoId, setExpandidoId]   = useState<string | null>(null)
+  const [detalleCargando, setDetalleCargando] = useState<string | null>(null)
+  const [detalles, setDetalles] = useState<Record<string, PedidoDetalle[]>>({})
+
+  async function cargarDetalle(rendicionId: string) {
+    if (detalles[rendicionId] !== undefined) {
+      // Ya cargado — solo toggle expand
+      setExpandidoId(prev => prev === rendicionId ? null : rendicionId)
+      return
+    }
+    setDetalleCargando(rendicionId)
+    setExpandidoId(rendicionId)
+    try {
+      const res = await fetch(`/api/rendiciones/${rendicionId}`)
+      if (!res.ok) throw new Error('Error cargando detalle')
+      const data = await res.json()
+      setDetalles(prev => ({ ...prev, [rendicionId]: data.pedidos ?? [] }))
+    } catch {
+      setDetalles(prev => ({ ...prev, [rendicionId]: [] }))
+    } finally {
+      setDetalleCargando(null)
+    }
+  }
 
   async function generarRendicion(e: React.FormEvent) {
     e.preventDefault()
@@ -146,45 +183,99 @@ export default function RendicionesView({
         </div>
       ) : (
         <div className="space-y-2">
-          {rendiciones.map((r) => (
-            <div key={r.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {r.repartidores?.nombre ?? 'Repartidor'}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {new Date(r.fecha + 'T00:00:00').toLocaleDateString('es-PE', { weekday: 'short', day: 'numeric', month: 'short' })}
-                  </p>
+          {rendiciones.map((r) => {
+            const isExpanded = expandidoId === r.id
+            const pedidosDetalle = detalles[r.id]
+            const cargandoEste = detalleCargando === r.id
+
+            return (
+              <div key={r.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                {/* Fila principal — clickeable para ver detalle */}
+                <div
+                  className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition"
+                  onClick={() => cargarDetalle(r.id)}
+                >
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                        {r.repartidores?.nombre ?? 'Repartidor'}
+                        {cargandoEste
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />
+                          : isExpanded
+                          ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
+                          : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                        }
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(r.fecha + 'T00:00:00').toLocaleDateString('es-PE', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <div className="text-center">
+                        <p className="text-xs text-gray-400">Esperado</p>
+                        <p className="text-sm font-semibold text-gray-700">{formatPEN(r.monto_esperado)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-400">Recibido</p>
+                        <p className="text-sm font-semibold text-gray-700">{formatPEN(r.monto_recibido)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-gray-400">Diferencia</p>
+                        <p className={cn('text-sm font-bold flex items-center gap-0.5', diferenciaColor(r.diferencia))}>
+                          {diferenciaIcon(r.diferencia)}
+                          {Math.abs(r.diferencia) < 0.01 ? '—' : formatPEN(Math.abs(r.diferencia))}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {r.confirmado_at && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-green-700 bg-green-50 rounded-lg px-2.5 py-1 w-fit">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Confirmado {new Date(r.confirmado_at).toLocaleDateString('es-PE')}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">Esperado</p>
-                    <p className="text-sm font-semibold text-gray-700">{formatPEN(r.monto_esperado)}</p>
+                {/* Panel de detalle — pedidos individuales */}
+                {isExpanded && pedidosDetalle !== undefined && (
+                  <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
+                    {pedidosDetalle.length === 0 ? (
+                      <p className="text-xs text-gray-400 text-center py-2">
+                        No se encontraron pedidos para este día/repartidor.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                          {pedidosDetalle.length} pedido{pedidosDetalle.length !== 1 ? 's' : ''} entregados
+                        </p>
+                        {pedidosDetalle.map((p) => (
+                          <div key={p.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-gray-800 truncate">
+                                {p.clientes?.nombre ?? p.nombre_cliente}
+                              </p>
+                              <p className="text-[11px] text-gray-400 font-mono">{p.numero_pedido}</p>
+                            </div>
+                            <div className="text-right shrink-0 space-y-0.5">
+                              <p className="text-xs font-semibold text-gray-700">{formatPEN(p.total)}</p>
+                              {p.cobrado_monto != null && p.cobrado_monto !== p.total && (
+                                <p className="text-[11px] text-amber-600">cobrado {formatPEN(p.cobrado_monto)}</p>
+                              )}
+                              <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium', colorEstadoPago(p.estado_pago))}>
+                                {labelEstadoPago(p.estado_pago)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">Recibido</p>
-                    <p className="text-sm font-semibold text-gray-700">{formatPEN(r.monto_recibido)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">Diferencia</p>
-                    <p className={cn('text-sm font-bold flex items-center gap-0.5', diferenciaColor(r.diferencia))}>
-                      {diferenciaIcon(r.diferencia)}
-                      {Math.abs(r.diferencia) < 0.01 ? '—' : formatPEN(Math.abs(r.diferencia))}
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
-
-              {r.confirmado_at && (
-                <div className="mt-2 flex items-center gap-1.5 text-xs text-green-700 bg-green-50 rounded-lg px-2.5 py-1 w-fit">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Confirmado {new Date(r.confirmado_at).toLocaleDateString('es-PE')}
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

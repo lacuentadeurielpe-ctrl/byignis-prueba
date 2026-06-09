@@ -131,6 +131,11 @@ export class VentasRepository {
     input: PedidoInput,
     items: ItemPedidoInput[]
   ) {
+    // Guard: nunca crear un pedido "fantasma" sin ítems (BUG-017)
+    if (!items || items.length === 0) {
+      throw new Error('No se puede crear un pedido sin ítems — al menos un producto es requerido')
+    }
+
     const { data: pedido, error: errPed } = await this.supabase
       .from('pedidos')
       .insert({
