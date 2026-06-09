@@ -53,4 +53,77 @@ export type InngestEvents = {
       source: string
     }
   }
+
+  /** Pedido programado creado → iniciar workflow de espera */
+  'delivery/pedido.programado': {
+    data: {
+      ferreteriaId:     string
+      pedidoId:         string
+      numeroPedido:     string
+      horaProgramadaAt: string     // ISO timestamp
+      telefonoCliente:  string | null
+      telefonoWhatsapp: string | null
+      nombreFerreteria: string
+      pesoTotalKg?:     number
+      zonaDeliveryId?:  string | null
+    }
+  }
+
+  /** Avería reportada en un vehículo */
+  'delivery/vehiculo.averia': {
+    data: {
+      ferreteriaId:        string
+      vehiculoId:          string
+      repartidorId:        string
+      descripcion:         string
+      grave?:              boolean
+      tiempoEstimadoMin?:  number | null
+      incidenteId?:        string | null
+    }
+  }
+
+  /** Repartidor reporta emergencia personal */
+  'delivery/repartidor.emergencia': {
+    data: {
+      ferreteriaId:       string
+      repartidorId:       string
+      motivo:             string
+      tiempoEstimadoMin?: number | null
+      autoReasignar?:     boolean
+    }
+  }
+
+  /** Cliente ausente al intentar entrega */
+  'delivery/cliente.ausente': {
+    data: {
+      ferreteriaId:    string
+      pedidoId:        string
+      entregaId:       string
+      numeroPedido:    string
+      telefonoCliente: string | null
+      telefonoWhatsapp: string | null
+      nombreFerreteria: string
+      repartidorNombre: string
+      zonaDeliveryId?:  string | null
+      intento?:         number
+    }
+  }
+
+  /** Pedido cancelado → liberar slot y adelantar cola */
+  'delivery/pedido.cancelado': {
+    data: {
+      ferreteriaId: string
+      pedidoId:     string
+      entregaId?:   string | null
+      repartidorId?: string | null
+      motivo?:      string
+    }
+  }
+
+  /** Trigger manual del monitor de demoras */
+  'delivery/monitor.check': {
+    data: {
+      ferreteriaId?: string   // si null, revisa todas
+    }
+  }
 }

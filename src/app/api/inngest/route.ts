@@ -10,12 +10,27 @@ import { inngest } from '@/lib/inngest/client'
 import { fnCheckDelay } from '@/lib/inngest/functions/check-delay'
 import { fnQueueRecalculate } from '@/lib/inngest/functions/queue-recalculate'
 import { fnUnassignedAlert } from '@/lib/inngest/functions/unassigned-alert'
+// BLOQUE 4 — Nuevos workflows de orquestación
+import { fnPedidoProgramado } from '@/lib/inngest/functions/pedido-programado'
+import { fnAveriaVehiculo } from '@/lib/inngest/functions/averia-vehiculo'
+import { fnRepartidorEmergencia } from '@/lib/inngest/functions/repartidor-emergencia'
+import { fnClienteAusente } from '@/lib/inngest/functions/cliente-ausente'
+import { fnPedidoCanceladoReasignar } from '@/lib/inngest/functions/pedido-cancelado-reasignar'
+import { fnMonitorDemora } from '@/lib/inngest/functions/monitor-demora'
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [
+    // Existentes
     fnCheckDelay,
     fnQueueRecalculate,
     fnUnassignedAlert,
+    // Orquestación completa de delivery
+    fnPedidoProgramado,
+    fnAveriaVehiculo,
+    fnRepartidorEmergencia,
+    fnClienteAusente,
+    fnPedidoCanceladoReasignar,
+    fnMonitorDemora,
   ],
 })

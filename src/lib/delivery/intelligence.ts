@@ -1,19 +1,23 @@
 /**
- * Delivery Intelligence — Motor de ETA Inteligente
+ * Delivery Intelligence — Motor de ETA Inteligente (v2)
  *
  * Cadena de cálculo (fallback layers):
  *   1. Google Routes API (traffic-aware) → si NEXT_PUBLIC_GOOGLE_MAPS_API_KEY existe
- *   2. Zone stats históricos → si hay >=5 entregas en zona+hora+día
- *   3. Ajustes por hora pico Lima, peso, cola
- *   4. Haversine + factor urbano 1.35x → siempre disponible
+ *   2. Regresión lineal ponderada por recencia (simple-statistics)
+ *      → si hay >=10 predicciones con resultado real en la zona
+ *   3. Zone stats históricos (avg/p90) → si hay >=5 entregas en zona+hora+día
+ *   4. Haversine + factor urbano + hora pico + factores de zona
  *
- * Funciones auxiliares:
- *   - registrarPrediccion() → inserta en delivery_predictions
- *   - completarPrediccion() → backfill resultado + recalcular stats
- *   - recalcularZoneStats() → re-agregar últimos N días
+ * Mejoras v2:
+ *   - Usa specs reales del vehículo asignado (velocidad, capacidad)
+ *   - Regresión lineal con recencia (últimos 30 días valen más)
+ *   - P90 para ETAs al cliente (no el promedio — el percentil 90)
+ *   - Detección de anomalías (excluye outliers del modelo)
+ *   - Factor de zona desde delivery_zona_factores
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import * as ss from 'simple-statistics'
 import { getDistanceWithTraffic } from './google-routes'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -25,11 +29,13 @@ export interface ParamsETAInteligente {
   clienteLat: number
   clienteLng: number
   zonaDeliveryId?: string | null
-  vehiculoTipo?: string | null
-  velocidadKmh?: number
+  vehiculoId?: string | null       // ID del vehículo asignado → pulls specs from DB
+  vehiculoTipo?: string | null     // fallback si no hay vehiculoId
+  velocidadKmh?: number            // override manual (ignora DB si se pasa)
   pesoTotalKg?: number
   itemsCount?: number
   pedidosEnCola?: number
+  usarP90?: boolean                // true = usar percentil 90 en vez de promedio (para notificar al cliente)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any>
 }
@@ -98,7 +104,132 @@ function getWeightPenalty(pesoKg: number): number {
   return 0
 }
 
-// ── Main ETA Calculator ──────────────────────────────────────────────────────
+// ── Obtener specs reales del vehículo ─────────────────────────────────────────
+
+async function obtenerSpecsVehiculo(
+  vehiculoId: string | null | undefined,
+  vehiculoTipoFallback: string | null | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+): Promise<{ velocidadKmh: number; capacidadKg: number; tipo: string }> {
+  if (vehiculoId) {
+    const { data: v } = await supabase
+      .from('vehiculos_delivery')
+      .select('tipo, velocidad_kmh, capacidad_kg')
+      .eq('id', vehiculoId)
+      .maybeSingle()
+
+    if (v) {
+      return {
+        velocidadKmh: (v.velocidad_kmh as number) ?? 30,
+        capacidadKg:  (v.capacidad_kg  as number) ?? 150,
+        tipo:         (v.tipo          as string) ?? 'moto',
+      }
+    }
+  }
+
+  // Fallback por tipo de vehículo
+  const tipo = vehiculoTipoFallback ?? 'moto'
+  const defaults: Record<string, { vel: number; cap: number }> = {
+    moto:       { vel: 35, cap: 80  },
+    auto:       { vel: 28, cap: 400 },
+    bicicleta:  { vel: 15, cap: 30  },
+    camion:     { vel: 22, cap: 1500 },
+  }
+  const d = defaults[tipo] ?? defaults.moto
+  return { velocidadKmh: d.vel, capacidadKg: d.cap, tipo }
+}
+
+// ── Regresión lineal ponderada por recencia (simple-statistics) ──────────────
+
+async function calcularETARegresion(
+  ferreteriaId:  string,
+  zonaDeliveryId: string,
+  distanciaKm:   number,
+  hora:          number,
+  dia:           number,
+  vehiculoTipo:  string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase:      SupabaseClient<any>,
+  usarP90 = false,
+): Promise<{ etaMin: number; confidence: number } | null> {
+  const cutoff30d = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+  const cutoff90d = new Date(Date.now() - 90 * 24 * 3600 * 1000)
+
+  // Traer predicciones completadas de esta zona (últimos 90 días)
+  const { data: preds } = await supabase
+    .from('delivery_predictions')
+    .select('duracion_real_min, distancia_km, hora_dia, dia_semana, vehiculo_tipo, created_at, error_min')
+    .eq('ferreteria_id', ferreteriaId)
+    .eq('zona_delivery_id', zonaDeliveryId)
+    .not('duracion_real_min', 'is', null)
+    .gte('created_at', cutoff90d.toISOString())
+    .or('owner_feedback->inusual.is.null,owner_feedback->inusual.eq.false')
+
+  if (!preds || preds.length < 10) return null
+
+  // Detección de anomalías: excluir valores que se desvían >2 desviaciones estándar
+  const duraciones = preds.map((p: Record<string, unknown>) => p.duracion_real_min as number)
+  const meanDur  = ss.mean(duraciones)
+  const stdDur   = ss.standardDeviation(duraciones)
+  const umbralMin = meanDur - 2 * stdDur
+  const umbralMax = meanDur + 2 * stdDur
+
+  const predsFiltradas = preds.filter((p: Record<string, unknown>) => {
+    const d = p.duracion_real_min as number
+    return d >= umbralMin && d <= umbralMax
+  })
+
+  if (predsFiltradas.length < 8) return null
+
+  // Peso por recencia: predicciones del último mes valen 3x más
+  const puntos: Array<[number, number]> = predsFiltradas.map((p: Record<string, unknown>) => {
+    const esReciente = new Date(p.created_at as string) >= cutoff30d
+    const peso = esReciente ? 3 : 1
+
+    // Variables de entrada para la regresión:
+    // x = distancia_km (principal predictor)
+    // Ajuste adicional: mismo tipo de vehículo y franja horaria similar
+    const mismoVehiculo = p.vehiculo_tipo === vehiculoTipo ? 1.0 : 0.8
+    const mismaHora     = Math.abs((p.hora_dia as number) - hora) <= 2 ? 1.0 : 0.7
+    const mismaZonaTemporal = mismaHora * mismoVehiculo
+
+    // Para regresión ponderada: duplicar los puntos pesados
+    return Array.from({ length: peso }, () =>
+      [(p.distancia_km as number) * mismaZonaTemporal, (p.duracion_real_min as number)] as [number, number]
+    )
+  }).flat()
+
+  try {
+    const regresion = ss.linearRegression(puntos)
+    const prediccion = ss.linearRegressionLine(regresion)
+    const etaBase = prediccion(distanciaKm)
+
+    if (etaBase <= 0) return null
+
+    // Si usarP90: calcular percentil 90 de los residuales y sumarlo
+    let etaFinal = etaBase
+    if (usarP90) {
+      const residuales = predsFiltradas.map((p: Record<string, unknown>) =>
+        (p.duracion_real_min as number) - prediccion(p.distancia_km as number)
+      )
+      const p90Residual = ss.quantile(residuales.sort((a, b) => a - b), 0.9)
+      etaFinal = etaBase + Math.max(p90Residual, 0)
+    }
+
+    // Confidence basada en R² de la regresión
+    const yActuales = puntos.map(p => p[1])
+    const yPredichos = puntos.map(p => prediccion(p[0]))
+    const rSquared = ss.rSquared(puntos, prediccion)
+    const confidence = Math.min(0.88, Math.max(0.5, rSquared * 0.9))
+
+    return { etaMin: Math.ceil(etaFinal), confidence }
+  } catch {
+    return null
+  }
+}
+
+// ── Main ETA Calculator v2 ────────────────────────────────────────────────────
 
 export async function calcularETAInteligente(
   params: ParamsETAInteligente,
@@ -108,22 +239,48 @@ export async function calcularETAInteligente(
     ferreteriaLat, ferreteriaLng,
     clienteLat, clienteLng,
     zonaDeliveryId,
-    velocidadKmh = 30,
+    vehiculoId,
+    velocidadKmh: velocidadOverride,
     pesoTotalKg = 0,
     pedidosEnCola = 0,
+    usarP90 = false,
     supabase,
   } = params
 
   const hora = horaLima()
-  const dia = diaLima()
-  const trafficFactor = getTrafficFactor(hora)
-  const queuePenalty = T_PREP_BASE + pedidosEnCola * T_PREP_COLA
-  const weightPenalty = getWeightPenalty(pesoTotalKg)
+  const dia  = diaLima()
+
+  // ── Obtener specs del vehículo real ───────────────────────────────────────
+  const specs = await obtenerSpecsVehiculo(vehiculoId, params.vehiculoTipo, supabase)
+  const velocidadKmh = velocidadOverride ?? specs.velocidadKmh
+
+  const trafficFactor  = getTrafficFactor(hora)
+  const queuePenalty   = T_PREP_BASE + pedidosEnCola * T_PREP_COLA
+  const weightPenalty  = getWeightPenalty(pesoTotalKg)
 
   const adjustments = {
     trafficFactor,
-    queuePenaltyMin: queuePenalty,
+    queuePenaltyMin:  queuePenalty,
     weightPenaltyMin: weightPenalty,
+  }
+
+  // Factor de zona (incidencias históricas)
+  let factorZona = 1.0
+  let penalizacionZonaMin = 0
+  if (zonaDeliveryId) {
+    const { data: fz } = await supabase
+      .from('delivery_zona_factores')
+      .select('factor_demora, penalizacion_min')
+      .eq('ferreteria_id', ferreteriaId)
+      .eq('zona_delivery_id', zonaDeliveryId)
+      .eq('dia_semana', dia)
+      .eq('hora_bloque', hora)
+      .maybeSingle()
+
+    if (fz) {
+      factorZona          = (fz.factor_demora    as number) ?? 1.0
+      penalizacionZonaMin = (fz.penalizacion_min as number) ?? 0
+    }
   }
 
   // ── Layer 1: Google Routes API ────────────────────────────────────────────
@@ -132,19 +289,19 @@ export async function calcularETAInteligente(
     try {
       const gResult = await getDistanceWithTraffic(
         { lat: ferreteriaLat, lng: ferreteriaLng },
-        { lat: clienteLat, lng: clienteLng },
+        { lat: clienteLat,    lng: clienteLng    },
         googleApiKey,
       )
 
       if (gResult) {
-        const etaRuta = gResult.duracionTraficoMin
-        const etaTotal = etaRuta + queuePenalty + weightPenalty
+        const etaRuta  = gResult.duracionTraficoMin * factorZona
+        const etaTotal = etaRuta + queuePenalty + weightPenalty + penalizacionZonaMin
 
         return {
-          etaMinutos: Math.ceil(etaTotal),
+          etaMinutos:  Math.ceil(etaTotal),
           distanciaKm: gResult.distanciaKm,
-          confidence: 0.9,
-          source: 'google',
+          confidence:  0.9,
+          source:      'google',
           adjustments,
         }
       }
@@ -153,7 +310,33 @@ export async function calcularETAInteligente(
     }
   }
 
-  // ── Layer 2: Zone historical stats ────────────────────────────────────────
+  // ── Distancia Haversine (necesaria para layers 2-4) ───────────────────────
+  const distLineal = haversineKm(ferreteriaLat, ferreteriaLng, clienteLat, clienteLng)
+  const distKm     = Math.round(distLineal * FACTOR_URBANO * 10) / 10
+
+  // ── Layer 2: Regresión lineal ponderada por recencia (simple-statistics) ──
+  if (zonaDeliveryId) {
+    try {
+      const regResult = await calcularETARegresion(
+        ferreteriaId, zonaDeliveryId, distKm, hora, dia, specs.tipo, supabase, usarP90,
+      )
+
+      if (regResult) {
+        const etaTotal = regResult.etaMin * factorZona + queuePenalty + weightPenalty + penalizacionZonaMin
+        return {
+          etaMinutos:  Math.ceil(etaTotal),
+          distanciaKm: distKm,
+          confidence:  regResult.confidence,
+          source:      'zone_avg',
+          adjustments,
+        }
+      }
+    } catch (e) {
+      console.warn('[Intelligence] Regresión fallback:', e)
+    }
+  }
+
+  // ── Layer 3: Zone stats históricos (avg o p90) ────────────────────────────
   if (zonaDeliveryId) {
     try {
       const { data: stats } = await supabase
@@ -166,22 +349,17 @@ export async function calcularETAInteligente(
         .maybeSingle()
 
       if (stats && (stats.entregas_count ?? 0) >= CONFIDENCE_MIN_ENTREGAS) {
-        const avgDuracion = stats.avg_duracion_min as number
-        // Adjust by current queue + weight
-        const etaTotal = avgDuracion + queuePenalty + weightPenalty
-
-        // Confidence based on sample size (caps at 0.85 for zone avg)
-        const sampleConfidence = Math.min(0.85, 0.5 + (stats.entregas_count as number) / 100)
-
-        // Calculate distance via Haversine for the record
-        const distLineal = haversineKm(ferreteriaLat, ferreteriaLng, clienteLat, clienteLng)
-        const distKm = Math.round(distLineal * FACTOR_URBANO * 10) / 10
+        const durBase    = usarP90
+          ? ((stats.p90_duracion_min as number) ?? (stats.avg_duracion_min as number))
+          : (stats.avg_duracion_min as number)
+        const etaTotal   = durBase * factorZona + queuePenalty + weightPenalty + penalizacionZonaMin
+        const confidence = Math.min(0.85, 0.5 + (stats.entregas_count as number) / 100)
 
         return {
-          etaMinutos: Math.ceil(etaTotal),
+          etaMinutos:  Math.ceil(etaTotal),
           distanciaKm: distKm,
-          confidence: sampleConfidence,
-          source: 'zone_avg',
+          confidence,
+          source:      'zone_avg',
           adjustments,
         }
       }
@@ -190,17 +368,15 @@ export async function calcularETAInteligente(
     }
   }
 
-  // ── Layer 3 & 4: Haversine + adjustments ──────────────────────────────────
-  const distLineal = haversineKm(ferreteriaLat, ferreteriaLng, clienteLat, clienteLng)
-  const distKm = Math.round(distLineal * FACTOR_URBANO * 10) / 10
-  const tRuta = Math.ceil((distKm / velocidadKmh) * 60 * trafficFactor)
-  const etaTotal = tRuta + queuePenalty + weightPenalty
+  // ── Layer 4: Haversine + ajustes ──────────────────────────────────────────
+  const tRuta    = Math.ceil((distKm / velocidadKmh) * 60 * trafficFactor * factorZona)
+  const etaTotal = tRuta + queuePenalty + weightPenalty + penalizacionZonaMin
 
   return {
-    etaMinutos: Math.ceil(etaTotal),
+    etaMinutos:  Math.ceil(etaTotal),
     distanciaKm: distKm,
-    confidence: 0.0,    // cold start — no historical data
-    source: 'haversine',
+    confidence:  0.0,
+    source:      'haversine',
     adjustments,
   }
 }

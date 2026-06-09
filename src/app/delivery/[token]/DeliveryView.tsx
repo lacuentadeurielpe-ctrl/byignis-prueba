@@ -1,14 +1,75 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   MapPin, Phone, Package, ChevronDown, CheckCircle, AlertTriangle,
   Loader2, RotateCcw, Siren, X, Inbox, BarChart2,
   FileText, Truck, CreditCard, BadgeCheck, Clock, Navigation, NavigationOff,
-  ExternalLink, Camera, Image as ImageIcon, XCircle,
+  ExternalLink, Camera, Image as ImageIcon, XCircle, Wrench, WifiOff, Timer,
 } from 'lucide-react'
 import PinModal from '@/components/ui/PinModal'
 import { cn, formatPEN, labelEstadoPago, colorEstadoPago } from '@/lib/utils'
+
+// ── Helpers de offline queue ──────────────────────────────────────────────────
+
+const OFFLINE_QUEUE_KEY = 'delivery_offline_queue'
+
+interface OfflineAction {
+  id:        string
+  url:       string
+  method:    string
+  body:      string
+  timestamp: number
+}
+
+function guardarAccionOffline(url: string, method: string, body: Record<string, unknown>) {
+  try {
+    const cola: OfflineAction[] = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) ?? '[]')
+    cola.push({
+      id:        crypto.randomUUID(),
+      url,
+      method,
+      body:      JSON.stringify(body),
+      timestamp: Date.now(),
+    })
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(cola))
+  } catch { /* no bloquear si localStorage no disponible */ }
+}
+
+async function sincronizarAccionesOffline() {
+  try {
+    const cola: OfflineAction[] = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) ?? '[]')
+    if (!cola.length) return
+
+    const procesadas: string[] = []
+    for (const accion of cola) {
+      try {
+        const res = await fetch(accion.url, {
+          method:  accion.method,
+          headers: { 'Content-Type': 'application/json' },
+          body:    accion.body,
+        })
+        if (res.ok) procesadas.push(accion.id)
+      } catch { /* mantener en cola si falla */ }
+    }
+
+    if (procesadas.length) {
+      const restantes = cola.filter(a => !procesadas.includes(a.id))
+      localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(restantes))
+    }
+  } catch { /* ignorar */ }
+}
+
+// ── Formato de tiempo transcurrido para el cronómetro ────────────────────────
+function formatearTiempoTranscurrido(ms: number): string {
+  const totalSeg = Math.floor(ms / 1000)
+  const horas    = Math.floor(totalSeg / 3600)
+  const minutos  = Math.floor((totalSeg % 3600) / 60)
+  const segundos = totalSeg % 60
+
+  if (horas > 0) return `${horas}h ${minutos.toString().padStart(2, '0')}m`
+  return `${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`
+}
 
 interface ItemPedido {
   id: string
@@ -22,6 +83,8 @@ interface EntregaInfo {
   estado: string
   eta_actual: string | null
   orden_en_ruta: number | null
+  salio_at: string | null
+  vehiculo_id: string | null
   vehiculos: { nombre: string; tipo: string } | null
 }
 
@@ -65,6 +128,14 @@ const INCIDENCIAS = [
   { value: 'otro',              label: 'Otro problema' },
 ]
 
+const TIPOS_AVERIA = [
+  { value: 'pinchadura',     label: '🔧 Llanta/pinchadura' },
+  { value: 'bateria',        label: '🔋 No arranca/batería' },
+  { value: 'motor',          label: '⚙️ Falla de motor' },
+  { value: 'accidente',      label: '🚨 Accidente' },
+  { value: 'otro',           label: '❓ Otro' },
+]
+
 const ESTADO_LABELS: Record<string, { label: string; icon: string; color: string }> = {
   confirmado:     { label: 'Confirmado',     icon: '✅', color: 'text-blue-600'   },
   en_preparacion: { label: 'En preparación', icon: '📦', color: 'text-amber-600'  },
@@ -87,6 +158,7 @@ export default function DeliveryView({
   tienePin = false,
   nombre = '',
   ferreteriaNombre = '',
+  vehiculoId: vehiculoIdProp,
 }: {
   pedidos: PedidoDelivery[]
   pedidosDisponibles: PedidoDelivery[]
@@ -99,6 +171,8 @@ export default function DeliveryView({
   nombre?: string
   /** Nombre de la ferretería — para el header sticky reactivo */
   ferreteriaNombre?: string
+  /** ID del vehículo asignado al repartidor (para reportar averías) */
+  vehiculoId?: string | null
 }) {
   const [pedidos,    setPedidos]    = useState(inicialAsignados)
   const [disponibles, setDisponibles] = useState(inicialDisponibles)
@@ -108,6 +182,135 @@ export default function DeliveryView({
   const [expandido, setExpandido] = useState<string | null>(inicialAsignados[0]?.id ?? null)
   const [cargando,  setCargando]  = useState<string | null>(null) // pedidoId en proceso
   const [aceptando, setAceptando] = useState<string | null>(null)
+
+  // ── Modo offline — sincronizar acciones pendientes al reconectar ─────────
+  const [estaOffline, setEstaOffline] = useState(false)
+  useEffect(() => {
+    const handleOnline  = () => { setEstaOffline(false); sincronizarAccionesOffline() }
+    const handleOffline = () => setEstaOffline(true)
+    window.addEventListener('online',  handleOnline)
+    window.addEventListener('offline', handleOffline)
+    setEstaOffline(!navigator.onLine)
+    // Al cargar, intentar sincronizar si hay acciones pendientes
+    if (navigator.onLine) sincronizarAccionesOffline()
+    return () => {
+      window.removeEventListener('online',  handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  // ── Cronómetro real desde salio_at ────────────────────────────────────────
+  // Busca el primer pedido con entrega que tenga salio_at para iniciar el timer
+  const salioPorPrimeraAt = inicialAsignados
+    .flatMap(p => p.entregas ?? [])
+    .map(e => e.salio_at)
+    .filter(Boolean)
+    .sort()[0] ?? null
+
+  const [tiempoEnRuta, setTiempoEnRuta] = useState<number>(
+    salioPorPrimeraAt ? Date.now() - new Date(salioPorPrimeraAt).getTime() : 0
+  )
+  const [cronometroActivo, setCronometroActivo] = useState(!!salioPorPrimeraAt)
+  const [cronometroInicio, setCronometroInicio] = useState<Date | null>(
+    salioPorPrimeraAt ? new Date(salioPorPrimeraAt) : null
+  )
+
+  useEffect(() => {
+    if (!cronometroActivo || !cronometroInicio) return
+    const interval = setInterval(() => {
+      setTiempoEnRuta(Date.now() - cronometroInicio.getTime())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [cronometroActivo, cronometroInicio])
+
+  const iniciarCronometro = useCallback(() => {
+    const ahora = new Date()
+    setCronometroInicio(ahora)
+    setCronometroActivo(true)
+    setTiempoEnRuta(0)
+    // Registrar salio_at en el servidor
+    fetch(`/api/delivery/${token}/iniciar-ruta`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ salio_at: ahora.toISOString() }),
+    }).catch(() => {
+      // Modo offline: guardar para sincronizar
+      guardarAccionOffline(`/api/delivery/${token}/iniciar-ruta`, 'POST', {
+        salio_at: ahora.toISOString()
+      })
+    })
+  }, [token])
+
+  // ── ETA por parada desde GPS ──────────────────────────────────────────────
+  const [etasDesdeGPS, setEtasDesdeGPS] = useState<Record<string, number>>({}) // pedidoId → min
+  const ultimaGPSRef = useRef<{ lat: number; lng: number } | null>(null)
+
+  const calcularEtasDesdeGPS = useCallback(async (lat: number, lng: number) => {
+    ultimaGPSRef.current = { lat, lng }
+    // Solo calcular para pedidos en ruta con coords
+    const pedidosConCoords = pedidos.filter(p => p.entregas?.[0]?.estado === 'en_ruta')
+    if (!pedidosConCoords.length) return
+
+    try {
+      const res = await fetch(`/api/delivery/${token}/eta-desde-gps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng }),
+      })
+      if (res.ok) {
+        const data = await res.json() as Record<string, number>
+        setEtasDesdeGPS(data)
+      }
+    } catch { /* ignorar */ }
+  }, [pedidos, token])
+
+  // ── Modal de avería del vehículo ──────────────────────────────────────────
+  const [modalAveria, setModalAveria] = useState(false)
+  const [averiaDesc,  setAveriaDesc]  = useState('')
+  const [averiaTipo,  setAveriaTipo]  = useState('')
+  const [averiaGrave, setAveriaGrave] = useState(false)
+  const [averiaLoading, setAveriaLoading] = useState(false)
+
+  async function reportarAveria() {
+    if (!averiaDesc.trim()) return
+    setAveriaLoading(true)
+    try {
+      const body = {
+        accion:       'averia_vehiculo',
+        descripcion:  `${averiaTipo ? TIPOS_AVERIA.find(t => t.value === averiaTipo)?.label + ': ' : ''}${averiaDesc}`,
+        vehiculo_id:  vehiculoIdProp,
+        grave:        averiaGrave,
+      }
+      const res = await fetch(`/api/delivery/${token}/incidencia`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok && !navigator.onLine) {
+        guardarAccionOffline(`/api/delivery/${token}/incidencia`, 'POST', body)
+      }
+      setModalAveria(false)
+      setAveriaDesc('')
+      setAveriaTipo('')
+      setAveriaGrave(false)
+      alert('⚠️ Avería reportada. El encargado recibirá una notificación y reasignará tus pedidos.')
+    } catch {
+      if (!navigator.onLine) {
+        guardarAccionOffline(`/api/delivery/${token}/incidencia`, 'POST', {
+          accion:      'averia_vehiculo',
+          descripcion: averiaDesc,
+          vehiculo_id: vehiculoIdProp,
+          grave:       averiaGrave,
+        })
+        setModalAveria(false)
+        alert('Sin conexión. La avería se enviará cuando vuelvas a tener internet.')
+      } else {
+        alert('Error al reportar. Intenta de nuevo.')
+      }
+    } finally {
+      setAveriaLoading(false)
+    }
+  }
 
   // ── GPS Tracking ──────────────────────────────────────────────────────────
   const [trackingActivo,   setTrackingActivo]   = useState(false)
@@ -123,16 +326,33 @@ export default function DeliveryView({
     setTrackingError(null)
     setTrackingActivo(true)
 
+    // Iniciar cronómetro si no está activo
+    if (!cronometroActivo) iniciarCronometro()
+
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const now = Date.now()
         if (now - lastSentRef.current < 28_000) return   // throttle: máx 1 req/28s
         lastSentRef.current = now
+
+        // Enviar ubicación al servidor
         fetch(`/api/delivery/${token}/ubicacion`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        }).catch(() => {/* fire-and-forget */})
+        }).catch(() => {
+          if (!navigator.onLine) {
+            guardarAccionOffline(`/api/delivery/${token}/ubicacion`, 'POST', {
+              lat: pos.coords.latitude, lng: pos.coords.longitude,
+            })
+          }
+        })
+
+        // Calcular ETAs por parada desde GPS (cada 60s)
+        const ahora = Date.now()
+        if (ahora - lastSentRef.current < 55_000) {
+          calcularEtasDesdeGPS(pos.coords.latitude, pos.coords.longitude)
+        }
       },
       (err) => {
         setTrackingError(
@@ -459,10 +679,16 @@ export default function DeliveryView({
             const entrega = pedido.entregas?.[0]
             const vehiculo = entrega?.vehiculos
             const etaMin = pedido.eta_minutos
-            if (!etaMin && !vehiculo) return null
+            const etaGPS = etasDesdeGPS[pedido.id]  // ETA real desde GPS
+            if (!etaMin && !vehiculo && !etaGPS) return null
             return (
               <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                {etaMin != null && (
+                {etaGPS != null ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                    <Navigation className="w-2.5 h-2.5" />
+                    {etaGPS < 60 ? `~${etaGPS} min (GPS)` : `~${Math.floor(etaGPS / 60)}h (GPS)`}
+                  </span>
+                ) : etaMin != null ? (
                   <span className="inline-flex items-center gap-1 text-[10px] font-medium text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-full">
                     <Clock className="w-2.5 h-2.5" />
                     {etaMin < 60
@@ -470,7 +696,7 @@ export default function DeliveryView({
                       : `~${Math.floor(etaMin / 60)}h${etaMin % 60 > 0 ? ` ${etaMin % 60}min` : ''}`
                     }
                   </span>
-                )}
+                ) : null}
                 {vehiculo && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">
                     <Truck className="w-2.5 h-2.5" />
@@ -900,7 +1126,7 @@ export default function DeliveryView({
                   <div className="bg-orange-50 border border-orange-200 rounded-2xl px-4 py-3 space-y-2.5">
                     {/* Fila título */}
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Truck className="w-4 h-4 text-orange-600 shrink-0" />
                         <p className="text-sm font-semibold text-orange-800">
                           {multiParada ? `Ruta con ${pedidos.length} paradas` : 'Tu entrega de hoy'}
@@ -927,10 +1153,32 @@ export default function DeliveryView({
                           className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition shrink-0"
                         >
                           <Navigation className="w-3 h-3" />
-                          Iniciar ruta
+                          {cronometroActivo ? 'GPS' : 'Iniciar ruta'}
                         </button>
                       )}
                     </div>
+
+                    {/* Cronómetro — tiempo transcurrido desde salio_at */}
+                    {cronometroActivo && tiempoEnRuta > 0 && (
+                      <div className="flex items-center justify-between bg-white/70 rounded-xl px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <Timer className="w-3.5 h-3.5 text-orange-600" />
+                          <span className="text-xs font-medium text-orange-800">En ruta hace</span>
+                        </div>
+                        <span className="text-base font-bold font-mono text-orange-900">
+                          {formatearTiempoTranscurrido(tiempoEnRuta)}
+                        </span>
+                      </div>
+                    )}
+                    {!cronometroActivo && (
+                      <button
+                        onClick={iniciarCronometro}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition"
+                      >
+                        <Timer className="w-3.5 h-3.5" />
+                        Marcar salida (iniciar cronómetro)
+                      </button>
+                    )}
 
                     {/* Info */}
                     {multiParada && (
@@ -946,6 +1194,16 @@ export default function DeliveryView({
                         </strong>
                       </p>
                     )}
+
+                    {/* Botón de avería del vehículo */}
+                    <button
+                      onClick={() => setModalAveria(true)}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 transition"
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      Reportar avería del vehículo
+                    </button>
+
                     {trackingError && (
                       <p className="text-xs text-red-600 bg-red-50 rounded-lg px-2.5 py-1.5">⚠️ {trackingError}</p>
                     )}
@@ -953,6 +1211,13 @@ export default function DeliveryView({
                       <p className="text-[11px] text-green-700">
                         📍 Compartiendo tu ubicación en tiempo real con los clientes
                       </p>
+                    )}
+                    {/* Banner offline */}
+                    {estaOffline && (
+                      <div className="flex items-center gap-1.5 bg-zinc-800 text-white text-[11px] px-3 py-2 rounded-xl">
+                        <WifiOff className="w-3.5 h-3.5 shrink-0" />
+                        Sin conexión — tus acciones se guardarán y enviarán al volver
+                      </div>
                     )}
                   </div>
                 )
@@ -1123,6 +1388,78 @@ export default function DeliveryView({
               >
                 {cargando && <Loader2 className="w-4 h-4 animate-spin" />}
                 {modal.tipo === 'emergencia' ? 'Enviar alerta' : modal.tipo === 'retorno' ? 'Confirmar retorno' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal de avería del vehículo ─────────────────────────────────────── */}
+      {modalAveria && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-5 shadow-xl mb-2">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-zinc-900 flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-red-500" /> Reportar avería del vehículo
+              </h3>
+              <button onClick={() => setModalAveria(false)} className="text-zinc-400 hover:text-zinc-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-sm text-zinc-600 mb-3">
+              El encargado será notificado y tus pedidos serán reasignados a otro repartidor.
+            </p>
+
+            {/* Tipo de avería */}
+            <p className="text-xs text-zinc-500 mb-2 font-medium">Tipo de avería</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {TIPOS_AVERIA.map(({ value, label }) => (
+                <button key={value} onClick={() => setAveriaTipo(value)}
+                  className={cn('py-2 px-3 rounded-xl text-xs font-medium border transition text-left',
+                    averiaTipo === value ? 'bg-red-50 border-red-400 text-red-700' : 'bg-zinc-50 border-zinc-200 text-zinc-600'
+                  )}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Descripción libre */}
+            <textarea
+              value={averiaDesc}
+              onChange={(e) => setAveriaDesc(e.target.value)}
+              placeholder="Describe qué pasó con el vehículo…"
+              rows={3}
+              className="w-full text-sm border border-zinc-200 rounded-xl px-3 py-2 mb-3 resize-none focus:outline-none focus:ring-2 focus:ring-red-400"
+            />
+
+            {/* Gravedad */}
+            <label className="flex items-center gap-2 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={averiaGrave}
+                onChange={(e) => setAveriaGrave(e.target.checked)}
+                className="w-4 h-4 accent-red-500"
+              />
+              <span className="text-xs font-medium text-zinc-700">
+                🔴 Avería grave — no puede moverse, necesita grúa/taller
+              </span>
+            </label>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setModalAveria(false)}
+                className="flex-1 py-2.5 text-sm text-zinc-600 border border-zinc-200 rounded-xl hover:bg-zinc-50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={reportarAveria}
+                disabled={averiaLoading || !averiaDesc.trim()}
+                className="flex-1 py-2.5 text-sm font-semibold bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-xl transition flex items-center justify-center gap-2"
+              >
+                {averiaLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
+                Reportar avería
               </button>
             </div>
           </div>
