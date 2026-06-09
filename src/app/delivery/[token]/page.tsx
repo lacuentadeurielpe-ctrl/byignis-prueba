@@ -49,26 +49,10 @@ export default async function DeliveryPage({ params }: Props) {
     pedidosDisponibles = await deliveryRepo.obtenerPedidosDisponiblesReparto(repartidor.ferreteria_id)
   }
 
-  const totalPendientes = pedidos?.length ?? 0
-
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-orange-500 text-white px-4 py-4 sticky top-0 z-10 shadow-sm">
-        <div className="flex items-center gap-3 max-w-lg mx-auto">
-          <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
-            <Truck className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="font-semibold text-sm">{repartidor.nombre}</p>
-            <p className="text-xs text-orange-100">{ferreteriaNombre}</p>
-          </div>
-          <div className="ml-auto text-right">
-            <p className="text-2xl font-bold">{totalPendientes}</p>
-            <p className="text-xs text-orange-100">pendientes</p>
-          </div>
-        </div>
-      </div>
-
+      {/* Header y contador reactivos viven dentro de DeliveryView (client component)
+          para que el contador se actualice al confirmar entregas sin recargar la página. */}
       <div className="max-w-lg mx-auto px-4 py-4">
         <DeliveryView
           pedidos={(pedidos ?? []) as any}
@@ -78,6 +62,8 @@ export default async function DeliveryPage({ params }: Props) {
           modo={modo}
           puedeRegistrarDeuda={repartidor.puede_registrar_deuda ?? false}
           tienePin={!!(repartidor as unknown as { pin_hash?: string | null }).pin_hash}
+          nombre={repartidor.nombre}
+          ferreteriaNombre={ferreteriaNombre}
         />
       </div>
     </div>

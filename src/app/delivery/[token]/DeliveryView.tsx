@@ -85,6 +85,8 @@ export default function DeliveryView({
   modo,
   puedeRegistrarDeuda,
   tienePin = false,
+  nombre = '',
+  ferreteriaNombre = '',
 }: {
   pedidos: PedidoDelivery[]
   pedidosDisponibles: PedidoDelivery[]
@@ -93,6 +95,10 @@ export default function DeliveryView({
   modo: 'manual' | 'libre'
   puedeRegistrarDeuda: boolean
   tienePin?: boolean
+  /** Nombre del repartidor — para el header sticky reactivo */
+  nombre?: string
+  /** Nombre de la ferretería — para el header sticky reactivo */
+  ferreteriaNombre?: string
 }) {
   const [pedidos,    setPedidos]    = useState(inicialAsignados)
   const [disponibles, setDisponibles] = useState(inicialDisponibles)
@@ -746,6 +752,25 @@ export default function DeliveryView({
 
   return (
     <>
+      {/* Header sticky reactivo — se actualiza al confirmar entregas */}
+      {nombre && (
+        <div className="bg-orange-500 text-white px-4 py-4 sticky top-0 z-10 shadow-sm -mx-4 -mt-4 mb-4">
+          <div className="flex items-center gap-3 max-w-lg mx-auto">
+            <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+              <Truck className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">{nombre}</p>
+              <p className="text-xs text-orange-100">{ferreteriaNombre}</p>
+            </div>
+            <div className="ml-auto text-right">
+              <p className="text-2xl font-bold">{pedidos.length}</p>
+              <p className="text-xs text-orange-100">pendientes</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex bg-white rounded-xl border border-zinc-200 p-1 mb-4 gap-1">
         {tabs.map((t) => (
