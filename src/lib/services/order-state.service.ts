@@ -84,6 +84,31 @@ export class OrderStateService {
                 : {})
             })
             finalStateValue = params.nuevoEstado;
+
+            // ── Sync entrega cuando staff cambia estado de un pedido delivery ──
+            // Esto evita la desincronización BUG-008/BUG-009: pedido.estado
+            // cambia pero entregas.estado se queda desactualizado.
+            if (pedidoActual.modalidad === 'delivery') {
+              const entregaEstadoMap: Record<string, string> = {
+                enviado:    'en_ruta',
+                entregado:  'entregado',
+                cancelado:  'fallida',
+                devuelto:   'fallida',
+              }
+              const nuevoEstadoEntrega = entregaEstadoMap[params.nuevoEstado]
+              if (nuevoEstadoEntrega) {
+                const patchEntrega: Record<string, unknown> = { estado: nuevoEstadoEntrega }
+                if (params.nuevoEstado === 'enviado')   patchEntrega.salio_at   = new Date().toISOString()
+                if (params.nuevoEstado === 'entregado') patchEntrega.llego_at   = new Date().toISOString()
+
+                await this.supabase
+                  .from('entregas')
+                  .update(patchEntrega)
+                  .eq('pedido_id', pedidoId)
+                  .eq('ferreteria_id', this.ferreteriaId)
+                  .not('estado', 'in', '("entregado","fallida")')  // no sobrescribir estados finales
+              }
+            }
           } catch (e: any) { errorInActions = e }
         },
         registrarAuditoria: async (_, params) => {
