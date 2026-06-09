@@ -36,7 +36,8 @@ export default async function DeliveryPage({ params }: Props) {
   const ferr = repartidor.ferreterias as any
   const ferreteriaNombre = ferr?.nombre ?? 'Empresa'
   const modo: 'manual' | 'libre' = ferr?.modo_asignacion_delivery === 'libre' ? 'libre' : 'manual'
-  const hoy = new Date().toISOString().slice(0, 10)
+  // Fecha actual en zona Lima (UTC-5) para filtrar cobros del día correcto
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
 
   const [pedidos, cobrosHoy] = await Promise.all([
     deliveryRepo.obtenerPedidosAsignadosRepartidor(repartidor.ferreteria_id, repartidor.id),

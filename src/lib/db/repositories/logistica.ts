@@ -217,14 +217,17 @@ export class DeliveryRepository {
    * Obtiene los cobros registrados por el repartidor el día de hoy.
    */
   async obtenerCobrosHoyRepartidor(ferreteriaId: string, repartidorId: string, hoyStr: string) {
+    // Filtramos por updated_at (no created_at) porque updated_at se actualiza
+    // al marcar el pedido como 'entregado', capturando la fecha real de entrega.
+    // Esto soluciona el caso de pedidos creados ayer pero entregados hoy.
     const { data, error } = await this.supabase
       .from('pedidos')
       .select('id, numero_pedido, total, cobrado_monto, cobrado_metodo, estado_pago, clientes(nombre), created_at')
       .eq('ferreteria_id', ferreteriaId)
       .eq('repartidor_id', repartidorId)
       .eq('estado', 'entregado')
-      .gte('created_at', `${hoyStr}T00:00:00`)
-      .order('created_at', { ascending: false })
+      .gte('updated_at', `${hoyStr}T00:00:00`)
+      .order('updated_at', { ascending: false })
 
     if (error) throw error
     return data ?? []
