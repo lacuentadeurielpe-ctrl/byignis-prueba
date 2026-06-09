@@ -125,14 +125,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: errItems.message }, { status: 500 })
   }
 
-  // 7. Actualizar cotización para guardar datos de conversión
+  // 7. Actualizar cotización: marcar como confirmada para evitar conversiones duplicadas
   await supabase
     .from('cotizaciones')
     .update({
       modalidad,
       zona_delivery_id,
       direccion_entrega,
-      es_conversion_directa: true
+      es_conversion_directa: true,
+      estado: 'confirmada',
     })
     .eq('id', cotizacion.id)
 
