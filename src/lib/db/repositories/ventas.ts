@@ -148,6 +148,9 @@ export class VentasRepository {
         metodo_pago: input.metodoPago,
         total: input.total,
         costo_total: input.costoTotal,
+        // Si el pago ya está confirmado al crear (venta directa POS, pago digital previo),
+        // registrar monto_pagado = total para que finanzas lo contabilice correctamente.
+        monto_pagado: input.estadoPago === 'pagado' ? input.total : 0,
         fecha_entrega_programada: input.fechaEntregaProgramada ?? null,
       })
       .select()
@@ -569,20 +572,45 @@ export class VentasRepository {
   }
 
   /**
-   * Obtiene los KPIs de ventas usando RPC en BD para máximo rendimiento (Fase 4).
+   * Obtiene los KPIs de ventas para el dashboard.
+   * Calcula directamente sin necesidad de una función SQL personalizada.
    */
   async obtenerKPIsRango(ferreteriaId: string, inicio: string, fin: string) {
-    const { data, error } = await this.supabase.rpc('dashboard_kpi_rango', {
-      f_id: ferreteriaId,
-      p_inicio: inicio,
-      p_fin: fin
-    })
+    // 1. Obtener pedidos confirmados del rango (excluye pendiente, cancelado, programado)
+    const { data: pedidos, error: pedidosError } = await this.supabase
+      .from('pedidos')
+      .select('id, estado, total')
+      .eq('ferreteria_id', ferreteriaId)
+      .not('estado', 'in', '(pendiente,cancelado,programado)')
+      .gte('created_at', inicio)
+      .lt('created_at', fin)
 
-    if (error) throw error
-    if (!data || data.length === 0) {
+    if (pedidosError) throw pedidosError
+
+    const pedidosList = pedidos ?? []
+    if (pedidosList.length === 0) {
       return { pedidos_n: 0, entregados_n: 0, ingresos_total: 0, ganancia_total: 0 }
     }
-    return data[0] as { pedidos_n: number; entregados_n: number; ingresos_total: number; ganancia_total: number }
+
+    const pedidos_n    = pedidosList.length
+    const entregados_n = pedidosList.filter((p: any) => p.estado === 'entregado').length
+    const ingresos_total = pedidosList.reduce((sum: number, p: any) => sum + Number(p.total ?? 0), 0)
+
+    // 2. Calcular COGS a partir de items_pedido + precio_compra de productos
+    const pedidoIds = pedidosList.map((p: any) => p.id)
+    const { data: items } = await this.supabase
+      .from('items_pedido')
+      .select('pedido_id, cantidad, producto_id, productos(precio_compra)')
+      .in('pedido_id', pedidoIds)
+
+    const cogs = (items ?? []).reduce((sum: number, item: any) => {
+      const costo = Number(item.productos?.precio_compra ?? 0)
+      return sum + Number(item.cantidad ?? 0) * costo
+    }, 0)
+
+    const ganancia_total = Math.max(0, ingresos_total - cogs)
+
+    return { pedidos_n, entregados_n, ingresos_total, ganancia_total }
   }
 
   /**
