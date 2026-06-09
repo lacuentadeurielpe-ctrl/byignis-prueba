@@ -1,44 +1,30 @@
-'use client'
-
 import { Cloud, MessageCircle, FileText, MapPin, Zap, Banknote, BookOpen, Code } from 'lucide-react'
-import { useMemo } from 'react'
 import SettingsHeader from '../components/SettingsHeader'
 import IntegrationCard from './components/IntegrationCard'
+import { createClient } from '@/lib/supabase/server'
+import { getSessionInfo } from '@/lib/auth/roles'
 
-const INTEGRACIONES_CORE = [
-  {
-    id: 'ycloud',
-    name: 'YCloud',
-    description: 'API WhatsApp para mensajes bidireccionales',
-    icon: MessageCircle,
-    status: 'desconectado' as const,
-    href: '/dashboard/settings-2/integraciones/ycloud',
-  },
-  {
-    id: 'nubefact',
-    name: 'Nubefact',
-    description: 'Facturación electrónica SUNAT',
-    icon: FileText,
-    status: 'desconectado' as const,
-    href: '/dashboard/settings-2/integraciones/nubefact',
-  },
-  {
-    id: 'mercadopago',
-    name: 'Mercado Pago',
-    description: 'Pagos y recaudación en línea',
-    icon: Banknote,
-    status: 'desconectado' as const,
-    href: '/dashboard/settings-2/integraciones/mercadopago',
-  },
-  {
-    id: 'maps',
-    name: 'Google Maps',
-    description: 'Geocoding y rutas de delivery',
-    icon: MapPin,
-    status: 'conectado' as const,
-    href: '/dashboard/settings-2/integraciones/maps',
-  },
-]
+type Estado = 'conectado' | 'desconectado' | 'pruebas'
+
+async function getIntegrationStatuses(ferreteriaId: string): Promise<Record<string, Estado>> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('integraciones_conectadas')
+    .select('tipo, estado')
+    .eq('ferreteria_id', ferreteriaId)
+    .in('tipo', ['ycloud', 'nubefact', 'mercadopago', 'maps'])
+
+  const map: Record<string, Estado> = {
+    ycloud:      'desconectado',
+    nubefact:    'desconectado',
+    mercadopago: 'desconectado',
+    maps:        'desconectado',
+  }
+  for (const row of data ?? []) {
+    if (row.estado) map[row.tipo] = row.estado as Estado
+  }
+  return map
+}
 
 const INTEGRACIONES_ROADMAP = [
   {
@@ -71,7 +57,47 @@ const INTEGRACIONES_ROADMAP = [
   },
 ]
 
-export default function IntegracionesPage() {
+export default async function IntegracionesPage() {
+  const session = await getSessionInfo()
+  const statuses = session
+    ? await getIntegrationStatuses(session.ferreteriaId)
+    : { ycloud: 'desconectado', nubefact: 'desconectado', mercadopago: 'desconectado', maps: 'desconectado' }
+
+  const INTEGRACIONES_CORE = [
+    {
+      id: 'ycloud',
+      name: 'YCloud',
+      description: 'API WhatsApp para mensajes bidireccionales',
+      icon: MessageCircle,
+      status: statuses.ycloud as Estado,
+      href: '/dashboard/settings-2/integraciones/ycloud',
+    },
+    {
+      id: 'nubefact',
+      name: 'Nubefact',
+      description: 'Facturación electrónica SUNAT',
+      icon: FileText,
+      status: statuses.nubefact as Estado,
+      href: '/dashboard/settings-2/integraciones/nubefact',
+    },
+    {
+      id: 'mercadopago',
+      name: 'Mercado Pago',
+      description: 'Pagos y recaudación en línea',
+      icon: Banknote,
+      status: statuses.mercadopago as Estado,
+      href: '/dashboard/settings-2/integraciones/mercadopago',
+    },
+    {
+      id: 'maps',
+      name: 'Google Maps',
+      description: 'Geocoding y rutas de delivery',
+      icon: MapPin,
+      status: statuses.maps as Estado,
+      href: '/dashboard/settings-2/integraciones/maps',
+    },
+  ]
+
   return (
     <div>
       <SettingsHeader
@@ -108,7 +134,7 @@ export default function IntegracionesPage() {
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-8">
           <p className="text-sm text-blue-900">
-            💡 <strong>Tip:</strong> Las integraciones requieren tokens/claves API. Guarda-las en un lugar seguro.
+            💡 <strong>Tip:</strong> Las integraciones requieren tokens/claves API. Guárdalas en un lugar seguro.
           </p>
         </div>
       </div>

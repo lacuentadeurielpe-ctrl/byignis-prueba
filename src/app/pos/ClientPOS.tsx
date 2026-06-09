@@ -17,9 +17,11 @@ interface ClientPOSProps {
   productos: ProductoPOS[]
   nombreFerreteria: string
   ferreteriaId: string
+  /** true solo si Nubefact está en modo producción — false en sandbox o desconectado */
+  nubefactActivo?: boolean
 }
 
-export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }: ClientPOSProps) {
+export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId, nubefactActivo = false }: ClientPOSProps) {
   const {
     items, agregarItem, actualizarCantidad, eliminarItem, vaciarCarrito, total,
     busqueda, setBusqueda, mostrarSugerencias, setMostrarSugerencias,
@@ -365,7 +367,16 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
               ] as const).map(({ key, label }) => (
                 <button
                   key={key}
-                  onClick={() => setTipoComprobante(key)}
+                  onClick={() => {
+                    setTipoComprobante(key)
+                    // Advertir al cajero si selecciona boleta/factura sin Nubefact activo
+                    if (key !== 'nota_venta' && !nubefactActivo) {
+                      toast.warning(
+                        `Nubefact no está configurado en modo producción. La ${label} se registrará internamente pero NO se enviará a SUNAT.`,
+                        { duration: 6000 }
+                      )
+                    }
+                  }}
                   className={cn(
                     'flex-1 py-1.5 text-xs font-semibold rounded-lg transition',
                     tipoComprobante === key
@@ -377,6 +388,12 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
                 </button>
               ))}
             </div>
+            {/* Aviso persistente si está en modo boleta/factura sin Nubefact */}
+            {tipoComprobante !== 'nota_venta' && !nubefactActivo && (
+              <p className="mt-1.5 text-[10px] text-amber-600 flex items-center gap-1">
+                ⚠️ Nubefact desconectado — no se emitirá comprobante SUNAT
+              </p>
+            )}
           </div>
 
           {/* Toggle Programar */}
