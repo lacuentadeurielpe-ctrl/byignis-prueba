@@ -5,13 +5,37 @@ import { useRouter } from 'next/navigation'
 import {
   Truck, MapPin, Clock, Package, CheckCircle, Loader2,
   Route, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, CalendarClock,
-  ListOrdered, ShieldAlert,
+  ListOrdered, ShieldAlert, LayoutGrid,
 } from 'lucide-react'
 import { cn, formatPEN, formatFechaHoraLima } from '@/lib/utils'
 import ColaTab from './components/ColaTab'
 import IncidenciasTab from './components/IncidenciasTab'
+import FleetStatusPanel from './components/FleetStatusPanel'
+import OperationsLog, { type OperacionLog } from './components/OperationsLog'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
+
+interface VehiculoFlota {
+  id:                 string
+  nombre:             string
+  tipo:               string
+  placa:              string | null
+  estado:             string
+  descripcion_averia: string | null
+  est_resolucion_at:  string | null
+  repartidor?:        { nombre: string } | null
+}
+
+interface RepartidorFlota {
+  id:                 string
+  nombre:             string
+  estado_operativo:   string
+  ultima_lat:         number | null
+  ultima_lng:         number | null
+  gps_actualizado_at: string | null
+  vehiculo?:          { nombre: string; tipo: string } | null
+  entregasActivas:    number
+}
 
 interface VehiculoInfo { id: string; nombre: string; tipo: string }
 interface RepartidorInfo { id: string; nombre: string }
@@ -133,6 +157,9 @@ export default function DeliveryDashboard({
   incidenciasCount = 0,
   sinZonas = false,
   sinVehiculos = false,
+  fleetRepartidores = [],
+  fleetVehiculos = [],
+  opsLog = [],
 }: {
   initialEntregas: EntregaDashboard[]
   initialProgramados?: PedidoProgramado[]
@@ -141,8 +168,11 @@ export default function DeliveryDashboard({
   incidenciasCount?: number
   sinZonas?: boolean
   sinVehiculos?: boolean
+  fleetRepartidores?: RepartidorFlota[]
+  fleetVehiculos?: VehiculoFlota[]
+  opsLog?: OperacionLog[]
 }) {
-  const [tab, setTab]                 = useState<'vivo' | 'programados' | 'cola' | 'incidencias'>('vivo')
+  const [tab, setTab]                 = useState<'vivo' | 'programados' | 'cola' | 'incidencias' | 'flota'>('vivo')
   const [entregas, setEntregas]       = useState(initialEntregas)
   const [programados]                 = useState(initialProgramados)
   const [optimizando, setOptimizando] = useState<string | null>(null)
@@ -338,13 +368,56 @@ export default function DeliveryDashboard({
             </span>
           )}
         </button>
+        <button
+          onClick={() => setTab('flota')}
+          className={cn(
+            'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0',
+            tab === 'flota'
+              ? 'border-zinc-950 text-zinc-950'
+              : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'
+          )}
+        >
+          <LayoutGrid className="w-3.5 h-3.5" />
+          Flota
+          {fleetRepartidores.filter(r => ['averia','emergencia'].includes(r.estado_operativo)).length > 0 && (
+            <span className="ml-0.5 text-[10px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-semibold leading-none">
+              !</span>
+          )}
+        </button>
       </div>
 
       {/* ── Vista: Cola ──────────────────────────────────────────────────────── */}
       {tab === 'cola' && <ColaTab />}
 
+      {/* ── Vista: Flota ──────────────────────────────────────────────────────── */}
+      {tab === 'flota' && (
+        <div className="space-y-4">
+          <FleetStatusPanel
+            vehiculos={fleetVehiculos}
+            repartidores={fleetRepartidores}
+            onRefresh={refrescar}
+          />
+          {opsLog.length > 0 && (
+            <OperationsLog
+              logs={opsLog}
+              onRefresh={refrescar}
+            />
+          )}
+        </div>
+      )}
+
       {/* ── Vista: Incidencias ───────────────────────────────────────────────── */}
-      {tab === 'incidencias' && <IncidenciasTab />}
+      {tab === 'incidencias' && (
+        <div className="space-y-4">
+          {opsLog.filter(l => !l.resuelto).length > 0 && (
+            <OperationsLog
+              logs={opsLog}
+              onRefresh={refrescar}
+            />
+          )}
+          <IncidenciasTab />
+        </div>
+      )}
 
       {/* ── Vista: Programados ──────────────────────────────────────────────── */}
       {tab === 'programados' && (

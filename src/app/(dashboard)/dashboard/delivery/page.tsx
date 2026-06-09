@@ -22,7 +22,18 @@ export default async function DeliveryPage() {
   const inicioHoy   = inicioDiaLima(0)
   const fin14dias   = inicioDiaLima(15)   // exclusivo → 14 días completos
 
-  const [entregas, pedidosProgramados, colaData, incidenciasData, zonasCount, vehiculosCount] = await Promise.all([
+  const [
+    entregas,
+    pedidosProgramados,
+    colaData,
+    incidenciasData,
+    zonasCount,
+    vehiculosCount,
+    repartidoresRaw,
+    vehiculosDeliveryRaw,
+    entregasActivasMap,
+    opsLogRaw,
+  ] = await Promise.all([
     deliveryRepo.obtenerEntregasDashboard(session.ferreteriaId, hoy),
     deliveryRepo.obtenerPedidosProgramados(session.ferreteriaId, inicioHoy, fin14dias),
     // Count pedidos en cola (sin asignar)
@@ -58,7 +69,58 @@ export default async function DeliveryPage() {
       .select('id', { count: 'exact', head: true })
       .eq('ferreteria_id', session.ferreteriaId)
       .then(({ count }) => count ?? 0),
+    // ── Flota: repartidores con estado operativo ──
+    supabase
+      .from('repartidores')
+      .select('id, nombre, estado_operativo, ultima_lat, ultima_lng, gps_actualizado_at')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .eq('activo', true)
+      .order('nombre')
+      .then(({ data }) => data ?? []),
+    // ── Flota: vehículos delivery con repartidor asignado ──
+    supabase
+      .from('vehiculos_delivery')
+      .select('id, nombre, tipo, placa, estado, descripcion_averia, est_resolucion_at, repartidores(nombre)')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .eq('activo', true)
+      .order('nombre')
+      .then(({ data }) => data ?? []),
+    // ── Entregas activas por repartidor (para contador) ──
+    supabase
+      .from('entregas')
+      .select('repartidor_id')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .in('estado', ['pendiente', 'carga', 'en_ruta'])
+      .then(({ data }) => {
+        const counts = new Map<string, number>()
+        for (const e of data ?? []) {
+          if (e.repartidor_id) {
+            counts.set(e.repartidor_id, (counts.get(e.repartidor_id) ?? 0) + 1)
+          }
+        }
+        return counts
+      }),
+    // ── Log de operaciones (últimas 50 entradas) ──
+    supabase
+      .from('delivery_operaciones_log')
+      .select('id, tipo_evento, entidad_tipo, entidad_id, detalle, origen, resuelto, created_at')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => data ?? []),
   ])
+
+  // Construir flota de repartidores con conteo de entregas activas
+  const fleetRepartidores = (repartidoresRaw as any[]).map((r) => ({
+    id:               r.id,
+    nombre:           r.nombre ?? '',
+    estado_operativo: r.estado_operativo ?? 'no_disponible',
+    ultima_lat:       r.ultima_lat as number | null,
+    ultima_lng:       r.ultima_lng as number | null,
+    gps_actualizado_at: r.gps_actualizado_at as string | null,
+    vehiculo:         null,
+    entregasActivas:  (entregasActivasMap as Map<string, number>).get(r.id) ?? 0,
+  }))
 
   // Fetch confidence data for active entregas (for IA badges in dashboard)
   const entregaIds = (entregas ?? [])
@@ -101,6 +163,20 @@ export default async function DeliveryPage() {
         incidenciasCount={incidenciasData as number}
         sinZonas={(zonasCount as number) === 0}
         sinVehiculos={(vehiculosCount as number) === 0}
+        fleetRepartidores={fleetRepartidores}
+        fleetVehiculos={(vehiculosDeliveryRaw as any[]).map((v) => ({
+          id:                v.id,
+          nombre:            v.nombre ?? v.tipo,
+          tipo:              v.tipo,
+          placa:             v.placa as string | null,
+          estado:            v.estado ?? 'disponible',
+          descripcion_averia: v.descripcion_averia as string | null,
+          est_resolucion_at: v.est_resolucion_at as string | null,
+          repartidor:        v.repartidores
+            ? { nombre: (Array.isArray(v.repartidores) ? v.repartidores[0] : v.repartidores)?.nombre ?? '' }
+            : null,
+        }))}
+        opsLog={(opsLogRaw as any[])}
       />
     </div>
   )
