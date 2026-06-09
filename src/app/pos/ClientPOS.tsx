@@ -82,10 +82,17 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
     }
   }
 
+  // Reutilizamos un solo AudioContext para evitar acumulación de contextos no cerrados
+  // (cada `new AudioContext()` sin `.close()` consume recursos y puede congelar el tab)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+
   function reproducirBeep() {
     try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const osc = ctx.createOscillator()
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+      }
+      const ctx  = audioCtxRef.current
+      const osc  = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.connect(gain); gain.connect(ctx.destination)
       osc.type = 'sine'
@@ -183,6 +190,8 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
     }
 
     setCobrando(true)
+    // Safety: si algo falla silenciosamente, el overlay se limpia en 30s
+    const safetyTimer = setTimeout(() => setCobrando(false), 30_000)
     try {
       // 1. Crear el pedido (nace como 'pendiente')
       const res = await fetch('/api/orders', {
@@ -238,6 +247,7 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId }:
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al cobrar')
     } finally {
+      clearTimeout(safetyTimer)
       setCobrando(false)
     }
   }
