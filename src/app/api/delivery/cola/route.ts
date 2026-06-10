@@ -23,7 +23,7 @@ export async function GET() {
     .from('pedidos')
     .select(`
       id, numero_pedido, nombre_cliente, telefono_cliente,
-      direccion_entrega, total, estado, eta_minutos,
+      direccion_entrega, cliente_lat, cliente_lng, total, estado, eta_minutos,
       created_at, zona_delivery_id, notas,
       zonas_delivery(id, nombre, tiempo_estimado_min),
       items_pedido(id, nombre_producto, cantidad, precio_unitario),
@@ -66,7 +66,7 @@ export async function GET() {
   // ── Repartidores disponibles (activos, no en ruta actualmente) ────────────
   const { data: todosRepartidores } = await supabase
     .from('repartidores')
-    .select('id, nombre, estado, vehiculos_delivery(id, nombre, tipo, placa)')
+    .select('id, nombre, estado_operativo, vehiculos_delivery(id, nombre, tipo, placa)')
     .eq('ferreteria_id', session.ferreteriaId)
     .eq('activo', true)
 
@@ -83,7 +83,7 @@ export async function GET() {
   const repartidoresDisponibles = (todosRepartidores ?? []).map((r: any) => ({
     id: r.id,
     nombre: r.nombre,
-    estado: r.estado,
+    estado: r.estado_operativo,
     enRuta: idsEnRuta.has(r.id),
     vehiculo: r.vehiculos_delivery?.[0] ?? null,
   }))

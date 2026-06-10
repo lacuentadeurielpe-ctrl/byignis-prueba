@@ -65,7 +65,7 @@ export default async function DeliveryPage() {
       .eq('ferreteria_id', session.ferreteriaId)
       .then(({ count }) => count ?? 0),
     supabase
-      .from('vehiculos')
+      .from('vehiculos_delivery')
       .select('id', { count: 'exact', head: true })
       .eq('ferreteria_id', session.ferreteriaId)
       .then(({ count }) => count ?? 0),
@@ -82,7 +82,6 @@ export default async function DeliveryPage() {
       .from('vehiculos_delivery')
       .select('id, nombre, tipo, placa, estado, descripcion_averia, est_resolucion_at, repartidores(nombre)')
       .eq('ferreteria_id', session.ferreteriaId)
-      .eq('activo', true)
       .order('nombre')
       .then(({ data }) => data ?? []),
     // ── Entregas activas por repartidor (para contador) ──

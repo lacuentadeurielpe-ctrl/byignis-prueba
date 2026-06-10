@@ -15,7 +15,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   Clock, MapPin, Package, Truck, AlertTriangle,
-  ChevronDown, Loader2, CheckCircle, Users, Zap,
+  ChevronDown, Loader2, CheckCircle, Users, Zap, Navigation,
 } from 'lucide-react'
 import { cn, formatPEN } from '@/lib/utils'
 
@@ -39,6 +39,8 @@ interface PedidoCola {
   nombre_cliente: string
   telefono_cliente: string
   direccion_entrega: string | null
+  cliente_lat: number | null
+  cliente_lng: number | null
   total: number
   estado: string
   eta_minutos: number | null
@@ -254,6 +256,8 @@ export default function ColaTab() {
         <div className="space-y-3">
           {pedidos.map((pedido) => {
             const esUrgente = pedido.minutosEnCola >= 15
+            const sinDireccion = !pedido.direccion_entrega?.trim()
+            const sinGPS = !pedido.cliente_lat || !pedido.cliente_lng
             const isOpen = expandido === pedido.id
             const repartidorSeleccionado = seleccionRepartidor[pedido.id] ?? ''
 
@@ -285,10 +289,20 @@ export default function ColaTab() {
                     </div>
                   </div>
 
-                  {pedido.direccion_entrega && (
+                  {pedido.direccion_entrega ? (
                     <div className="flex items-center gap-1.5 mt-2">
                       <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                       <p className="text-xs text-zinc-600 truncate">{pedido.direccion_entrega}</p>
+                      {sinGPS && (
+                        <span title="Sin coordenadas GPS — ETA no calculable" className="text-[9px] bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium shrink-0">
+                          sin GPS
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <Navigation className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <p className="text-xs text-red-600 font-medium">Sin dirección de entrega</p>
                     </div>
                   )}
 
@@ -358,6 +372,23 @@ export default function ColaTab() {
                         }
                         {' · '}
                         {Math.round(pedido.prediccion.confidence * 100)}% confianza
+                      </div>
+                    )}
+
+                    {/* ── Alertas de datos incompletos ── */}
+                    {sinDireccion && (
+                      <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-semibold text-red-700">Sin dirección de entrega</p>
+                          <p className="text-[11px] text-red-600 mt-0.5">El repartidor no sabrá a dónde ir. Contacta al cliente antes de asignar.</p>
+                        </div>
+                      </div>
+                    )}
+                    {!sinDireccion && sinGPS && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-start gap-2">
+                        <Navigation className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-amber-700">Sin GPS — el ETA no se puede calcular con precisión. Haversine como fallback.</p>
                       </div>
                     )}
 
