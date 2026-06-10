@@ -2,10 +2,11 @@
 import { redirect } from 'next/navigation'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
-import { FileText, ShoppingCart, CreditCard, TrendingUp } from 'lucide-react'
+import { FileText, ShoppingCart, CreditCard, TrendingUp, Wallet } from 'lucide-react'
 import CotizacionesTable from '@/components/cotizaciones/CotizacionesTable'
 import OrdersPremiumView from '@/components/orders/premium/OrdersPremiumView'
 import PagosView, { type PagoItem } from '@/components/pagos/PagosView'
+import CreditosTable from '@/components/creditos/CreditosTable'
 import type { PermisoMap } from '@/lib/auth/permisos'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'pedidos',      label: 'Pedidos',      icon: ShoppingCart },
   { id: 'cotizaciones', label: 'Cotizaciones',  icon: FileText     },
   { id: 'pagos',        label: 'Pagos',         icon: CreditCard   },
+  { id: 'deudas',       label: 'Deudas',        icon: Wallet       },
 ] as const
 
 type Tab = typeof TABS[number]['id']
@@ -108,6 +110,56 @@ export default async function VentasPage({
     )
   }
 
+  // ── Deudas (Créditos) ────────────────────────────────────────────────────
+  let deudasContent: React.ReactNode = null
+  if (tab === 'deudas') {
+    const creditos = await ventasRepo.listarCreditosDashboard(session.ferreteriaId)
+
+    const totalActivo  = creditos.filter(c => c.estado === 'activo').reduce((s, c) => s + (c.monto_total - c.monto_pagado), 0)
+    const totalVencido = creditos.filter(c => c.estado === 'vencido').reduce((s, c) => s + (c.monto_total - c.monto_pagado), 0)
+
+    deudasContent = (
+      <>
+        {creditos.length === 0 ? (
+          <div className="text-center py-16">
+            <Wallet className="w-10 h-10 mx-auto mb-3 text-zinc-200" />
+            <p className="text-sm text-zinc-500">No hay créditos registrados</p>
+            <p className="text-xs text-zinc-400 mt-1">Los créditos a clientes aparecerán aquí. Se crean automáticamente cuando el bot registra una venta con pago pendiente.</p>
+          </div>
+        ) : (
+          <>
+            {/* Banner resumen de cartera */}
+            {(totalActivo > 0 || totalVencido > 0) && (
+              <div className="flex gap-3 mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                <Wallet className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-800">Cartera de deudas pendientes</p>
+                  <div className="flex gap-4 mt-1 flex-wrap">
+                    {totalActivo > 0 && (
+                      <span className="text-xs text-amber-700">
+                        <span className="font-bold">S/ {totalActivo.toFixed(2)}</span> activo
+                      </span>
+                    )}
+                    {totalVencido > 0 && (
+                      <span className="text-xs text-red-700">
+                        <span className="font-bold">S/ {totalVencido.toFixed(2)}</span> vencido ⚠️
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            <CreditosTable
+              creditos={creditos as any[]}
+              rol={session.rol}
+              permisos={session.permisos as PermisoMap}
+            />
+          </>
+        )}
+      </>
+    )
+  }
+
   // ── Pagos ────────────────────────────────────────────────────────────────
   let pagosContent: React.ReactNode = null
   if (tab === 'pagos') {
@@ -178,6 +230,7 @@ export default async function VentasPage({
       {pedidosContent}
       {cotizacionesContent}
       {pagosContent}
+      {deudasContent}
     </div>
   )
 }

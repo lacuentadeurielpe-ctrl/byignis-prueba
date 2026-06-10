@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, Clock, XCircle, Gift, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { CheckCircle, Clock, XCircle, Gift, ChevronDown, ChevronUp, ExternalLink, X } from 'lucide-react'
 import { formatPEN, formatFecha } from '@/lib/utils'
 
 export interface PagoItem {
@@ -48,13 +48,19 @@ const TABS = [
 
 export default function PagosView({ pagos, esDueno, initPagoId }: { pagos: PagoItem[]; esDueno: boolean; initPagoId?: string }) {
   const [tabActivo, setTabActivo] = useState('')
+  const [metodoFiltro, setMetodoFiltro] = useState('')
   const [expandido, setExpandido] = useState<string | null>(initPagoId ?? null)
   const [procesando, setProcesando] = useState<string | null>(null)
   const [pagosState, setPagosState] = useState<PagoItem[]>(pagos)
 
-  const filtrados = tabActivo
-    ? pagosState.filter((p) => p.estado === tabActivo)
-    : pagosState
+  // Métodos únicos que realmente existen en los pagos
+  const metodosPresentes = Array.from(new Set(pagosState.map((p) => p.metodo).filter(Boolean)))
+
+  const filtrados = pagosState.filter((p) => {
+    const matchEstado = !tabActivo || p.estado === tabActivo
+    const matchMetodo = !metodoFiltro || p.metodo === metodoFiltro
+    return matchEstado && matchMetodo
+  })
 
   async function accion(pagoId: string, accion: 'aprobar' | 'rechazar', pedidoId?: string) {
     if (!confirm(accion === 'aprobar' ? '¿Confirmar este pago?' : '¿Rechazar este pago?')) return
@@ -87,8 +93,8 @@ export default function PagosView({ pagos, esDueno, initPagoId }: { pagos: PagoI
 
   return (
     <div>
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-zinc-200 mb-4 overflow-x-auto">
+      {/* Tabs por estado */}
+      <div className="flex gap-1 border-b border-zinc-200 mb-3 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -108,6 +114,32 @@ export default function PagosView({ pagos, esDueno, initPagoId }: { pagos: PagoI
           </button>
         ))}
       </div>
+
+      {/* Chips de filtro por método */}
+      {metodosPresentes.length > 1 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-[11px] text-zinc-400 font-medium shrink-0">Método:</span>
+          {metodoFiltro && (
+            <button
+              onClick={() => setMetodoFiltro('')}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-900 text-white transition"
+            >
+              {METODO_LABEL[metodoFiltro] ?? metodoFiltro}
+              <X className="w-3 h-3" />
+            </button>
+          )}
+          {!metodoFiltro && metodosPresentes.map((m) => (
+            <button
+              key={m}
+              onClick={() => setMetodoFiltro(m)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition"
+            >
+              {METODO_LABEL[m] ?? m}
+              <span className="text-zinc-400">({pagosState.filter(p => p.metodo === m && (!tabActivo || p.estado === tabActivo)).length})</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Lista */}
       <div className="space-y-2">
@@ -137,7 +169,13 @@ export default function PagosView({ pagos, esDueno, initPagoId }: { pagos: PagoI
                     <span className="text-sm font-bold text-zinc-900 tabular-nums">
                       {formatPEN(pago.monto)}
                     </span>
-                    <span className="text-xs text-zinc-500">{METODO_LABEL[pago.metodo] ?? pago.metodo}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setMetodoFiltro(metodoFiltro === pago.metodo ? '' : pago.metodo) }}
+                      className={`text-xs px-1.5 py-0.5 rounded-md transition ${metodoFiltro === pago.metodo ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:bg-zinc-100'}`}
+                      title="Filtrar por este método"
+                    >
+                      {METODO_LABEL[pago.metodo] ?? pago.metodo}
+                    </button>
                     {pago.pedido && (
                       <span className="text-xs bg-zinc-100 rounded-full px-1.5 py-0.5 text-zinc-600 font-medium">
                         {pago.pedido.numero_pedido}
