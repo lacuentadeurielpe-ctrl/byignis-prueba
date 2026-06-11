@@ -54,7 +54,7 @@ export async function PATCH(
   // Cargar pedido — filtrado por ferreteria_id (TENANT AISLADO)
   const { data: pedidoActual } = await supabase
     .from('pedidos')
-    .select('id, numero_pedido, estado, estado_pago, total, monto_pagado, cliente_id, telefono_cliente, eta_minutos, clientes(telefono)')
+    .select('id, numero_pedido, estado, estado_pago, total, monto_pagado, cobrado_monto, cliente_id, telefono_cliente, eta_minutos, clientes(telefono)')
     .eq('id', pedidoId)
     .eq('ferreteria_id', repartidor.ferreteria_id)   // TENANT AISLADO
     .single()
@@ -100,8 +100,8 @@ export async function PATCH(
     const montoPagadoPrevio = pedidoActual.monto_pagado ?? 0
     const saldoPendiente    = Math.max(0, totalPedido - montoPagadoPrevio)
 
-    // Si ya estaba pagado (vía WhatsApp/Yape previo) → no tocar estado_pago
-    if (pedidoActual.estado_pago !== 'pagado') {
+    // Solo procesar estado_pago si aún no se registró cobro físico antes
+    if (pedidoActual.cobrado_monto === null) {
       if (saldoPendiente === 0 || montoCobrado >= saldoPendiente) {
         // Cubre el saldo pendiente completo → pagado
         update.estado_pago         = 'pagado'

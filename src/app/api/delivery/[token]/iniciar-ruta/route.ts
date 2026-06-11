@@ -35,21 +35,18 @@ export async function POST(
 
   const ahora = new Date().toISOString()
 
-  // Actualizar la entrega más reciente pendiente / asignada del repartidor
-  const { data: entrega, error } = await supabase
+  // Actualizar TODAS las entregas activas del repartidor con salio_at
+  // (multi-parada: el repartidor sale una sola vez para todas sus entregas del día)
+  const { error: errEntregas } = await supabase
     .from('entregas')
     .update({ salio_at: ahora, estado: 'en_ruta' })
     .eq('repartidor_id', repartidor.id)
     .eq('ferreteria_id', repartidor.ferreteria_id)
     .in('estado', ['pendiente', 'asignado', 'en_ruta'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .select('id, pedido_id')
-    .single()
 
-  if (error || !entrega) {
-    // Puede que ya esté en ruta — responder ok igualmente
-    return NextResponse.json({ ok: true, salio_at: ahora, mensaje: 'Sin entrega activa para actualizar' })
+  if (errEntregas) {
+    console.error('[iniciar-ruta] Error al actualizar entregas:', errEntregas.message)
+    // No bloqueamos al repartidor — el localStorage del frontend tiene el fallback
   }
 
   // Marcar repartidor en ruta si no lo está
@@ -60,10 +57,5 @@ export async function POST(
       .eq('id', repartidor.id)
   }
 
-  return NextResponse.json({
-    ok:        true,
-    salio_at:  ahora,
-    entregaId: entrega.id,
-    pedidoId:  entrega.pedido_id,
-  })
+  return NextResponse.json({ ok: true, salio_at: ahora })
 }

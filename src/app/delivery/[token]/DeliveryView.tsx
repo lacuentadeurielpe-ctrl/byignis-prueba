@@ -226,8 +226,32 @@ export default function DeliveryView({
     return () => clearInterval(interval)
   }, [cronometroActivo, cronometroInicio])
 
+  // Restaurar cronómetro desde localStorage si la DB no tiene salio_at
+  // (ocurre cuando el repartidor inicia ruta y luego recarga la página sin entrega activa guardada)
+  useEffect(() => {
+    if (cronometroActivo) return  // ya activo desde datos del servidor
+    try {
+      const stored = localStorage.getItem(`delivery_cron_${token}`)
+      if (stored) {
+        const inicio = new Date(stored)
+        const elapsedMs = Date.now() - inicio.getTime()
+        // Solo restaurar si el inicio fue hace menos de 16 horas (evitar estados fantasma)
+        if (!isNaN(inicio.getTime()) && elapsedMs < 16 * 60 * 60 * 1000) {
+          setCronometroInicio(inicio)
+          setCronometroActivo(true)
+          setTiempoEnRuta(elapsedMs)
+        } else {
+          localStorage.removeItem(`delivery_cron_${token}`)
+        }
+      }
+    } catch { /* localStorage no disponible en este entorno */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const iniciarCronometro = useCallback(() => {
     const ahora = new Date()
+    // Persistir en localStorage para sobrevivir recargas de página
+    try { localStorage.setItem(`delivery_cron_${token}`, ahora.toISOString()) } catch {}
     setCronometroInicio(ahora)
     setCronometroActivo(true)
     setTiempoEnRuta(0)
@@ -383,12 +407,12 @@ export default function DeliveryView({
   }, [])
 
   // Estado inline de cobro por pedido (sin modal)
-  // Inicializar con el total del pedido para órdenes sin pagar,
-  // evitando que el repartidor confirme sin registrar el cobro.
+  // Inicializar para todos los pedidos donde aún no se registró cobro físico.
+  // cobrado_monto !== null = ya fue procesado por el repartidor en esta entrega.
   const [cobros, setCobros] = useState<Record<string, { monto: string; metodo: string }>>(() => {
     const initial: Record<string, { monto: string; metodo: string }> = {}
     inicialAsignados.forEach(p => {
-      if (p.estado_pago !== 'pagado') {
+      if (p.cobrado_monto === null) {
         initial[p.id] = { monto: p.total.toFixed(2), metodo: '' }
       }
     })
@@ -470,7 +494,9 @@ export default function DeliveryView({
   async function confirmarEntrega(pedido: PedidoDelivery, pinYaVerificado = false) {
     const { monto, metodo } = cobroDeState(pedido.id)
     const montoNum = parseFloat(monto) || 0
-    const esDeuda  = montoNum > 0 && montoNum < pedido.total
+    // Para pedidos pre-pagados digitalmente (estado_pago = 'pagado'), no se genera deuda
+    // aunque el monto cobrado físicamente sea menor al total
+    const esDeuda  = montoNum > 0 && montoNum < pedido.total && pedido.estado_pago !== 'pagado'
 
     // Validar pago parcial sin permiso
     if (esDeuda && !puedeRegistrarDeuda) {
@@ -515,7 +541,12 @@ export default function DeliveryView({
         clientes:      pedido.clientes,
         created_at:    pedido.created_at,
       }, ...prev])
-      setPedidos(prev => prev.filter(p => p.id !== pedido.id))
+      const nuevaLista = pedidos.filter(p => p.id !== pedido.id)
+      setPedidos(nuevaLista)
+      // Si se entregaron todos, limpiar cronómetro de localStorage
+      if (nuevaLista.length === 0) {
+        try { localStorage.removeItem(`delivery_cron_${token}`) } catch {}
+      }
     } catch {
       alert('Error al registrar entrega. Intenta de nuevo.')
     } finally {
@@ -615,13 +646,17 @@ export default function DeliveryView({
     const nombre       = pedido.clientes?.nombre ?? pedido.nombre_cliente ?? 'Cliente'
     const telefono     = pedido.clientes?.telefono ?? pedido.telefono_cliente ?? null
     const tieneInc     = !!pedido.incidencia_tipo
-    const yaPagado     = pedido.estado_pago === 'pagado'
+    // "ya cobrado" = el repartidor ya registró la colección física en esta entrega
+    const yaPagado     = pedido.cobrado_monto !== null
+    // "pre-pagado digital" = marcado como pagado (Yape/transfer) pero sin cobro físico aún
+    const pagoDigital  = pedido.estado_pago === 'pagado' && pedido.cobrado_monto === null
     const estadoInfo   = ESTADO_LABELS[pedido.estado] ?? { label: pedido.estado, icon: '•', color: 'text-zinc-500' }
     const pagoLabel    = labelEstadoPago(pedido.estado_pago)
     const pagoColor    = colorEstadoPago(pedido.estado_pago)
     const { monto, metodo } = cobroDeState(pedido.id)
     const montoNum     = parseFloat(monto) || 0
-    const esParcial    = montoNum > 0 && montoNum < pedido.total
+    // esParcial solo aplica cuando hay deuda real (no para pedidos pre-pagados)
+    const esParcial    = montoNum > 0 && montoNum < pedido.total && !pagoDigital
     const enProceso    = cargando === pedido.id
     // Número de parada: priorizar orden_en_ruta de la entrega, si no usar idx+1
     const entrega      = pedido.entregas?.[0]
@@ -814,10 +849,18 @@ export default function DeliveryView({
                   {yaPagado ? (
                     <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-xl px-3 py-2.5">
                       <BadgeCheck className="w-4 h-4 shrink-0" />
-                      <span>Pago ya confirmado (WhatsApp/digital) — solo confirma la entrega</span>
+                      <span>Cobro ya registrado — {pedido.cobrado_monto != null ? formatPEN(pedido.cobrado_monto) : ''}</span>
                     </div>
                   ) : (
                     <>
+                      {/* Banner informativo si el pedido fue marcado como pagado digitalmente */}
+                      {pagoDigital && (
+                        <div className="flex items-center gap-2 text-xs text-sky-700 bg-sky-50 rounded-xl px-3 py-2 border border-sky-200">
+                          <BadgeCheck className="w-3.5 h-3.5 shrink-0" />
+                          <span>Este pedido tiene pago registrado previamente. Ingresa lo que cobres al entregar (puede ser S/0 si ya está pagado).</span>
+                        </div>
+                      )}
+
                       {/* Método de pago */}
                       <div className="flex gap-2">
                         {[
