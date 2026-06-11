@@ -104,7 +104,10 @@ interface PedidoDelivery {
   incidencia_desc: string | null
   created_at: string
   eta_minutos: number | null
-  clientes: { nombre: string | null; telefono: string } | null
+  cliente_id: string | null
+  /** null = sin límite configurado; number = crédito disponible en S/ */
+  credito_disponible: number | null
+  clientes: { nombre: string | null; telefono: string; limite_credito_monto?: number | null } | null
   zonas_delivery: { nombre: string } | null
   items_pedido: ItemPedido[]
   entregas: EntregaInfo[] | null
@@ -861,17 +864,37 @@ export default function DeliveryView({
                         )}
                       </div>
 
+                      {/* Banner crédito disponible del cliente */}
+                      {(() => {
+                        const disp = pedido.credito_disponible
+                        if (disp === null) return null // sin límite configurado
+                        if (disp <= 0) return (
+                          <div className="text-xs rounded-xl px-3 py-2 bg-red-50 text-red-700 border border-red-200">
+                            🚫 Este cliente <strong>no puede recibir más crédito</strong>. Tiene deudas sin pagar que alcanzaron su límite. Comunícate con el encargado.
+                          </div>
+                        )
+                        return (
+                          <div className="text-xs rounded-xl px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            💳 Crédito disponible del cliente: <strong>S/ {disp.toFixed(2)}</strong>
+                          </div>
+                        )
+                      })()}
+
                       {/* Aviso de cobro parcial */}
                       {esParcial && (
                         <div className={cn(
                           'text-xs rounded-xl px-3 py-2',
-                          puedeRegistrarDeuda
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-red-50 text-red-700 border border-red-200'
+                          !puedeRegistrarDeuda
+                            ? 'bg-red-50 text-red-700 border border-red-200'
+                            : pedido.credito_disponible !== null && pedido.credito_disponible <= 0
+                              ? 'bg-red-50 text-red-700 border border-red-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
                         )}>
-                          {puedeRegistrarDeuda
-                            ? `⚠️ Cobro parcial: S/${montoNum.toFixed(2)} de S/${pedido.total.toFixed(2)} — se registrará deuda de S/${(pedido.total - montoNum).toFixed(2)}`
-                            : `❌ Cobro parcial no permitido. Debes cobrar S/${pedido.total.toFixed(2)} completo o consultar con el encargado.`
+                          {!puedeRegistrarDeuda
+                            ? `❌ Cobro parcial no permitido. Debes cobrar S/${pedido.total.toFixed(2)} completo o consultar con el encargado.`
+                            : pedido.credito_disponible !== null && pedido.credito_disponible <= 0
+                              ? `❌ Este cliente no puede recibir deuda. Debes cobrar el monto completo.`
+                              : `⚠️ Cobro parcial: S/${montoNum.toFixed(2)} de S/${pedido.total.toFixed(2)} — se registrará deuda de S/${(pedido.total - montoNum).toFixed(2)}`
                           }
                         </div>
                       )}
@@ -935,7 +958,7 @@ export default function DeliveryView({
                 <div className="space-y-2">
                   <button
                     onClick={() => confirmarEntrega(pedido)}
-                    disabled={enProceso || (!yaPagado && esParcial && !puedeRegistrarDeuda)}
+                    disabled={enProceso || (!yaPagado && esParcial && (!puedeRegistrarDeuda || (pedido.credito_disponible !== null && pedido.credito_disponible <= 0)))}
                     className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition"
                   >
                     {enProceso ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}

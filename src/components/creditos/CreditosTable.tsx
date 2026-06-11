@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { cn, formatPEN, formatFecha } from '@/lib/utils'
-import { ChevronDown, CreditCard, CheckCircle2, AlertTriangle, Clock, Plus, Loader2, X, Phone, ExternalLink } from 'lucide-react'
+import { ChevronDown, CreditCard, CheckCircle2, AlertTriangle, Clock, Plus, Loader2, X, Phone, ExternalLink, Pencil, Check } from 'lucide-react'
 import { checkPermiso, type PermisoMap } from '@/lib/auth/permisos'
 import type { Rol } from '@/lib/auth/roles'
 
@@ -85,6 +85,29 @@ export default function CreditosTable({
     notas: string
   } | null>(null)
   const [registrando, setRegistrando] = useState(false)
+  // Edición de fecha límite inline
+  const [editandoFecha, setEditandoFecha] = useState<string | null>(null)
+  const [fechaInput, setFechaInput] = useState('')
+  const [guardandoFecha, setGuardandoFecha] = useState(false)
+
+  async function guardarFecha(creditoId: string) {
+    if (!fechaInput) return
+    setGuardandoFecha(true)
+    try {
+      const res = await fetch(`/api/creditos/${creditoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha_limite: fechaInput }),
+      })
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? 'Error') }
+      setCreditos(prev => prev.map(c => c.id === creditoId ? { ...c, fecha_limite: fechaInput } : c))
+      setEditandoFecha(null)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al guardar')
+    } finally {
+      setGuardandoFecha(false)
+    }
+  }
 
   const filtrados = useMemo(() => {
     if (!filtroEstado) return creditos
@@ -361,6 +384,47 @@ export default function CreditosTable({
                         </div>
                       </div>
                     )}
+
+                    {/* Fecha límite editable */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-gray-500 font-medium">Vence:</span>
+                      {editandoFecha === credito.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="date"
+                            value={fechaInput}
+                            onChange={e => setFechaInput(e.target.value)}
+                            className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300"
+                          />
+                          <button
+                            onClick={() => guardarFecha(credito.id)}
+                            disabled={guardandoFecha || !fechaInput}
+                            className="p-1 text-green-600 hover:bg-green-50 rounded-lg disabled:opacity-50 transition"
+                            title="Guardar"
+                          >
+                            {guardandoFecha ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => setEditandoFecha(null)}
+                            className="p-1 text-gray-400 hover:bg-gray-100 rounded-lg transition"
+                            title="Cancelar"
+                          ><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-gray-700">
+                            {new Date(credito.fecha_limite + 'T00:00:00').toLocaleDateString('es-PE')}
+                          </span>
+                          {credito.estado !== 'pagado' && puedeAbonar && (
+                            <button
+                              onClick={() => { setEditandoFecha(credito.id); setFechaInput(credito.fecha_limite) }}
+                              className="p-1 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded transition"
+                              title="Editar fecha límite"
+                            ><Pencil className="w-3 h-3" /></button>
+                          )}
+                        </div>
+                      )}
+                    </div>
 
                     {credito.notas && (
                       <p className="text-xs text-gray-500">

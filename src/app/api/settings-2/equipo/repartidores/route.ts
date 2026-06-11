@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   try {
     const { data, error } = await supabase
       .from('repartidores')
-      .select('id, nombre, telefono, pin, token, estado, zonas_asignadas, puede_registrar_deuda, limite_deuda_monto, limite_deuda_porcentaje, created_at')
+      .select('id, nombre, telefono, pin, token, estado, zonas_asignadas, puede_registrar_deuda, created_at')
       .eq('ferreteria_id', session.ferreteriaId)
       .order('created_at', { ascending: false })
 
@@ -115,43 +115,27 @@ export async function PATCH(request: Request) {
         .update({ token: nuevoToken, pin_hash: nuevoPinHash })
         .eq('id', body.id)
         .eq('ferreteria_id', session.ferreteriaId)
-        .select('id, nombre, telefono, pin, token, estado, zonas_asignadas, puede_registrar_deuda, limite_deuda_monto, limite_deuda_porcentaje, created_at')
+        .select('id, nombre, telefono, pin, token, estado, zonas_asignadas, puede_registrar_deuda, created_at')
         .single()
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json(data)
     }
 
-    // Acción especial: actualizar permisos de cobro parcial (deuda)
+    // Acción especial: actualizar permiso de pago parcial
     if (body.accion === 'actualizar_permisos') {
-      const { puede_registrar_deuda, limite_deuda_monto, limite_deuda_porcentaje } = body
+      const { puede_registrar_deuda } = body
 
       if (typeof puede_registrar_deuda !== 'boolean') {
         return NextResponse.json({ error: 'puede_registrar_deuda debe ser boolean' }, { status: 400 })
       }
 
-      // Validar límites si se envían
-      if (limite_deuda_monto !== null && limite_deuda_monto !== undefined) {
-        if (typeof limite_deuda_monto !== 'number' || limite_deuda_monto <= 0) {
-          return NextResponse.json({ error: 'limite_deuda_monto debe ser un número positivo' }, { status: 400 })
-        }
-      }
-      if (limite_deuda_porcentaje !== null && limite_deuda_porcentaje !== undefined) {
-        if (typeof limite_deuda_porcentaje !== 'number' || limite_deuda_porcentaje < 1 || limite_deuda_porcentaje > 100) {
-          return NextResponse.json({ error: 'limite_deuda_porcentaje debe estar entre 1 y 100' }, { status: 400 })
-        }
-      }
-
       const { data, error } = await supabase
         .from('repartidores')
-        .update({
-          puede_registrar_deuda,
-          limite_deuda_monto:      puede_registrar_deuda ? (limite_deuda_monto ?? null) : null,
-          limite_deuda_porcentaje: puede_registrar_deuda ? (limite_deuda_porcentaje ?? null) : null,
-        })
+        .update({ puede_registrar_deuda })
         .eq('id', body.id)
         .eq('ferreteria_id', session.ferreteriaId)
-        .select('id, nombre, puede_registrar_deuda, limite_deuda_monto, limite_deuda_porcentaje')
+        .select('id, nombre, puede_registrar_deuda')
         .single()
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })

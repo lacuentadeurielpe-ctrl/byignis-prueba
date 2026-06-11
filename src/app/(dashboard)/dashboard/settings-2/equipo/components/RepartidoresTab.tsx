@@ -11,15 +11,11 @@ interface Repartidor {
   token: string
   estado: string
   puede_registrar_deuda: boolean
-  limite_deuda_monto: number | null
-  limite_deuda_porcentaje: number | null
 }
 
 // Estado local de edición de permisos para un repartidor
 interface PermisosEdit {
   puede_registrar_deuda: boolean
-  limite_deuda_monto: string       // string para controlar el input
-  limite_deuda_porcentaje: string  // string para controlar el input
 }
 
 export default function RepartidoresTab() {
@@ -34,23 +30,18 @@ export default function RepartidoresTab() {
   const [generando, setGenerando]       = useState<string | null>(null)
 
   // Expansión + edición de permisos
-  const [expandido, setExpandido]       = useState<string | null>(null)
-  const [permisosEdit, setPermisosEdit] = useState<Record<string, PermisosEdit>>({})
+  const [expandido, setExpandido]         = useState<string | null>(null)
+  const [permisosEdit, setPermisosEdit]   = useState<Record<string, PermisosEdit>>({})
   const [guardandoPerm, setGuardandoPerm] = useState<string | null>(null)
-  const [savedPerm, setSavedPerm]       = useState<string | null>(null)
+  const [savedPerm, setSavedPerm]         = useState<string | null>(null)
 
   function getPortalUrl(token: string) {
     const base = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_APP_URL ?? '')
     return `${base}/delivery/${token}`
   }
 
-  // Inicializar el estado de edición cuando cambia la lista
   function initPermisosEdit(rep: Repartidor): PermisosEdit {
-    return {
-      puede_registrar_deuda: rep.puede_registrar_deuda ?? false,
-      limite_deuda_monto:    rep.limite_deuda_monto != null ? String(rep.limite_deuda_monto) : '',
-      limite_deuda_porcentaje: rep.limite_deuda_porcentaje != null ? String(rep.limite_deuda_porcentaje) : '',
-    }
+    return { puede_registrar_deuda: rep.puede_registrar_deuda ?? false }
   }
 
   function toggleExpandido(id: string, rep: Repartidor) {
@@ -58,7 +49,6 @@ export default function RepartidoresTab() {
       setExpandido(null)
     } else {
       setExpandido(id)
-      // Si todavía no hay edición inicializada para este repartidor, inicializar
       setPermisosEdit(prev => ({
         ...prev,
         [id]: prev[id] ?? initPermisosEdit(rep),
@@ -105,31 +95,14 @@ export default function RepartidoresTab() {
     setGuardandoPerm(id)
     setError('')
 
-    const montoNum = edit.limite_deuda_monto !== '' ? parseFloat(edit.limite_deuda_monto) : null
-    const pctNum   = edit.limite_deuda_porcentaje !== '' ? parseInt(edit.limite_deuda_porcentaje) : null
-
-    // Validaciones locales
-    if (montoNum !== null && (isNaN(montoNum) || montoNum <= 0)) {
-      setError('El límite de monto debe ser mayor a 0')
-      setGuardandoPerm(null)
-      return
-    }
-    if (pctNum !== null && (isNaN(pctNum) || pctNum < 1 || pctNum > 100)) {
-      setError('El límite porcentual debe estar entre 1 y 100')
-      setGuardandoPerm(null)
-      return
-    }
-
     try {
       const res = await fetch('/api/settings-2/equipo/repartidores', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id,
-          accion:                  'actualizar_permisos',
-          puede_registrar_deuda:   edit.puede_registrar_deuda,
-          limite_deuda_monto:      montoNum,
-          limite_deuda_porcentaje: pctNum,
+          accion:                'actualizar_permisos',
+          puede_registrar_deuda: edit.puede_registrar_deuda,
         }),
       })
 
@@ -281,8 +254,8 @@ export default function RepartidoresTab() {
       ) : (
         <div className="space-y-3">
           {repartidores.map(rep => {
-            const isExp = expandido === rep.id
-            const edit  = permisosEdit[rep.id]
+            const isExp     = expandido === rep.id
+            const edit      = permisosEdit[rep.id]
             const puedeDeuda = edit?.puede_registrar_deuda ?? rep.puede_registrar_deuda
 
             return (
@@ -299,7 +272,7 @@ export default function RepartidoresTab() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-zinc-900 text-sm">{rep.nombre}</span>
                       <code className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-md">PIN {rep.pin}</code>
-                      {rep.puede_registrar_deuda ? (
+                      {puedeDeuda ? (
                         <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-semibold rounded-md">
                           <Shield className="w-2.5 h-2.5" /> Acepta pago parcial
                         </span>
@@ -382,6 +355,7 @@ export default function RepartidoresTab() {
                         <p className="text-xs text-zinc-500 mt-0.5">
                           Si está activo, el repartidor puede entregar aunque el cliente pague solo una parte.
                           El resto queda como deuda registrada automáticamente.
+                          El límite de crédito por cliente se configura en cada ficha de cliente.
                         </p>
                       </div>
                       <button
@@ -398,81 +372,6 @@ export default function RepartidoresTab() {
                         }`} />
                       </button>
                     </div>
-
-                    {/* Límites (solo visibles si pago parcial está habilitado) */}
-                    {edit.puede_registrar_deuda && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-0 border-l-2 border-emerald-200 pl-4">
-                        {/* Límite de monto */}
-                        <div>
-                          <label className="block text-xs font-semibold text-zinc-700 mb-1.5">
-                            Límite máximo de deuda (S/)
-                          </label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-semibold">S/</span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="Sin límite"
-                              value={edit.limite_deuda_monto}
-                              onChange={e => setPermisosEdit(prev => ({
-                                ...prev,
-                                [rep.id]: { ...prev[rep.id], limite_deuda_monto: e.target.value },
-                              }))}
-                              className="w-full pl-8 pr-3 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                            />
-                          </div>
-                          <p className="text-[10px] text-zinc-400 mt-1">
-                            La deuda generada no puede superar este monto. Dejar vacío = sin límite monetario.
-                          </p>
-                        </div>
-
-                        {/* Límite porcentual */}
-                        <div>
-                          <label className="block text-xs font-semibold text-zinc-700 mb-1.5">
-                            Deuda máxima (% del pedido)
-                          </label>
-                          <div className="relative">
-                            <input
-                              type="number"
-                              min="1"
-                              max="100"
-                              step="1"
-                              placeholder="Sin límite"
-                              value={edit.limite_deuda_porcentaje}
-                              onChange={e => setPermisosEdit(prev => ({
-                                ...prev,
-                                [rep.id]: { ...prev[rep.id], limite_deuda_porcentaje: e.target.value },
-                              }))}
-                              className="w-full pr-8 pl-3 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                            />
-                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-semibold">%</span>
-                          </div>
-                          <p className="text-[10px] text-zinc-400 mt-1">
-                            Ej: 30% → el repartidor puede dejar como deuda hasta el 30% del total. Vacío = sin límite %.
-                          </p>
-                        </div>
-
-                        {/* Resumen visual */}
-                        {(edit.limite_deuda_monto || edit.limite_deuda_porcentaje) && (
-                          <div className="sm:col-span-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
-                            <span className="font-semibold">Ejemplo: </span>
-                            {(() => {
-                              const ejTotal = 100
-                              const partes: string[] = []
-                              if (edit.limite_deuda_monto && parseFloat(edit.limite_deuda_monto) > 0) {
-                                partes.push(`no puede dejar más de S/ ${parseFloat(edit.limite_deuda_monto).toFixed(2)} de deuda`)
-                              }
-                              if (edit.limite_deuda_porcentaje && parseInt(edit.limite_deuda_porcentaje) > 0) {
-                                const pct = parseInt(edit.limite_deuda_porcentaje)
-                                partes.push(`en un pedido de S/ ${ejTotal} debe cobrar al menos S/ ${(ejTotal * (1 - pct / 100)).toFixed(2)} (${100 - pct}%)`)
-                              }
-                              return partes.join(' y ')
-                            })()}.
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {/* Botón guardar */}
                     <div className="flex items-center gap-3 pt-1">

@@ -50,6 +50,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     direccion_habitual,
     tags,
     notas_internas,
+    limite_credito_monto,
   } = body
 
   // Validar tipo
@@ -86,13 +87,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (direccion_habitual !== undefined) updates.direccion_habitual = direccion_habitual?.trim() || null
   if (tags !== undefined) updates.tags = Array.isArray(tags) ? tags : []
   if (notas_internas !== undefined) updates.notas_internas = notas_internas?.trim() || null
+  if (limite_credito_monto !== undefined) {
+    if (limite_credito_monto === null || limite_credito_monto === '') {
+      updates.limite_credito_monto = null
+    } else {
+      const monto = Number(limite_credito_monto)
+      if (isNaN(monto) || monto < 0) {
+        return NextResponse.json({ error: 'Límite de crédito inválido' }, { status: 400 })
+      }
+      updates.limite_credito_monto = monto
+    }
+  }
 
   const { data, error } = await supabase
     .from('clientes')
     .update(updates)
     .eq('id', id)
     .eq('ferreteria_id', session.ferreteriaId)  // ← doble verificación multi-tenancy
-    .select('id, nombre, alias, dni_ruc, tipo, email, telefono_secundario, direccion_habitual, tags, notas_internas')
+    .select('id, nombre, alias, dni_ruc, tipo, email, telefono_secundario, direccion_habitual, tags, notas_internas, limite_credito_monto')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

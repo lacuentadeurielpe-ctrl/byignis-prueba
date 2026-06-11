@@ -36,7 +36,7 @@ export async function PATCH(
   // Autenticar repartidor por token — TENANT AISLADO
   const { data: repartidor } = await supabase
     .from('repartidores')
-    .select('id, nombre, ferreteria_id, puede_registrar_deuda, limite_deuda_monto, limite_deuda_porcentaje, ferreterias(nombre, telefono_whatsapp, telefono_dueno)')
+    .select('id, nombre, ferreteria_id, puede_registrar_deuda, ferreterias(nombre, telefono_whatsapp, telefono_dueno)')
     .eq('token', token)
     .eq('activo', true)
     .single()
@@ -110,7 +110,7 @@ export async function PATCH(
         update.pago_confirmado_por = `repartidor:${repartidor.nombre}`
         update.metodo_pago         = cobrado_metodo ?? null
       } else if (montoCobrado > 0 && montoCobrado < saldoPendiente) {
-        // Pago parcial del saldo restante — requiere permiso
+        // Pago parcial del saldo restante — requiere permiso del repartidor
         if (!repartidor.puede_registrar_deuda) {
           return NextResponse.json({
             error: 'No tienes permiso para registrar cobros parciales. Consulta con el encargado.',
@@ -118,31 +118,42 @@ export async function PATCH(
           }, { status: 403 })
         }
 
-        // Verificar límites del repartidor
+        // Verificar límite de crédito del CLIENTE (no del repartidor)
         const deudaGenerada = saldoPendiente - montoCobrado
-        const rep = repartidor as any
+        const clienteId = (pedidoActual as any).cliente_id
 
-        if (rep.limite_deuda_monto !== null && rep.limite_deuda_monto !== undefined) {
-          if (deudaGenerada > rep.limite_deuda_monto) {
-            return NextResponse.json({
-              error: `La deuda que generarías (S/ ${deudaGenerada.toFixed(2)}) supera tu límite permitido de S/ ${Number(rep.limite_deuda_monto).toFixed(2)}. Debes cobrar al menos S/ ${(saldoPendiente - rep.limite_deuda_monto).toFixed(2)}.`,
-              code: 'limite_deuda_excedido',
-              deuda_generada: deudaGenerada,
-              limite_monto: rep.limite_deuda_monto,
-            }, { status: 403 })
-          }
-        }
+        if (clienteId) {
+          const { data: cliente } = await supabase
+            .from('clientes')
+            .select('limite_credito_monto')
+            .eq('id', clienteId)
+            .single()
 
-        if (rep.limite_deuda_porcentaje !== null && rep.limite_deuda_porcentaje !== undefined) {
-          const maxDeudaPermitida = totalPedido * (rep.limite_deuda_porcentaje / 100)
-          if (deudaGenerada > maxDeudaPermitida) {
-            const minimoACobrar = saldoPendiente - maxDeudaPermitida
-            return NextResponse.json({
-              error: `La deuda que generarías (${((deudaGenerada / totalPedido) * 100).toFixed(0)}%) supera tu límite de ${rep.limite_deuda_porcentaje}%. Debes cobrar al menos S/ ${minimoACobrar.toFixed(2)}.`,
-              code: 'limite_deuda_excedido',
-              deuda_generada: deudaGenerada,
-              limite_porcentaje: rep.limite_deuda_porcentaje,
-            }, { status: 403 })
+          const limiteMonto = (cliente as any)?.limite_credito_monto ?? null
+
+          if (limiteMonto !== null) {
+            // Sumar deudas activas y vencidas actuales del cliente
+            const { data: deudasActivas } = await supabase
+              .from('creditos')
+              .select('monto_total, monto_pagado')
+              .eq('cliente_id', clienteId)
+              .in('estado', ['activo', 'vencido'])
+
+            const deudaActual = (deudasActivas ?? []).reduce(
+              (s: number, d: any) => s + Math.max(0, d.monto_total - d.monto_pagado), 0
+            )
+            const creditoDisponible = Math.max(0, limiteMonto - deudaActual)
+
+            if (deudaGenerada > creditoDisponible) {
+              return NextResponse.json({
+                error: creditoDisponible <= 0
+                  ? `Este cliente no puede recibir más crédito. Ya tiene S/ ${deudaActual.toFixed(2)} de deuda (límite: S/ ${Number(limiteMonto).toFixed(2)}). Comunícate con el encargado.`
+                  : `El crédito disponible del cliente es S/ ${creditoDisponible.toFixed(2)}, pero la deuda que se generaría es S/ ${deudaGenerada.toFixed(2)}. Debes cobrar al menos S/ ${(saldoPendiente - creditoDisponible).toFixed(2)}.`,
+                code: 'limite_cliente_excedido',
+                credito_disponible: creditoDisponible,
+                deuda_generada: deudaGenerada,
+              }, { status: 403 })
+            }
           }
         }
 

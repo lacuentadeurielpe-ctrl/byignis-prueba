@@ -29,7 +29,7 @@ export async function GET(
 
   const { data: repartidor, error: repError } = await supabase
     .from('repartidores')
-    .select('id, nombre, ferreteria_id, puede_registrar_deuda, limite_deuda_monto, limite_deuda_porcentaje, ferreterias(nombre, modo_asignacion_delivery)')
+    .select('id, nombre, ferreteria_id, puede_registrar_deuda, ferreterias(nombre, modo_asignacion_delivery)')
     .eq('token', token)
     .eq('activo', true)
     .single()
@@ -88,12 +88,10 @@ export async function GET(
 
   return NextResponse.json({
     repartidor: {
-      id: repartidor.id,
-      nombre: repartidor.nombre,
-      ferreteria: ferr?.nombre ?? 'Ferretería',
-      puede_registrar_deuda:   (repartidor as any).puede_registrar_deuda   ?? false,
-      limite_deuda_monto:      (repartidor as any).limite_deuda_monto      ?? null,
-      limite_deuda_porcentaje: (repartidor as any).limite_deuda_porcentaje ?? null,
+      id:                    repartidor.id,
+      nombre:                repartidor.nombre,
+      ferreteria:            ferr?.nombre ?? 'Ferretería',
+      puede_registrar_deuda: (repartidor as any).puede_registrar_deuda ?? false,
     },
     modo,
     pedidos: pedidos ?? [],

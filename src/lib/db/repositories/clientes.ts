@@ -30,7 +30,8 @@ export class ClientesRepository {
       .from('clientes')
       .select(`
         id, nombre, telefono, dni_ruc, tipo, alias, email,
-        telefono_secundario, direccion_habitual, tags, notas_internas, created_at
+        telefono_secundario, direccion_habitual, tags, notas_internas,
+        limite_credito_monto, created_at
       `)
       .eq('id', clienteId)
       .eq('ferreteria_id', ferreteriaId)

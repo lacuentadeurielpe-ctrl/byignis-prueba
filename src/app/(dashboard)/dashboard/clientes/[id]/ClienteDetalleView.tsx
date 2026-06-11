@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Phone, MessageSquare, Mail, Building2, UserX, User, MapPin, Edit3 } from 'lucide-react'
+import { ArrowLeft, Phone, MessageSquare, Mail, Building2, UserX, User, MapPin, Edit3, ShieldCheck, ShieldOff } from 'lucide-react'
 import { cn, formatPEN, formatFecha } from '@/lib/utils'
 import EditarClienteModal from '@/components/clientes/EditarClienteModal'
 import TabOverview from './tabs/TabOverview'
@@ -55,6 +55,7 @@ export default function ClienteDetalleView({
   const calcDeudaTotal = (c: any[]) =>
     c.filter(d => d.estado !== 'pagado').reduce((s: number, d: any) => s + Math.max(0, (d.monto_total ?? 0) - (d.monto_pagado ?? 0)), 0)
   const [deudaTotal, setDeudaTotal] = useState(() => calcDeudaTotal(creditos))
+  const [limiteCredito, setLimiteCredito] = useState<number | null>(initCliente.limite_credito_monto ?? null)
 
   useEffect(() => {
     const tab = searchParams.get('tab') as typeof TABS[number]['id']
@@ -153,13 +154,27 @@ export default function ClienteDetalleView({
               </a>
             )}
             {esDueno && (
-              <div className="text-right mt-2 flex gap-4">
+              <div className="text-right mt-2 flex gap-4 flex-wrap justify-end">
                 <div>
                   <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Deuda Actual</p>
                   <p className={cn("text-lg font-bold", deudaTotal > 0 ? "text-rose-600" : "text-emerald-600")}>
                     {formatPEN(deudaTotal)}
                   </p>
                 </div>
+                {limiteCredito !== null && (() => {
+                  const disponible = Math.max(0, limiteCredito - deudaTotal)
+                  const sinCredito = disponible <= 0
+                  return (
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Crédito Disponible</p>
+                      <p className={cn("text-lg font-bold flex items-center gap-1", sinCredito ? "text-rose-600" : "text-emerald-600")}>
+                        {sinCredito ? <ShieldOff className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
+                        {formatPEN(disponible)}
+                      </p>
+                      <p className="text-[10px] text-zinc-400">de {formatPEN(limiteCredito)}</p>
+                    </div>
+                  )
+                })()}
                 <div>
                   <p className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">LTV (Compras)</p>
                   <p className="text-lg font-bold text-zinc-900">{formatPEN(LTV)}</p>
@@ -208,7 +223,9 @@ export default function ClienteDetalleView({
             creditos={creditos}
             clienteId={cliente.id}
             esDueno={esDueno}
+            limiteCreditoInicial={limiteCredito}
             onDeudaUpdate={setDeudaTotal}
+            onLimiteUpdate={setLimiteCredito}
           />
         )}
         {activeTab === 'historial' && (

@@ -2,6 +2,45 @@ import { createClient } from '@supabase/supabase-js'
 import { Truck } from 'lucide-react'
 import DeliveryView from './DeliveryView'
 import { DeliveryRepository } from '@/lib/db/repositories/logistica'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// Calcula crédito disponible por cliente para los pedidos de la lista
+async function enriquecerPedidosConCredito(supabase: SupabaseClient, pedidos: any[]) {
+  const clienteIds = [...new Set(pedidos.map(p => p.cliente_id).filter(Boolean))] as string[]
+  if (!clienteIds.length) return pedidos
+
+  // Clientes que tienen límite configurado
+  const { data: clientesConLimite } = await supabase
+    .from('clientes')
+    .select('id, limite_credito_monto')
+    .in('id', clienteIds)
+    .not('limite_credito_monto', 'is', null)
+
+  if (!clientesConLimite?.length) return pedidos
+
+  // Deudas activas/vencidas de esos clientes
+  const { data: deudasActivas } = await supabase
+    .from('creditos')
+    .select('cliente_id, monto_total, monto_pagado')
+    .in('cliente_id', clientesConLimite.map(c => c.id))
+    .in('estado', ['activo', 'vencido'])
+
+  // Mapa: cliente_id → crédito disponible
+  const creditoMap: Record<string, number> = {}
+  for (const c of clientesConLimite) {
+    const deudaTotal = (deudasActivas ?? [])
+      .filter(d => d.cliente_id === c.id)
+      .reduce((s: number, d: any) => s + Math.max(0, d.monto_total - d.monto_pagado), 0)
+    creditoMap[c.id] = Math.max(0, (c.limite_credito_monto as number) - deudaTotal)
+  }
+
+  return pedidos.map(p => ({
+    ...p,
+    credito_disponible: p.cliente_id && creditoMap[p.cliente_id] !== undefined
+      ? creditoMap[p.cliente_id]
+      : null,
+  }))
+}
 
 function adminClient() {
   return createClient(
@@ -39,14 +78,18 @@ export default async function DeliveryPage({ params }: Props) {
   // Fecha actual en zona Lima (UTC-5) para filtrar cobros del día correcto
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
 
-  const [pedidos, cobrosHoy] = await Promise.all([
+  const [pedidosRaw, cobrosHoy] = await Promise.all([
     deliveryRepo.obtenerPedidosAsignadosRepartidor(repartidor.ferreteria_id, repartidor.id),
     deliveryRepo.obtenerCobrosHoyRepartidor(repartidor.ferreteria_id, repartidor.id, hoy),
   ])
 
+  // Enriquecer con crédito disponible del cliente (2 queries batch, no N+1)
+  const pedidos = await enriquecerPedidosConCredito(supabase, pedidosRaw as any[])
+
   let pedidosDisponibles: any[] = []
   if (modo === 'libre') {
-    pedidosDisponibles = await deliveryRepo.obtenerPedidosDisponiblesReparto(repartidor.ferreteria_id)
+    const disponiblesRaw = await deliveryRepo.obtenerPedidosDisponiblesReparto(repartidor.ferreteria_id)
+    pedidosDisponibles = await enriquecerPedidosConCredito(supabase, disponiblesRaw as any[])
   }
 
   return (

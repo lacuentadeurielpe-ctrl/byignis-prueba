@@ -199,10 +199,11 @@ export class DeliveryRepository {
         id, numero_pedido, nombre_cliente, telefono_cliente,
         direccion_entrega, total, estado, estado_pago, notas,
         cobrado_monto, cobrado_metodo, incidencia_tipo, incidencia_desc,
-        created_at,
-        clientes(nombre, telefono),
+        created_at, cliente_id, monto_pagado, eta_minutos,
+        clientes(nombre, telefono, limite_credito_monto),
         zonas_delivery(nombre),
-        items_pedido(id, nombre_producto, cantidad, precio_unitario)
+        items_pedido(id, nombre_producto, cantidad, precio_unitario),
+        entregas(id, estado, eta_actual, orden_en_ruta, salio_at, vehiculo_id, vehiculos(nombre, tipo))
       `)
       .eq('ferreteria_id', ferreteriaId)
       .eq('repartidor_id', repartidorId)
