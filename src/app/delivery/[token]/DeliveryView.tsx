@@ -899,7 +899,7 @@ export default function DeliveryView({
                       {/* Banner crédito disponible del cliente */}
                       {(() => {
                         const disp = pedido.credito_disponible
-                        if (disp === null) return null // sin límite configurado
+                        if (disp == null) return null // sin límite configurado (null o undefined)
                         if (disp <= 0) return (
                           <div className="text-xs rounded-xl px-3 py-2 bg-red-50 text-red-700 border border-red-200">
                             🚫 Este cliente <strong>no puede recibir más crédito</strong>. Tiene deudas sin pagar que alcanzaron su límite. Comunícate con el encargado.
