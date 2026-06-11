@@ -411,7 +411,7 @@ export default function DeliveryView({
   const [cobros, setCobros] = useState<Record<string, { monto: string; metodo: string }>>(() => {
     const initial: Record<string, { monto: string; metodo: string }> = {}
     inicialAsignados.forEach(p => {
-      if (p.estado_pago !== 'pagado' && p.cobrado_monto === null) {
+      if (p.estado_pago !== 'pagado') {
         initial[p.id] = { monto: p.total.toFixed(2), metodo: '' }
       }
     })
@@ -645,8 +645,9 @@ export default function DeliveryView({
     const nombre       = pedido.clientes?.nombre ?? pedido.nombre_cliente ?? 'Cliente'
     const telefono     = pedido.clientes?.telefono ?? pedido.telefono_cliente ?? null
     const tieneInc     = !!pedido.incidencia_tipo
-    // pagado = el dueño confirmó el pago (Yape/transfer previo) O el repartidor ya cobró
-    const yaPagado     = pedido.estado_pago === 'pagado' || pedido.cobrado_monto !== null
+    // pagado = el dueño confirmó el pago desde el dashboard (Yape/transfer/efectivo previo)
+    // Si no está marcado como pagado, el repartidor siempre puede registrar el cobro
+    const yaPagado     = pedido.estado_pago === 'pagado'
     const estadoInfo   = ESTADO_LABELS[pedido.estado] ?? { label: pedido.estado, icon: '•', color: 'text-zinc-500' }
     const pagoLabel    = labelEstadoPago(pedido.estado_pago)
     const pagoColor    = colorEstadoPago(pedido.estado_pago)
