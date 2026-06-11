@@ -412,7 +412,7 @@ export default function DeliveryView({
     const initial: Record<string, { monto: string; metodo: string }> = {}
     inicialAsignados.forEach(p => {
       if (p.estado_pago !== 'pagado') {
-        initial[p.id] = { monto: p.total.toFixed(2), metodo: '' }
+        initial[p.id] = { monto: p.total != null ? Number(p.total).toFixed(2) : '0.00', metodo: '' }
       }
     })
     return initial
@@ -621,7 +621,7 @@ export default function DeliveryView({
         if (pedidoCompleto.estado_pago !== 'pagado') {
           setCobros(prev => ({
             ...prev,
-            [pedidoId]: { monto: pedidoCompleto.total.toFixed(2), metodo: '' },
+            [pedidoId]: { monto: pedidoCompleto.total != null ? Number(pedidoCompleto.total).toFixed(2) : '0.00', metodo: '' },
           }))
         }
         setTab('mis_pedidos')
@@ -884,7 +884,7 @@ export default function DeliveryView({
                             type="number" step="0.10" min="0"
                             value={monto}
                             onChange={(e) => updateCobro(pedido.id, { monto: e.target.value })}
-                            placeholder={pedido.total.toFixed(2)}
+                            placeholder={pedido.total != null ? Number(pedido.total).toFixed(2) : '0.00'}
                             className="w-full pl-9 pr-3 py-2.5 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
                           />
                         </div>
@@ -923,10 +923,10 @@ export default function DeliveryView({
                               : 'bg-amber-50 text-amber-700 border border-amber-200'
                         )}>
                           {!puedeRegistrarDeuda
-                            ? `❌ Cobro parcial no permitido. Debes cobrar S/${pedido.total.toFixed(2)} completo o consultar con el encargado.`
+                            ? `❌ Cobro parcial no permitido. Debes cobrar S/${Number(pedido.total ?? 0).toFixed(2)} completo o consultar con el encargado.`
                             : pedido.credito_disponible !== null && pedido.credito_disponible <= 0
                               ? `❌ Este cliente no puede recibir deuda. Debes cobrar el monto completo.`
-                              : `⚠️ Cobro parcial: S/${montoNum.toFixed(2)} de S/${pedido.total.toFixed(2)} — se registrará deuda de S/${(pedido.total - montoNum).toFixed(2)}`
+                              : `⚠️ Cobro parcial: S/${montoNum.toFixed(2)} de S/${Number(pedido.total ?? 0).toFixed(2)} — se registrará deuda de S/${(Number(pedido.total ?? 0) - montoNum).toFixed(2)}`
                           }
                         </div>
                       )}
