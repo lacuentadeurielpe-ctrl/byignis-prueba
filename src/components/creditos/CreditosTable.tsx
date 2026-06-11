@@ -156,7 +156,7 @@ export default function CreditosTable({
         </div>
         <div className="bg-green-50 rounded-xl p-4 col-span-2 sm:col-span-1">
           <p className="text-xs text-green-600 font-medium mb-1">Cancelados</p>
-          <p className="text-lg font-bold text-green-800">{totales.pagado} crédito{totales.pagado !== 1 ? 's' : ''}</p>
+          <p className="text-lg font-bold text-green-800">{totales.pagado} deuda{totales.pagado !== 1 ? 's' : ''} cancelada{totales.pagado !== 1 ? 's' : ''}</p>
         </div>
       </div>
 
@@ -250,7 +250,7 @@ export default function CreditosTable({
       {filtrados.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <CreditCard className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p className="text-sm">No hay créditos{filtroEstado ? ` con estado "${filtroEstado}"` : ' registrados'}</p>
+          <p className="text-sm">No hay deudas{filtroEstado ? ` con estado "${filtroEstado}"` : ' registradas'}</p>
         </div>
       ) : (
         <div className="space-y-2">

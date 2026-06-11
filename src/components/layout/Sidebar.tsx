@@ -58,7 +58,7 @@ const navGroups: NavGroup[] = [
       { label: 'Catálogo',  href: '/dashboard/catalog',   icon: Package,    permiso: 'ver_stock', moduleName: 'catalog' },
       { label: 'Clientes',  href: '/dashboard/clientes',  icon: Users,      permiso: 'ver_historial_clientes', moduleName: 'clientes' },
       { label: 'CRM / Pipeline', href: '/dashboard/crm',  icon: Target,     permiso: 'ver_historial_clientes', moduleName: 'crm' },
-      { label: 'Créditos',  href: '/dashboard/creditos',  icon: CreditCard, permiso: 'ver_creditos', moduleName: 'creditos' },
+      { label: 'Deudas',    href: '/dashboard/ventas?tab=deudas', icon: CreditCard, permiso: 'ver_creditos', moduleName: 'creditos' },
       { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos', moduleName: 'delivery' },
     ],
   },
@@ -129,6 +129,20 @@ export default function Sidebar({
   const session = { rol, permisos }
 
   function isActive(href: string) {
+    // Para links con query params (ej: /dashboard/ventas?tab=deudas)
+    if (href.includes('?')) {
+      const [hrefPath, hrefQuery] = href.split('?')
+      if (!pathname.startsWith(hrefPath)) return false
+      if (typeof window === 'undefined') return false
+      const sp = new URLSearchParams(window.location.search)
+      const hsp = new URLSearchParams(hrefQuery)
+      return Array.from(hsp.entries()).every(([k, v]) => sp.get(k) === v)
+    }
+    // Para /dashboard/ventas: no marcar activo cuando tab=deudas está activo
+    if (href === '/dashboard/ventas' && typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search)
+      if (sp.get('tab') === 'deudas') return false
+    }
     return href === '/dashboard'
       ? pathname === '/dashboard'
       : pathname.startsWith(href)

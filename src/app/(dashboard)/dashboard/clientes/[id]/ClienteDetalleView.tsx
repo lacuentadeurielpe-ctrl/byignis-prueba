@@ -27,7 +27,7 @@ interface ClienteDetalleViewProps {
 
 const TABS = [
   { id: 'overview', label: 'Resumen' },
-  { id: 'cuenta', label: 'Cta. Corriente' },
+  { id: 'cuenta', label: 'Deudas' },
   { id: 'historial', label: 'Historial' },
   { id: 'chat', label: 'Conversación' },
   { id: 'oportunidades', label: 'Oportunidades' },
@@ -51,6 +51,11 @@ export default function ClienteDetalleView({
   const [cliente, setCliente] = useState(initCliente)
   const [modalEditar, setModalEditar] = useState(false)
 
+  // deudaTotal es stateful para que se actualice cuando se registre un abono desde el tab
+  const calcDeudaTotal = (c: any[]) =>
+    c.filter(d => d.estado !== 'pagado').reduce((s: number, d: any) => s + Math.max(0, (d.monto_total ?? 0) - (d.monto_pagado ?? 0)), 0)
+  const [deudaTotal, setDeudaTotal] = useState(() => calcDeudaTotal(creditos))
+
   useEffect(() => {
     const tab = searchParams.get('tab') as typeof TABS[number]['id']
     if (tab && TABS.some(t => t.id === tab)) {
@@ -60,7 +65,6 @@ export default function ClienteDetalleView({
 
   const pedidosCompletados = pedidos.filter(p => p.estado !== 'cancelado')
   const totalGastado = pedidosCompletados.reduce((s, p) => s + (p.total || 0), 0)
-  const deudaTotal = creditos.reduce((s, c) => s + (c.monto_total - c.monto_pagado), 0)
   const LTV = totalGastado // Lifetime Value
 
   const whatsappUrl = cliente.telefono ? `https://wa.me/${cliente.telefono.replace(/\D/g, '')}` : null
@@ -200,9 +204,11 @@ export default function ClienteDetalleView({
           />
         )}
         {activeTab === 'cuenta' && (
-          <TabCuentaCorriente 
-            creditos={creditos} 
+          <TabCuentaCorriente
+            creditos={creditos}
             clienteId={cliente.id}
+            esDueno={esDueno}
+            onDeudaUpdate={setDeudaTotal}
           />
         )}
         {activeTab === 'historial' && (

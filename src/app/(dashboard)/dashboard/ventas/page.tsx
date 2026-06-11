@@ -48,6 +48,13 @@ export default async function VentasPage({
   const deliveryRepo = new DeliveryRepository(supabase)
   const facturacionRepo = new FacturacionRepository(supabase)
 
+  // Conteo de deudas vencidas — siempre, para mostrar badge en el tab
+  const { count: deudasVencidas } = await supabase
+    .from('creditos')
+    .select('id', { count: 'exact', head: true })
+    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('estado', 'vencido')
+
   // ── Pedidos (default) ────────────────────────────────────────────────────
   let pedidosContent: React.ReactNode = null
   if (tab === 'pedidos') {
@@ -222,6 +229,11 @@ export default async function VentasPage({
           >
             <Icon className="w-3.5 h-3.5" />
             {label}
+            {id === 'deudas' && (deudasVencidas ?? 0) > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600">
+                {deudasVencidas}
+              </span>
+            )}
           </a>
         ))}
       </div>
