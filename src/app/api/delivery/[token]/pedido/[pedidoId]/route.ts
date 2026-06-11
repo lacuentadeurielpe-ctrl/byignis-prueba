@@ -100,8 +100,8 @@ export async function PATCH(
     const montoPagadoPrevio = pedidoActual.monto_pagado ?? 0
     const saldoPendiente    = Math.max(0, totalPedido - montoPagadoPrevio)
 
-    // Solo procesar estado_pago si aún no se registró cobro físico antes
-    if (pedidoActual.cobrado_monto === null) {
+    // Solo procesar cobro si el pedido aún no estaba pagado
+    if (pedidoActual.estado_pago !== 'pagado') {
       if (saldoPendiente === 0 || montoCobrado >= saldoPendiente) {
         // Cubre el saldo pendiente completo → pagado
         update.estado_pago         = 'pagado'

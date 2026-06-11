@@ -407,12 +407,11 @@ export default function DeliveryView({
   }, [])
 
   // Estado inline de cobro por pedido (sin modal)
-  // Inicializar para todos los pedidos donde aún no se registró cobro físico.
-  // cobrado_monto !== null = ya fue procesado por el repartidor en esta entrega.
+  // Solo inicializar para pedidos pendientes de cobro (no pagados aún)
   const [cobros, setCobros] = useState<Record<string, { monto: string; metodo: string }>>(() => {
     const initial: Record<string, { monto: string; metodo: string }> = {}
     inicialAsignados.forEach(p => {
-      if (p.cobrado_monto === null) {
+      if (p.estado_pago !== 'pagado' && p.cobrado_monto === null) {
         initial[p.id] = { monto: p.total.toFixed(2), metodo: '' }
       }
     })
@@ -646,17 +645,14 @@ export default function DeliveryView({
     const nombre       = pedido.clientes?.nombre ?? pedido.nombre_cliente ?? 'Cliente'
     const telefono     = pedido.clientes?.telefono ?? pedido.telefono_cliente ?? null
     const tieneInc     = !!pedido.incidencia_tipo
-    // "ya cobrado" = el repartidor ya registró la colección física en esta entrega
-    const yaPagado     = pedido.cobrado_monto !== null
-    // "pre-pagado digital" = marcado como pagado (Yape/transfer) pero sin cobro físico aún
-    const pagoDigital  = pedido.estado_pago === 'pagado' && pedido.cobrado_monto === null
+    // pagado = el dueño confirmó el pago (Yape/transfer previo) O el repartidor ya cobró
+    const yaPagado     = pedido.estado_pago === 'pagado' || pedido.cobrado_monto !== null
     const estadoInfo   = ESTADO_LABELS[pedido.estado] ?? { label: pedido.estado, icon: '•', color: 'text-zinc-500' }
     const pagoLabel    = labelEstadoPago(pedido.estado_pago)
     const pagoColor    = colorEstadoPago(pedido.estado_pago)
     const { monto, metodo } = cobroDeState(pedido.id)
     const montoNum     = parseFloat(monto) || 0
-    // esParcial solo aplica cuando hay deuda real (no para pedidos pre-pagados)
-    const esParcial    = montoNum > 0 && montoNum < pedido.total && !pagoDigital
+    const esParcial    = montoNum > 0 && montoNum < pedido.total
     const enProceso    = cargando === pedido.id
     // Número de parada: priorizar orden_en_ruta de la entrega, si no usar idx+1
     const entrega      = pedido.entregas?.[0]
@@ -853,14 +849,6 @@ export default function DeliveryView({
                     </div>
                   ) : (
                     <>
-                      {/* Banner informativo si el pedido fue marcado como pagado digitalmente */}
-                      {pagoDigital && (
-                        <div className="flex items-center gap-2 text-xs text-sky-700 bg-sky-50 rounded-xl px-3 py-2 border border-sky-200">
-                          <BadgeCheck className="w-3.5 h-3.5 shrink-0" />
-                          <span>Este pedido tiene pago registrado previamente. Ingresa lo que cobres al entregar (puede ser S/0 si ya está pagado).</span>
-                        </div>
-                      )}
-
                       {/* Método de pago */}
                       <div className="flex gap-2">
                         {[
