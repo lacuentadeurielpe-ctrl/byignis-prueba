@@ -36,7 +36,7 @@ export async function PATCH(
   // Autenticar repartidor por token — TENANT AISLADO
   const { data: repartidor } = await supabase
     .from('repartidores')
-    .select('id, nombre, ferreteria_id, puede_registrar_deuda, ferreterias(nombre, telefono_whatsapp, telefono_dueno)')
+    .select('id, nombre, ferreteria_id, puede_registrar_deuda, limite_deuda_monto, limite_deuda_porcentaje, ferreterias(nombre, telefono_whatsapp, telefono_dueno)')
     .eq('token', token)
     .eq('activo', true)
     .single()
@@ -117,6 +117,35 @@ export async function PATCH(
             code: 'sin_permiso_deuda',
           }, { status: 403 })
         }
+
+        // Verificar límites del repartidor
+        const deudaGenerada = saldoPendiente - montoCobrado
+        const rep = repartidor as any
+
+        if (rep.limite_deuda_monto !== null && rep.limite_deuda_monto !== undefined) {
+          if (deudaGenerada > rep.limite_deuda_monto) {
+            return NextResponse.json({
+              error: `La deuda que generarías (S/ ${deudaGenerada.toFixed(2)}) supera tu límite permitido de S/ ${Number(rep.limite_deuda_monto).toFixed(2)}. Debes cobrar al menos S/ ${(saldoPendiente - rep.limite_deuda_monto).toFixed(2)}.`,
+              code: 'limite_deuda_excedido',
+              deuda_generada: deudaGenerada,
+              limite_monto: rep.limite_deuda_monto,
+            }, { status: 403 })
+          }
+        }
+
+        if (rep.limite_deuda_porcentaje !== null && rep.limite_deuda_porcentaje !== undefined) {
+          const maxDeudaPermitida = totalPedido * (rep.limite_deuda_porcentaje / 100)
+          if (deudaGenerada > maxDeudaPermitida) {
+            const minimoACobrar = saldoPendiente - maxDeudaPermitida
+            return NextResponse.json({
+              error: `La deuda que generarías (${((deudaGenerada / totalPedido) * 100).toFixed(0)}%) supera tu límite de ${rep.limite_deuda_porcentaje}%. Debes cobrar al menos S/ ${minimoACobrar.toFixed(2)}.`,
+              code: 'limite_deuda_excedido',
+              deuda_generada: deudaGenerada,
+              limite_porcentaje: rep.limite_deuda_porcentaje,
+            }, { status: 403 })
+          }
+        }
+
         update.estado_pago  = 'credito_activo'
         update.monto_pagado = montoPagadoPrevio + montoCobrado   // acumular pagos
       }
