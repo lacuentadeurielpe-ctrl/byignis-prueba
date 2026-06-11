@@ -1,33 +1,39 @@
+'use client'
+
 import { Cloud, MessageCircle, FileText, MapPin, Zap, Banknote, BookOpen, Code } from 'lucide-react'
 import SettingsHeader from '../components/SettingsHeader'
 import IntegrationCard from './components/IntegrationCard'
-import { createClient } from '@/lib/supabase/server'
-import { getSessionInfo } from '@/lib/auth/roles'
 
-type Estado = 'conectado' | 'desconectado' | 'pruebas'
-
-async function getIntegrationStatuses(ferreteriaId: string): Promise<Record<string, Estado>> {
-  const map: Record<string, Estado> = {
-    ycloud:      'desconectado',
-    nubefact:    'desconectado',
-    mercadopago: 'desconectado',
-    maps:        'desconectado',
-  }
-  try {
-    const supabase = await createClient()
-    const { data } = await supabase
-      .from('integraciones_conectadas')
-      .select('tipo, estado')
-      .eq('ferreteria_id', ferreteriaId)
-      .in('tipo', ['ycloud', 'nubefact', 'mercadopago', 'maps'])
-    for (const row of data ?? []) {
-      if (row.estado) map[row.tipo] = row.estado as Estado
-    }
-  } catch {
-    // Tabla aún no migrada en producción — devolver defaults
-  }
-  return map
-}
+const INTEGRACIONES_CORE = [
+  {
+    id: 'ycloud',
+    name: 'YCloud',
+    description: 'API WhatsApp para mensajes bidireccionales',
+    icon: MessageCircle,
+    href: '/dashboard/settings-2/integraciones/ycloud',
+  },
+  {
+    id: 'nubefact',
+    name: 'Nubefact',
+    description: 'Facturación electrónica SUNAT',
+    icon: FileText,
+    href: '/dashboard/settings-2/integraciones/nubefact',
+  },
+  {
+    id: 'mercadopago',
+    name: 'Mercado Pago',
+    description: 'Pagos y recaudación en línea',
+    icon: Banknote,
+    href: '/dashboard/settings-2/integraciones/mercadopago',
+  },
+  {
+    id: 'maps',
+    name: 'Google Maps',
+    description: 'Geocoding y rutas de delivery',
+    icon: MapPin,
+    href: '/dashboard/settings-2/integraciones/maps',
+  },
+]
 
 const INTEGRACIONES_ROADMAP = [
   {
@@ -60,47 +66,7 @@ const INTEGRACIONES_ROADMAP = [
   },
 ]
 
-export default async function IntegracionesPage() {
-  const session = await getSessionInfo()
-  const statuses = session
-    ? await getIntegrationStatuses(session.ferreteriaId)
-    : { ycloud: 'desconectado', nubefact: 'desconectado', mercadopago: 'desconectado', maps: 'desconectado' }
-
-  const INTEGRACIONES_CORE = [
-    {
-      id: 'ycloud',
-      name: 'YCloud',
-      description: 'API WhatsApp para mensajes bidireccionales',
-      icon: MessageCircle,
-      status: statuses.ycloud as Estado,
-      href: '/dashboard/settings-2/integraciones/ycloud',
-    },
-    {
-      id: 'nubefact',
-      name: 'Nubefact',
-      description: 'Facturación electrónica SUNAT',
-      icon: FileText,
-      status: statuses.nubefact as Estado,
-      href: '/dashboard/settings-2/integraciones/nubefact',
-    },
-    {
-      id: 'mercadopago',
-      name: 'Mercado Pago',
-      description: 'Pagos y recaudación en línea',
-      icon: Banknote,
-      status: statuses.mercadopago as Estado,
-      href: '/dashboard/settings-2/integraciones/mercadopago',
-    },
-    {
-      id: 'maps',
-      name: 'Google Maps',
-      description: 'Geocoding y rutas de delivery',
-      icon: MapPin,
-      status: statuses.maps as Estado,
-      href: '/dashboard/settings-2/integraciones/maps',
-    },
-  ]
-
+export default function IntegracionesPage() {
   return (
     <div>
       <SettingsHeader
