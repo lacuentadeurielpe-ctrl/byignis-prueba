@@ -50,7 +50,7 @@ export async function GET() {
           title: 'Facturación Electrónica inactiva',
           description: 'Tienes un RUC registrado, pero falta vincular NubeFact para emitir boletas/facturas automáticamente.',
           actionText: 'Configurar NubeFact',
-          href: '/dashboard/settings?tab=facturacion',
+          href: '/dashboard/settings-2/finanzas',
         })
       }
     }

@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   const state   = searchParams.get('state')
   const errorMp = searchParams.get('error')
 
-  const settingsUrl = new URL('/dashboard/settings', request.url)
+  const settingsUrl = new URL('/dashboard/settings-2/integraciones/mercadopago', request.url)
 
   // MP puede redirigir con error si el usuario rechaza
   if (errorMp) {

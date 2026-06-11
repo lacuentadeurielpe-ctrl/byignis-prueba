@@ -109,7 +109,7 @@ export default async function SaludPage() {
       label: 'WhatsApp conectado',
       ok:    ycloudActivo,
       icon:  ycloudActivo ? Wifi : WifiOff,
-      fix:   '/dashboard/settings?tab=whatsapp',
+      fix:   '/dashboard/settings-2/integraciones/ycloud',
     },
     {
       key:   'productos',
@@ -123,28 +123,28 @@ export default async function SaludPage() {
       label: `Zonas de delivery (${zonasCount ?? 0} configuradas)`,
       ok:    (zonasCount ?? 0) > 0,
       icon:  MapPin,
-      fix:   '/dashboard/settings?tab=general',
+      fix:   '/dashboard/settings-2/negocio',
     },
     {
       key:   'horario',
       label: 'Horario de atención',
       ok:    !!(ferreteria?.horario_apertura && ferreteria?.horario_cierre && (ferreteria?.dias_atencion as string[] | null)?.length),
       icon:  Clock,
-      fix:   '/dashboard/settings?tab=general',
+      fix:   '/dashboard/settings-2/negocio',
     },
     {
       key:   'formas_pago',
       label: 'Formas de pago configuradas',
       ok:    ((ferreteria?.formas_pago as string[] | null)?.length ?? 0) > 0,
       icon:  CreditCard,
-      fix:   '/dashboard/settings?tab=general',
+      fix:   '/dashboard/settings-2/negocio',
     },
     {
       key:   'perfil_bot',
       label: 'Perfil del bot configurado',
       ok:    !!(perfilBot?.tipo_negocio?.trim()),
       icon:  Bot,
-      fix:   '/dashboard/settings?tab=perfil_bot',
+      fix:   '/dashboard/settings-2/bot',
     },
   ]
 
