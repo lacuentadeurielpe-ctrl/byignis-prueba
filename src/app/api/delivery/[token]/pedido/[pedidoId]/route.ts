@@ -107,7 +107,7 @@ export async function PATCH(
         update.estado_pago         = 'pagado'
         update.monto_pagado        = totalPedido   // marca como totalmente cubierto
         update.pago_confirmado_at  = new Date().toISOString()
-        update.pago_confirmado_por = `repartidor:${repartidor.nombre}`
+        update.pago_confirmado_por = repartidor.id   // UUID del repartidor
         update.metodo_pago         = cobrado_metodo ?? null
       } else if (montoCobrado > 0 && montoCobrado < saldoPendiente) {
         // Pago parcial del saldo restante — requiere permiso del repartidor
