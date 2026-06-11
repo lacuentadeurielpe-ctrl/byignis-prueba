@@ -7,21 +7,24 @@ import { getSessionInfo } from '@/lib/auth/roles'
 type Estado = 'conectado' | 'desconectado' | 'pruebas'
 
 async function getIntegrationStatuses(ferreteriaId: string): Promise<Record<string, Estado>> {
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('integraciones_conectadas')
-    .select('tipo, estado')
-    .eq('ferreteria_id', ferreteriaId)
-    .in('tipo', ['ycloud', 'nubefact', 'mercadopago', 'maps'])
-
   const map: Record<string, Estado> = {
     ycloud:      'desconectado',
     nubefact:    'desconectado',
     mercadopago: 'desconectado',
     maps:        'desconectado',
   }
-  for (const row of data ?? []) {
-    if (row.estado) map[row.tipo] = row.estado as Estado
+  try {
+    const supabase = await createClient()
+    const { data } = await supabase
+      .from('integraciones_conectadas')
+      .select('tipo, estado')
+      .eq('ferreteria_id', ferreteriaId)
+      .in('tipo', ['ycloud', 'nubefact', 'mercadopago', 'maps'])
+    for (const row of data ?? []) {
+      if (row.estado) map[row.tipo] = row.estado as Estado
+    }
+  } catch {
+    // Tabla aún no migrada en producción — devolver defaults
   }
   return map
 }
