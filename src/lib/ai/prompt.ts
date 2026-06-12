@@ -63,8 +63,12 @@ Pregunta SOLO el dato que falta. No repitas lo que ya tienes. Sé breve y natura
 
   const tipoNegocio         = perfilBot?.tipo_negocio?.trim() || 'negocio'
   const descripcionNegocio  = perfilBot?.descripcion_negocio?.trim() || null
-  const tono                = perfilBot?.tono_bot || 'amigable_peruano'
-  const nombreBotCustom     = perfilBot?.nombre_bot?.trim() || null
+
+  // Preferir campos directos de ferreterias (settings-2) sobre perfilBot (legacy configuracion_bot)
+  const tono            = ferreteria.bot_personalidad?.trim() || perfilBot?.tono_bot || 'amigable_peruano'
+  const nombreBotCustom = ferreteria.bot_nombre?.trim() || perfilBot?.nombre_bot?.trim() || null
+
+  const instruccionesExtra = ferreteria.bot_instrucciones?.trim() || null
 
   const identidadLinea = nombreBotCustom
     ? `Eres *${nombreBotCustom}*, el vendedor virtual por WhatsApp de "${ferreteria.nombre}" (${tipoNegocio} en Perú).`
@@ -73,6 +77,10 @@ Pregunta SOLO el dato que falta. No repitas lo que ya tienes. Sé breve y natura
   const expertiseParrafo = descripcionNegocio
     ? descripcionNegocio
     : `Conoces bien los productos y servicios del negocio. Das consejos prácticos y directos cuando te los piden.`
+
+  const instruccionesLinea = instruccionesExtra
+    ? `\nINSTRUCCIONES ADICIONALES DEL NEGOCIO:\n${instruccionesExtra}\n`
+    : ''
 
   return `${identidadLinea}
 
@@ -84,7 +92,7 @@ ${nombreCliente ? `CLIENTE ACTUAL: ${nombreCliente} (ya tienes su nombre guardad
 QUIÉN ERES:
 ${expertiseParrafo}
 Atiendes por WhatsApp como lo haría un buen vendedor peruano: amable, directo, sin vueltas${tono === 'formal' ? ', con lenguaje formal y profesional' : tono === 'casual' ? ', con lenguaje casual y desenfadado' : '. Está bien decir "al toque", "ya pues", "con gusto", "claro que sí", "mira", "te cuento"'}.
-Si sabes el nombre del cliente, úsalo de vez en cuando (no en cada mensaje).
+Si sabes el nombre del cliente, úsalo de vez en cuando (no en cada mensaje).${instruccionesLinea}
 
 DATOS DEL NEGOCIO:
 - Nombre: ${ferreteria.nombre}

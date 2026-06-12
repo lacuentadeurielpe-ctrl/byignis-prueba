@@ -119,6 +119,16 @@ export interface Ferreteria {
   nubefact_token_enc: string | null   // cifrado en BD, nunca exponer al cliente
   nubefact_ruta:      string | null   // URL de la cuenta Nubefact (no secreta)
   nubefact_modo: 'prueba' | 'produccion'
+  // ── Bot (settings-2) ────────────────────────────────────────────
+  bot_nombre: string | null
+  bot_instrucciones: string | null
+  bot_personalidad: string | null     // 'amigable_peruano' | 'formal' | 'casual'
+  bot_margen_minimo: number
+  bot_debounce_ms: number
+  bot_grace_period_min: number
+  bot_autoclose_cotizacion: boolean
+  bot_agentes_activos: string[] | null
+  modulos_activos: string[] | null
   // ────────────────────────────────────────────────────────────────
   created_at: string
   updated_at: string
