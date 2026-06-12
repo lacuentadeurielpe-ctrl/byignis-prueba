@@ -431,13 +431,8 @@ export async function POST(request: Request) {
   let textoCompleto = notaParaBot ? `${textoMensaje}\n\n${notaParaBot}` : textoMensaje
   let ycloudMessageIdFinal = ycloudMessageId
 
-  // Leer configuración del tenant (debounce_segundos)
-  const { data: configBot } = await supabase
-    .from('configuracion_bot')
-    .select('debounce_segundos')
-    .eq('ferreteria_id', ferreteria.id)
-    .single()
-  const debounceSegundos = (configBot as { debounce_segundos?: number } | null)?.debounce_segundos ?? 8
+  // Leer debounce desde ferreterias.bot_debounce_ms (ms → s)
+  const debounceSegundos = Math.round((ferreteria.bot_debounce_ms ?? 8000) / 1000)
 
   if (debounceSegundos > 0) {
     const resultado = await acumularOProcesar({

@@ -15,7 +15,7 @@ import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import { enviarMensaje, enviarDocumento, enviarImagen } from '@/lib/whatsapp/ycloud'
 import { withTimeout } from '@/lib/utils'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
-import { geocodificarDireccion } from '@/lib/delivery/geocoding'
+import { geocodificarDireccion, resolverGoogleApiKey } from '@/lib/delivery/geocoding'
 import { calcularETAInteligente, registrarPrediccion } from '@/lib/delivery/intelligence'
 import { crearEntrega } from '@/lib/delivery/assignment'
 import { notificarAsignacion } from '@/lib/notifications/delivery.notifications'
@@ -713,10 +713,12 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
 
           if (!ferr?.lat || !ferr?.lng) return
 
+          const mapsKey = await resolverGoogleApiKey(ctx.supabase, ctx.ferreteriaId)
           const coords = await geocodificarDireccion(
             direccionEntrega,
             (ferr as unknown as { nombre?: string }).nombre ?? 'Lima',
             { lat: ferr.lat, lng: ferr.lng, radiusKm: 80 },
+            mapsKey,
           )
           if (!coords) return
 

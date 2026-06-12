@@ -7,7 +7,7 @@
  */
 
 const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1'
-const MODEL = 'claude-3-5-sonnet-20241022'
+const MODEL = 'claude-sonnet-4-6'
 const MAX_TOKENS = 1024
 const TIMEOUT_MS = 28_000
 

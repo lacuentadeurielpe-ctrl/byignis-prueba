@@ -146,11 +146,27 @@ export async function handleIncomingMessage({
   const timeoutIntervacion = (ferreteria as any).timeout_intervencion_dueno ?? config?.timeout_intervencion_dueno ?? 30
   // F3: Perfil del bot — tipo_negocio, descripcion_negocio, tono_bot, nombre_bot
   const perfilBot: PerfilBot = (config as unknown as { perfil_bot?: PerfilBot } | null)?.perfil_bot ?? {}
-  // F4: Agentes configurables — semántica opt-out (undefined = todo activo)
-  const agentesActivos = (config as unknown as { agentes_activos?: AgentesActivos } | null)?.agentes_activos
-  // F5: Profit engine
-  const cierreCotizacionActivo = (config as unknown as { cierre_cotizacion_activo?: boolean } | null)?.cierre_cotizacion_activo !== false
-  const umbralUpsellSoles      = (config as unknown as { umbral_upsell_soles?: number } | null)?.umbral_upsell_soles ?? 0
+  // F4: Agentes configurables — ferreterias.bot_agentes_activos es string[] con los agentes habilitados
+  // Si la columna tiene valor, convertir a AgentesActivos (opt-out por ausencia en el array).
+  // Fallback: config.agentes_activos (tabla antigua) → si tampoco existe, todo activo (undefined).
+  const botAgentesArr = (ferreteria as unknown as { bot_agentes_activos?: string[] | null }).bot_agentes_activos
+  const agentesActivos: AgentesActivos | undefined = botAgentesArr != null
+    ? {
+        ventas:       botAgentesArr.includes('ventas')       ? undefined : false,
+        comprobantes: botAgentesArr.includes('comprobantes') ? undefined : false,
+        upsell:       botAgentesArr.includes('upsell')       ? undefined : false,
+        crm:          botAgentesArr.includes('crm')          ? undefined : false,
+      }
+    : (config as unknown as { agentes_activos?: AgentesActivos } | null)?.agentes_activos
+  // F5: Profit engine — preferir columnas directas de ferreterias
+  const cierreCotizacionActivo =
+    (ferreteria as unknown as { bot_autoclose_cotizacion?: boolean }).bot_autoclose_cotizacion
+    ?? (config as unknown as { cierre_cotizacion_activo?: boolean } | null)?.cierre_cotizacion_activo
+    ?? true
+  const umbralUpsellSoles =
+    (ferreteria as unknown as { bot_margen_minimo?: number }).bot_margen_minimo
+    ?? (config as unknown as { umbral_upsell_soles?: number } | null)?.umbral_upsell_soles
+    ?? 0
 
   // ── 3. Sesión ─────────────────────────────────────────────────────────────
   const { conversacion, cliente } = await getOrCreateSession(
