@@ -54,6 +54,9 @@ export class OrdersService {
     const total = payload.items.reduce((s, i) => s + i.cantidad * i.precio_unitario, 0)
     const costo_total = payload.items.reduce((s, i) => s + i.cantidad * i.costo_unitario, 0)
 
+    // Validar stock si el tenant no permite venta sin stock
+    await this.validarStockItems(payload.items)
+
     const numeroPedido = await this.ventasRepo.generarNumeroPedido(this.ferreteriaId)
 
     // Cliente
@@ -242,5 +245,44 @@ export class OrdersService {
     )
 
     return { id: pedidoId, total, costo_total, items_count: payload.items.length }
+  }
+
+  private async validarStockItems(items: ItemNuevoPedido[]) {
+    const { data: ferreteria } = await this.supabase
+      .from('ferreterias')
+      .select('permitir_venta_sin_stock')
+      .eq('id', this.ferreteriaId)
+      .single()
+
+    // Si el tenant permite venta sin stock globalmente, no validar
+    if (ferreteria?.permitir_venta_sin_stock) return
+
+    const productIds = items
+      .filter(i => i.producto_id)
+      .map(i => i.producto_id as string)
+
+    if (!productIds.length) return
+
+    const { data: productos } = await this.supabase
+      .from('productos')
+      .select('id, stock, venta_sin_stock, nombre')
+      .in('id', productIds)
+      .eq('ferreteria_id', this.ferreteriaId)
+
+    if (!productos) return
+
+    const productoMap = new Map(productos.map(p => [p.id, p]))
+
+    for (const item of items) {
+      if (!item.producto_id) continue
+      const prod = productoMap.get(item.producto_id)
+      if (!prod) continue
+      if (prod.venta_sin_stock) continue
+      if ((prod.stock ?? 0) < item.cantidad) {
+        throw new Error(
+          `Stock insuficiente para "${prod.nombre}": disponible ${prod.stock ?? 0}, solicitado ${item.cantidad}`
+        )
+      }
+    }
   }
 }
