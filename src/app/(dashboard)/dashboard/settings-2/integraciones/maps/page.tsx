@@ -194,10 +194,14 @@ export default function MapsPage() {
           </div>
         </FormSection>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-900">
-            ℹ️ <strong>Información:</strong> Google Maps es opcional pero recomendado para delivery.
-          </p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+          <p className="text-sm text-blue-900 font-medium">¿Cómo funciona?</p>
+          <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+            <li>El API key aquí guardado se usa en el bot de WhatsApp y en el motor de delivery para geocodificar direcciones.</li>
+            <li>Si ya tienes configurada la variable de entorno <code className="bg-blue-100 px-1 rounded text-xs">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> en Vercel, esa tiene prioridad.</li>
+            <li>Si no tienes la variable de entorno, el key guardado aquí activa Google Maps automáticamente.</li>
+            <li>Sin ninguna clave, el sistema usa OpenStreetMap (Nominatim) como fallback gratuito.</li>
+          </ul>
         </div>
       </div>
     </div>

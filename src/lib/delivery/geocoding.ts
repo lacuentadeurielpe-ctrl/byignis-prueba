@@ -147,22 +147,24 @@ async function geocodificarConNominatim(
  * Geocodifica una dirección de texto.
  *
  * Prioridad:
- *   1. Google Maps Geocoding API (si NEXT_PUBLIC_GOOGLE_MAPS_API_KEY existe)
+ *   1. Google Maps Geocoding API (apiKey param → env var NEXT_PUBLIC_GOOGLE_MAPS_API_KEY)
  *      → con location bias si se pasa `bias` (coords del local de la ferretería)
  *   2. Nominatim como fallback (añade `ciudad` al query para contexto)
  *
  * @param direccion  Dirección libre ("paradero 12, calle cesar vallejo")
  * @param ciudad     Ciudad/región para contexto en Nominatim fallback (ej: "Moche, Trujillo")
  * @param bias       Coords del local para que Google priorice resultados cercanos
+ * @param apiKey     Override explícito del API key (tiene precedencia sobre env var)
  */
 export async function geocodificarDireccion(
   direccion: string,
   ciudad = 'Perú',
   bias?: LocationBias,
+  apiKey?: string,
 ): Promise<Coordenadas | null> {
   if (!direccion?.trim()) return null
 
-  const googleApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+  const googleApiKey = apiKey ?? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 
   // Motor 1: Google (con location bias si tenemos coords del local)
   if (googleApiKey) {
@@ -173,6 +175,30 @@ export async function geocodificarDireccion(
 
   // Motor 2: Nominatim (añade ciudad para contexto)
   return geocodificarConNominatim(direccion.trim(), ciudad)
+}
+
+/**
+ * Obtiene el Google Maps API key para una ferretería específica.
+ * Prioridad: env var global → clave guardada en integraciones_conectadas.
+ * Úsalo en contextos server-side donde se tiene acceso a supabase.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function resolverGoogleApiKey(supabase: any, ferreteriaId: string): Promise<string | undefined> {
+  // La variable de entorno global tiene prioridad (instalación del desarrollador)
+  if (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) {
+    return process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+  }
+
+  // Fallback: key guardada por el dueño en settings-2 → Integraciones → Google Maps
+  const { data } = await supabase
+    .from('integraciones_conectadas')
+    .select('metadata')
+    .eq('ferreteria_id', ferreteriaId)
+    .eq('tipo', 'maps')
+    .eq('estado', 'conectado')
+    .maybeSingle()
+
+  return data?.metadata?.api_key as string | undefined
 }
 
 // ── Helpers con caché en BD ───────────────────────────────────────────────────
@@ -197,7 +223,8 @@ export async function geocodificarFerreteria(
     return { lat: ferreteria.lat, lng: ferreteria.lng }
   }
 
-  const coords = await geocodificarDireccion(direccion)
+  const apiKey = await resolverGoogleApiKey(supabase, ferreteriaId)
+  const coords = await geocodificarDireccion(direccion, 'Perú', undefined, apiKey)
   if (!coords) return null
 
   await supabase
@@ -236,7 +263,8 @@ export async function geocodificarCliente(
     return { lat: cliente.lat, lng: cliente.lng }
   }
 
-  const coords = await geocodificarDireccion(direccion, 'Perú', bias)
+  const apiKey = await resolverGoogleApiKey(supabase, ferreteriaId)
+  const coords = await geocodificarDireccion(direccion, 'Perú', bias, apiKey)
   if (!coords) return null
 
   // Guardar en caché

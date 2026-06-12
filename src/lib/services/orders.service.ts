@@ -2,7 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { VentasRepository, ItemPedidoInput, PedidoInput } from '../db/repositories/ventas'
 import { ChatRepository } from '../db/repositories/chat'
 import { DeliveryRepository } from '../db/repositories/logistica'
-import { geocodificarDireccion } from '../delivery/geocoding'
+import { geocodificarDireccion, resolverGoogleApiKey } from '../delivery/geocoding'
 import { calcularETAInteligente, registrarPrediccion } from '../delivery/intelligence'
 import { crearEntrega } from '../delivery/assignment'
 import { normalizarTelefono } from '../utils'
@@ -138,10 +138,12 @@ export class OrdersService {
       let etaResult: Awaited<ReturnType<typeof calcularETAInteligente>> | null = null
 
       if (ferreteria?.lat && ferreteria?.lng) {
+        const mapsApiKey = await resolverGoogleApiKey(this.supabase, this.ferreteriaId)
         const coords = await geocodificarDireccion(
           dirEta,
           ferreteria.nombre ?? 'Perú',
           { lat: ferreteria.lat, lng: ferreteria.lng, radiusKm: 80 },
+          mapsApiKey,
         )
         if (coords) {
           const vehiculos = await this.deliveryRepo.listarVehiculosActivos(this.ferreteriaId)
