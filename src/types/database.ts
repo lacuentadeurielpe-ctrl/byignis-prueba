@@ -5,6 +5,39 @@
 // ──────────────────────────────────────────────────────────────────
 // Tipos de facturación / RUC
 // ──────────────────────────────────────────────────────────────────
+export type TipoProductoDigital = 'archivo' | 'licencia' | 'curso' | 'servicio' | 'suscripcion'
+export type MetodoEntregaDigital = 'whatsapp_auto' | 'enlace_publico' | 'manual'
+
+export interface PreguntaFrecuente {
+  pregunta: string
+  respuesta: string
+}
+
+export interface ProductoDigital {
+  id: string
+  ferreteria_id: string
+  nombre: string
+  tipo: TipoProductoDigital
+  descripcion: string | null
+  precio: number
+  unidad: string
+  descripcion_bot: string | null
+  campos_requeridos: string[]
+  preguntas_frecuentes: PreguntaFrecuente[]
+  destacado: boolean
+  metodo_entrega: MetodoEntregaDigital
+  contenido_entrega: string | null
+  mensaje_post_venta: string | null
+  vigencia: string | null
+  cupos_totales: number | null
+  cupos_usados: number
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
 export type TipoRuc = 'sin_ruc' | 'ruc10' | 'ruc20'
 export type RegimenTributario = 'rer' | 'rmt' | 'rus' | 'general'
 export type TipoComprobante = 'nota_venta' | 'boleta' | 'factura' | 'nota_credito' | 'nota_debito'
