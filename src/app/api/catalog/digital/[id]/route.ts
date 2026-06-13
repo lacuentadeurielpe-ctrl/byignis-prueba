@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 
+const ALLOWED_FIELDS = [
+  'nombre', 'categoria', 'subcategoria', 'descripcion',
+  'precio', 'precio_original', 'unidad', 'stock', 'vigencia', 'tags',
+  'destacado', 'activo',
+  'tipos_entrega', 'archivo_url', 'contenido_entrega', 'mensaje_entrega',
+]
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionInfo()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -9,17 +16,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await request.json()
 
-  const allowed = [
-    'nombre', 'tipo', 'descripcion', 'precio', 'unidad',
-    'descripcion_bot', 'campos_requeridos', 'preguntas_frecuentes', 'destacado',
-    'metodo_entrega', 'contenido_entrega', 'mensaje_post_venta', 'vigencia',
-    'cupos_totales', 'fecha_inicio', 'fecha_fin', 'activo',
-  ]
   const patch: Record<string, unknown> = {}
-  for (const key of allowed) {
+  for (const key of ALLOWED_FIELDS) {
     if (key in body) patch[key] = body[key]
   }
   if (patch.nombre) patch.nombre = String(patch.nombre).trim()
+  if (patch.categoria) patch.categoria = String(patch.categoria).trim()
+  if ('precio' in patch) patch.precio = Number(patch.precio)
+  if ('precio_original' in patch) patch.precio_original = patch.precio_original ? Number(patch.precio_original) : null
+  if ('stock' in patch) patch.stock = patch.stock ? Number(patch.stock) : null
 
   const supabase = await createClient()
   const { data, error } = await supabase

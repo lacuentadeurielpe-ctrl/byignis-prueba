@@ -23,14 +23,14 @@ export async function POST(request: Request) {
 
   const body = await request.json()
   const {
-    nombre, tipo, descripcion, precio, unidad,
-    descripcion_bot, campos_requeridos, preguntas_frecuentes, destacado,
-    metodo_entrega, contenido_entrega, mensaje_post_venta, vigencia,
-    cupos_totales, fecha_inicio, fecha_fin, activo,
+    nombre, categoria, subcategoria, descripcion,
+    precio, precio_original, unidad, stock, vigencia, tags,
+    destacado, activo,
+    tipos_entrega, archivo_url, contenido_entrega, mensaje_entrega,
   } = body
 
   if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 })
-  if (precio == null || precio < 0) return NextResponse.json({ error: 'Precio inválido' }, { status: 400 })
+  if (precio == null || Number(precio) < 0) return NextResponse.json({ error: 'Precio inválido' }, { status: 400 })
 
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -38,22 +38,21 @@ export async function POST(request: Request) {
     .insert({
       ferreteria_id: session.ferreteriaId,
       nombre: nombre.trim(),
-      tipo: tipo || 'servicio',
+      categoria: categoria?.trim() || 'General',
+      subcategoria: subcategoria?.trim() || null,
       descripcion: descripcion?.trim() || null,
       precio: Number(precio),
+      precio_original: precio_original ? Number(precio_original) : null,
       unidad: unidad?.trim() || 'unidad',
-      descripcion_bot: descripcion_bot?.trim() || null,
-      campos_requeridos: campos_requeridos || [],
-      preguntas_frecuentes: preguntas_frecuentes || [],
-      destacado: destacado ?? false,
-      metodo_entrega: metodo_entrega || 'manual',
-      contenido_entrega: contenido_entrega?.trim() || null,
-      mensaje_post_venta: mensaje_post_venta?.trim() || null,
+      stock: stock ? Number(stock) : null,
       vigencia: vigencia?.trim() || null,
-      cupos_totales: cupos_totales ? Number(cupos_totales) : null,
-      fecha_inicio: fecha_inicio || null,
-      fecha_fin: fecha_fin || null,
+      tags: Array.isArray(tags) ? tags : [],
+      destacado: destacado ?? false,
       activo: activo ?? true,
+      tipos_entrega: Array.isArray(tipos_entrega) && tipos_entrega.length > 0 ? tipos_entrega : ['manual'],
+      archivo_url: archivo_url?.trim() || null,
+      contenido_entrega: contenido_entrega?.trim() || null,
+      mensaje_entrega: mensaje_entrega?.trim() || null,
     })
     .select()
     .single()

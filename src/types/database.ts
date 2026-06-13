@@ -5,34 +5,27 @@
 // ──────────────────────────────────────────────────────────────────
 // Tipos de facturación / RUC
 // ──────────────────────────────────────────────────────────────────
-export type TipoProductoDigital = 'archivo' | 'licencia' | 'curso' | 'servicio' | 'suscripcion'
-export type MetodoEntregaDigital = 'whatsapp_auto' | 'enlace_publico' | 'manual'
-
-export interface PreguntaFrecuente {
-  pregunta: string
-  respuesta: string
-}
-
 export interface ProductoDigital {
   id: string
   ferreteria_id: string
   nombre: string
-  tipo: TipoProductoDigital
+  categoria: string
+  subcategoria: string | null
   descripcion: string | null
   precio: number
+  precio_original: number | null
   unidad: string
-  descripcion_bot: string | null
-  campos_requeridos: string[]
-  preguntas_frecuentes: PreguntaFrecuente[]
-  destacado: boolean
-  metodo_entrega: MetodoEntregaDigital
-  contenido_entrega: string | null
-  mensaje_post_venta: string | null
+  stock: number | null
   vigencia: string | null
-  cupos_totales: number | null
-  cupos_usados: number
-  fecha_inicio: string | null
-  fecha_fin: string | null
+  tags: string[]
+  thumbnail_url: string | null
+  archivo_url: string | null
+  contenido_entrega: string | null
+  tipos_entrega: string[]
+  mensaje_entrega: string | null
+  contextualizacion: string | null
+  contextualizacion_at: string | null
+  destacado: boolean
   activo: boolean
   created_at: string
   updated_at: string
