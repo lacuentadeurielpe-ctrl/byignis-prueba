@@ -206,10 +206,20 @@ export async function handleIncomingMessage({
   }
 
   // ── 6. Cargar catálogo, zonas y flujo activo ──────────────────────────────
-  const [productos, zonas, datosFlujo] = await Promise.all([
+  const botModo = ferreteria.bot_modo_catalogo ?? 'fisicos'
+
+  const [productos, zonas, datosFlujo, productosDigitales] = await Promise.all([
     catalogRepo.listarProductosActivos(ferreteria.id),
     catalogRepo.listarZonasDeliveryActivas(ferreteria.id),
     chatRepo.obtenerDatosFlujo(conversacion.id),
+    botModo !== 'fisicos'
+      ? supabase
+          .from('productos_digitales')
+          .select('*')
+          .eq('ferreteria_id', ferreteria.id)
+          .eq('activo', true)
+          .then(({ data }) => data ?? [])
+      : Promise.resolve([]),
   ])
 
   // ── 7. Verificar créditos mínimos (1) sin descontar aún ─────────────────
@@ -276,10 +286,11 @@ export async function handleIncomingMessage({
 
       const systemPromptOrq = buildOrchestratorSystemPrompt({
         ferreteria,
-        productos: productos ?? [],
-        zonas: zonas ?? [],
+        productos:         botModo !== 'digitales' ? (productos ?? []) : [],
+        productosDigitales: productosDigitales.length > 0 ? productosDigitales : undefined,
+        zonas:             zonas ?? [],
         config,
-        nombreCliente: nombreClienteGuardado,
+        nombreCliente:     nombreClienteGuardado,
         perfilCliente,
         resumenContexto,
         datosFlujo,
@@ -300,8 +311,10 @@ export async function handleIncomingMessage({
           conversacionId:  conversacion.id,
           clienteId:       conversacion.cliente_id,
           telefonoCliente,                       // para crear_pedido
-          productos:       productos ?? [],
-          zonas:           zonas ?? [],          // para crear_pedido (zona lookup)
+          productos:           botModo !== 'digitales' ? (productos ?? []) : [],
+          productosDigitales:  productosDigitales.length > 0 ? productosDigitales : undefined,
+          botModoCatalogo:     botModo,
+          zonas:               zonas ?? [],      // para crear_pedido (zona lookup)
           datosFlujo,                            // cotización activa y paso actual
           ventanaGraciaMinutos: (config as unknown as { ventana_gracia_minutos?: number } | null)?.ventana_gracia_minutos ?? 30,
           ycloudApiKey,

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Plus, Download } from 'lucide-react'
 import ProductsTable from '@/components/catalog/ProductsTable'
 import CatalogNav from '@/components/catalog/CatalogNav'
+import CatalogBotModeBar from '@/components/catalog/CatalogBotModeBar'
 import { getSessionInfo } from '@/lib/auth/roles'
 
 export default async function CatalogPage() {
@@ -31,12 +32,13 @@ export default async function CatalogPage() {
       .single(),
     supabase
       .from('ferreterias')
-      .select('igv_incluido_en_precios')
+      .select('igv_incluido_en_precios, bot_modo_catalogo')
       .eq('id', session.ferreteriaId)
       .single(),
   ])
 
   const igvGlobal = ferreteria?.igv_incluido_en_precios ?? false
+  const botModo = (ferreteria?.bot_modo_catalogo as 'fisicos' | 'digitales' | 'ambos') ?? 'fisicos'
 
   return (
     <div className="p-8">
@@ -66,6 +68,8 @@ export default async function CatalogPage() {
           </Link>
         </div>
       </div>
+
+      <CatalogBotModeBar initialMode={botModo} />
 
       <CatalogNav />
 

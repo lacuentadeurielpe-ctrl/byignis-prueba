@@ -6,7 +6,7 @@
 // la sesión autenticada.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Producto, ZonaDelivery, DatosFlujoPedido, AgentesActivos } from '@/types/database'
+import type { Producto, ProductoDigital, ZonaDelivery, DatosFlujoPedido, AgentesActivos } from '@/types/database'
 import { procesarItemsSolicitados, buscarProducto, formatearCotizacion } from '@/lib/bot/catalog-search'
 import { pausarBot } from '@/lib/bot/session'
 import { generarYEnviarComprobante, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
@@ -37,6 +37,8 @@ export interface ToolContext {
   agentesActivos?: AgentesActivos   // F4: si undefined → todo activo
   umbralUpsellSoles?: number        // F5: monto mínimo de cotización para activar upsell (0 = siempre)
   nubefactTokenPlano?: string       // Inyectado
+  productosDigitales?: ProductoDigital[]
+  botModoCatalogo?: 'fisicos' | 'digitales' | 'ambos'
 }
 
 export interface ToolResult {
@@ -368,6 +370,48 @@ export function getActiveToolSchemas(agentes?: AgentesActivos): ToolSchema[] {
 
 type Executor = (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult>
 
+function buscarProductoDigital(nombreBuscado: string, productos: ProductoDigital[]): ProductoDigital | null {
+  const activos = productos.filter((p) => p.activo && (p.stock === null || p.stock > 0))
+  if (!activos.length) return null
+
+  const norm = (s: string) =>
+    s.toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .trim()
+
+  const buscado = norm(nombreBuscado)
+  const tokensB = new Set(buscado.split(/\s+/).filter((t) => t.length > 2))
+
+  let mejorMatch: ProductoDigital | null = null
+  let mejorScore = 0
+
+  for (const p of activos) {
+    const nombreNorm = norm(p.nombre)
+
+    // Substring match → return immediately
+    if (nombreNorm.includes(buscado) || buscado.includes(nombreNorm)) return p
+
+    // Tag match
+    for (const tag of p.tags) {
+      const tagNorm = norm(tag)
+      if (tagNorm.includes(buscado) || buscado.includes(tagNorm)) return p
+    }
+
+    // Token overlap score
+    const tokensP = new Set(nombreNorm.split(/\s+/).filter((t) => t.length > 2))
+    const matches = [...tokensB].filter((t) => tokensP.has(t)).length
+    const score = tokensB.size > 0 ? matches / tokensB.size : 0
+    if (score >= 0.5 && score > mejorScore) {
+      mejorScore = score
+      mejorMatch = p
+    }
+  }
+
+  return mejorMatch
+}
+
 function tokenizarProductos(nombres: string[]): Set<string> {
   const tokens = new Set<string>()
   for (const nombre of nombres) {
@@ -390,20 +434,80 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     const items = args.items as Array<{ nombre_buscado: string; cantidad: number }> | undefined
     if (!Array.isArray(items) || items.length === 0) return { ok: false, error: 'items vacío' }
 
-    const resultados = procesarItemsSolicitados(items, ctx.productos)
-    const resumen = resultados.map((r) => ({
-      nombre_buscado:       r.nombre_buscado,
-      cantidad_solicitada:  r.cantidad,
-      encontrado:           !!r.producto,
-      producto_id:          r.producto?.id ?? null,
-      nombre_catalogo:      r.producto?.nombre ?? null,
-      unidad:               r.producto?.unidad ?? null,
-      precio_unitario:      r.precio_unitario,
-      stock:                r.stock_disponible,
-      disponible:           r.disponible,
-      nota:                 r.nota,
-      requiere_aprobacion:  r.requiere_aprobacion,
-    }))
+    const modo = ctx.botModoCatalogo ?? 'fisicos'
+    const buscarFisicos   = modo !== 'digitales'
+    const buscarDigitales = modo !== 'fisicos' && (ctx.productosDigitales?.length ?? 0) > 0
+
+    // Physical search (skipped in 'digitales' mode)
+    const fisicosProcesados = buscarFisicos
+      ? procesarItemsSolicitados(items, ctx.productos)
+      : items.map((i) => ({
+          nombre_buscado: i.nombre_buscado,
+          cantidad: i.cantidad,
+          producto: null,
+          precio_unitario: null,
+          stock_disponible: null,
+          disponible: false,
+          nota: null,
+          requiere_aprobacion: false,
+        }))
+
+    const resumen = fisicosProcesados.map((r) => {
+      // Physical product found OR digital search disabled
+      if (r.producto || !buscarDigitales) {
+        return {
+          nombre_buscado:      r.nombre_buscado,
+          cantidad_solicitada: r.cantidad,
+          encontrado:          !!r.producto,
+          producto_id:         r.producto?.id ?? null,
+          nombre_catalogo:     r.producto?.nombre ?? null,
+          unidad:              r.producto?.unidad ?? null,
+          precio_unitario:     r.precio_unitario,
+          stock:               r.stock_disponible,
+          disponible:          r.disponible,
+          nota:                r.nota,
+          requiere_aprobacion: r.requiere_aprobacion,
+          es_digital:          false,
+        }
+      }
+
+      // Try digital products
+      const pd = buscarProductoDigital(r.nombre_buscado, ctx.productosDigitales!)
+      if (pd) {
+        const stockDisp = pd.stock === null ? 999 : pd.stock
+        return {
+          nombre_buscado:      r.nombre_buscado,
+          cantidad_solicitada: r.cantidad,
+          encontrado:          true,
+          producto_id:         pd.id,
+          nombre_catalogo:     pd.nombre,
+          unidad:              pd.unidad,
+          precio_unitario:     pd.precio,
+          stock:               pd.stock,
+          disponible:          pd.activo && stockDisp > 0,
+          nota:                `Producto digital — entrega: ${pd.tipos_entrega.join(', ')}`,
+          requiere_aprobacion: false,
+          es_digital:          true,
+        }
+      }
+
+      // Not found anywhere
+      return {
+        nombre_buscado:      r.nombre_buscado,
+        cantidad_solicitada: r.cantidad,
+        encontrado:          false,
+        producto_id:         null,
+        nombre_catalogo:     null,
+        unidad:              null,
+        precio_unitario:     null,
+        stock:               null,
+        disponible:          false,
+        nota:                r.nota ?? 'No encontrado en el catálogo',
+        requiere_aprobacion: false,
+        es_digital:          false,
+      }
+    })
+
     return { ok: true, data: { resultados: resumen } }
   },
 

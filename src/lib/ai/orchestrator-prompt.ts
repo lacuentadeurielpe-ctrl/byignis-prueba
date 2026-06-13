@@ -7,12 +7,13 @@
 // - Upsell solo si es realmente complementario y el cliente ya compró algo relacionado
 // - Múltiples mensajes cortos OK si mejora legibilidad; no spam
 
-import type { Ferreteria, Producto, ZonaDelivery, ConfiguracionBot, DatosFlujoPedido, PerfilBot } from '@/types/database'
+import type { Ferreteria, Producto, ProductoDigital, ZonaDelivery, ConfiguracionBot, DatosFlujoPedido, PerfilBot } from '@/types/database'
 import { formatHora } from '@/lib/utils'
 
 interface BuildOrchestratorPromptParams {
   ferreteria: Ferreteria
   productos: Producto[]
+  productosDigitales?: ProductoDigital[]
   zonas: ZonaDelivery[]
   config: ConfiguracionBot | null
   nombreCliente: string | null
@@ -57,9 +58,39 @@ function buildCatalogoCompacto(productos: Producto[]): string {
   return lineas.join('\n')
 }
 
+function buildCatalogoDigitalCompacto(productos: ProductoDigital[]): string {
+  const activos = productos.filter((p) => p.activo)
+  if (!activos.length) return '(sin productos digitales cargados)'
+
+  const porCategoria: Record<string, ProductoDigital[]> = {}
+  for (const p of activos) {
+    const cat = p.categoria ?? 'General'
+    if (!porCategoria[cat]) porCategoria[cat] = []
+    porCategoria[cat].push(p)
+  }
+
+  const lineas: string[] = []
+  for (const [categoria, prods] of Object.entries(porCategoria)) {
+    lineas.push(`[${categoria}]`)
+    for (const p of prods) {
+      if (p.stock !== null && p.stock <= 0) {
+        lineas.push(`  ${p.nombre} — SIN STOCK`)
+        continue
+      }
+      const stockLabel = p.stock === null ? '∞' : String(p.stock)
+      const entrega = p.tipos_entrega.join('/')
+      let linea = `  ${p.nombre} | S/${p.precio.toFixed(2)}/${p.unidad} | stk:${stockLabel} | entrega:${entrega}`
+      if (p.contextualizacion) linea += `\n    [ctx: ${p.contextualizacion}]`
+      lineas.push(linea)
+    }
+  }
+  return lineas.join('\n')
+}
+
 export function buildOrchestratorSystemPrompt({
   ferreteria,
   productos,
+  productosDigitales,
   zonas,
   config,
   nombreCliente,
@@ -120,6 +151,10 @@ Datos acumulados: ${partes.length > 0 ? partes.join(' | ') : '(ninguno aún)'}
 
   const catalogoTexto = buildCatalogoCompacto(productos)
 
+  const catalogoDigitalTexto = productosDigitales && productosDigitales.length > 0
+    ? buildCatalogoDigitalCompacto(productosDigitales)
+    : null
+
   const descripcionTexto = descripcionNegocio
     ? `\n# Sobre este negocio\n${descripcionNegocio}\n`
     : ''
@@ -148,6 +183,14 @@ IMPORTANTE: Este catálogo es la ÚNICA fuente de verdad sobre qué productos te
 - Para obtener precios exactos, descuentos por volumen y confirmación de stock en tiempo real → usa \`buscar_producto\`
 
 ${catalogoTexto}
+${catalogoDigitalTexto ? `
+# CATÁLOGO DIGITAL (nombre | precio/unidad | stock | entrega)
+Estos productos se entregan de forma digital (descarga, link, clave de activación, o entrega manual).
+- Usa \`buscar_producto\` igual que con productos físicos para confirmar disponibilidad
+- El campo [ctx: ...] es el contexto generado por IA — úsalo para responder dudas del cliente sin inventar
+
+${catalogoDigitalTexto}
+` : ''}
 
 # REGLAS CRÍTICAS — LEER ANTES DE CADA RESPUESTA
 
