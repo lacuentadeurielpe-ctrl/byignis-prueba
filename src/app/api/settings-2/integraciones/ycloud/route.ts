@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { encriptar } from '@/lib/encryption'
 
@@ -43,9 +44,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'API Key es requerida' }, { status: 400 })
   }
 
-  const supabase = await createClient()
+  // Usar admin client para evitar bloqueos RLS en configuracion_ycloud
+  const supabase = createAdminClient()
 
-  // Encriptar credenciales
+  // Encriptar credenciales (fallback a plain: si no hay ENCRYPTION_KEY)
   const apiKeyEnc = await encriptar(api_key.trim())
   const webhookSecretEnc = webhook_secret?.trim() ? await encriptar(webhook_secret.trim()) : null
 

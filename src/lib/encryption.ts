@@ -43,6 +43,9 @@ async function getKey(): Promise<CryptoKey> {
  * @returns string en formato "iv:authTag:ciphertext" (todo en hex)
  */
 export async function encriptar(texto: string): Promise<string> {
+  // Si no hay clave de encriptación, guardar con prefijo plain: (fallback)
+  if (!process.env.ENCRYPTION_KEY) return `plain:${texto}`
+
   const key = await getKey()
   const iv = crypto.getRandomValues(new Uint8Array(12)) // 96 bits para GCM
   const encoder = new TextEncoder()
@@ -66,9 +69,12 @@ export async function encriptar(texto: string): Promise<string> {
 
 /**
  * Desencripta un texto en formato "iv:authTag:ciphertext".
+ * Si el valor tiene prefijo "plain:" lo devuelve sin encriptar (fallback sin ENCRYPTION_KEY).
  * @returns texto plano original
  */
 export async function desencriptar(textoEncriptado: string): Promise<string> {
+  if (textoEncriptado.startsWith('plain:')) return textoEncriptado.slice(6)
+
   const key = await getKey()
   const partes = textoEncriptado.split(':')
   if (partes.length !== 3) throw new Error('Formato de texto encriptado inválido')
