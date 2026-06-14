@@ -374,10 +374,10 @@ export async function POST(request: Request) {
       if (captionImg) {
         textoMensaje = captionImg
       } else {
-        // Vision falló o no está disponible — pasar al bot con contexto genérico
-        // para que quede guardado en historial y el bot pueda responder apropiadamente
-        textoMensaje = '[imagen]'
-        notaParaBot = '[El cliente envió una imagen. No se pudo analizar automáticamente. Pídele que describa qué necesita o que escriba la lista de productos.]'
+        // Vision falló o no está disponible — usar texto natural para que el bot
+        // responda pidiendo descripción en vez de disculparse por "problema técnico"
+        textoMensaje = 'foto'
+        notaParaBot = '[El cliente envió una foto. Pídele amablemente que escriba los productos que necesita o que describa su consulta en texto.]'
       }
     }
 
