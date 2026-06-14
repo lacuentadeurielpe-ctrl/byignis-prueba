@@ -1,6 +1,8 @@
 // Cliente OpenAI para procesamiento de audio (Whisper) e imágenes (Vision)
 // Solo activo si OPENAI_API_KEY está configurado
 
+import { GoogleGenerativeAI, SchemaType, type Schema } from '@google/generative-ai'
+
 const OPENAI_BASE = 'https://api.openai.com/v1'
 
 function getKey(): string | null {
@@ -59,8 +61,8 @@ export async function transcribirAudio(
 
 // ── Imagen → Análisis (Gemini Vision) ───────────────────────────────────────
 
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
-const GEMINI_MODEL = 'gemini-2.0-flash'
+// Mismo modelo que usa el módulo de catálogo (compras-ai.ts), que funciona en producción
+const GEMINI_MODEL = 'gemini-2.5-flash'
 
 function getGeminiKey(): string | null {
   return process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? null
@@ -81,6 +83,8 @@ export interface AnalisisImagen {
 
 /**
  * Analiza una imagen con Gemini Vision.
+ * Usa el SDK oficial @google/generative-ai con gemini-2.5-flash — el MISMO
+ * patrón que el módulo de catálogo (compras-ai.ts) que funciona en producción.
  * Detecta si es una lista de productos, una foto de producto, comprobante de pago o algo genérico.
  * Retorna un análisis estructurado para que el bot pueda responder apropiadamente.
  */
@@ -89,77 +93,90 @@ export async function analizarImagen(
   mimeType: string,
 ): Promise<AnalisisImagen | null> {
   const apiKey = getGeminiKey()
-  if (!apiKey) return null
+  if (!apiKey) {
+    console.warn('[Gemini] Vision: GOOGLE_GENERATIVE_AI_API_KEY no configurada')
+    return null
+  }
+
+  // Normalizar mimeType — Gemini solo acepta tipos de imagen válidos
+  const mime = mimeType.includes('png') ? 'image/png'
+    : mimeType.includes('webp') ? 'image/webp'
+    : mimeType.includes('heic') || mimeType.includes('heif') ? 'image/heic'
+    : 'image/jpeg'
 
   const base64 = buffer.toString('base64')
 
-  const systemPrompt = `Eres el asistente de una ferretería peruana. Analiza la imagen del cliente.
-
-Determina cuál de estos tipos es:
-1. LISTA_PRODUCTOS: cotización escrita, lista de compras, captura de lista, pedido escrito
-2. PRODUCTO_INDIVIDUAL: foto de un producto para identificar, pedir precio o consultar
-3. COMPROBANTE_PAGO: captura de pago Yape, Plin, transferencia bancaria, depósito, BCP, Interbank, BBVA, etc.
-4. CONSULTA: foto de instalación, daño, medida, plano, obra
-5. OTRO: selfie, paisaje, meme, nada relevante para la ferretería
-
-Responde SOLO en JSON:
-{
-  "tipo": "lista_productos" | "producto_individual" | "comprobante_pago" | "consulta" | "otro",
-  "descripcion": "respuesta amigable en español peruano para el cliente (máx 150 chars)",
-  "productosDetectados": [{"nombre": "...", "cantidad": 2}],
-  "pago": {
-    "monto": 150.00,
-    "destinatario": "...",
-    "operacion_id": "...",
-    "fecha": "..."
+  const schema: Schema = {
+    type: SchemaType.OBJECT,
+    properties: {
+      tipo: {
+        type: SchemaType.STRING,
+        description: 'Uno de: lista_productos, producto_individual, comprobante_pago, consulta, otro',
+      },
+      descripcion: {
+        type: SchemaType.STRING,
+        description: 'Respuesta amigable en español peruano para el cliente (máx 150 chars)',
+      },
+      productosDetectados: {
+        type: SchemaType.ARRAY,
+        items: {
+          type: SchemaType.OBJECT,
+          properties: {
+            nombre: { type: SchemaType.STRING },
+            cantidad: { type: SchemaType.NUMBER },
+            precio: { type: SchemaType.NUMBER },
+          },
+          required: ['nombre'],
+        },
+      },
+      pago: {
+        type: SchemaType.OBJECT,
+        properties: {
+          monto: { type: SchemaType.NUMBER, description: 'Monto numérico del pago, ej 150.00' },
+          destinatario: { type: SchemaType.STRING },
+          operacion_id: { type: SchemaType.STRING },
+          fecha: { type: SchemaType.STRING },
+        },
+      },
+    },
+    required: ['tipo', 'descripcion'],
   }
-}`
+
+  const prompt = `Eres el asistente de una ferretería peruana. Analiza la imagen del cliente y clasifícala.
+
+Determina el "tipo" según cuál de estos corresponde:
+1. lista_productos: cotización escrita, lista de compras, captura de lista, pedido escrito → llena "productosDetectados"
+2. producto_individual: foto de un producto para identificar, pedir precio o consultar
+3. comprobante_pago: captura de pago Yape, Plin, transferencia bancaria, depósito, BCP, Interbank, BBVA, etc. → llena "pago"
+4. consulta: foto de instalación, daño, medida, plano, obra
+5. otro: selfie, paisaje, meme, nada relevante para la ferretería
+
+La "descripcion" debe ser un mensaje amable en español peruano dirigido al cliente (máx 150 caracteres).
+Si es lista_productos, extrae cada producto en "productosDetectados" con nombre y cantidad.
+Si es comprobante_pago, extrae monto, destinatario, operacion_id y fecha en "pago".`
 
   try {
-    const res = await fetch(
-      `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{
-            parts: [
-              { inlineData: { mimeType, data: base64 } },
-              { text: 'Analiza esta imagen del cliente.' },
-            ],
-          }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            maxOutputTokens: 400,
-          },
-        }),
-      }
-    )
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_MODEL,
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+      },
+    })
 
-    if (!res.ok) {
-      const err = await res.text()
-      console.error('[Gemini] Error Vision:', res.status, err)
-      return null
-    }
+    const result = await model.generateContent([
+      prompt,
+      { inlineData: { data: base64, mimeType: mime } },
+    ])
 
-    const data = await res.json()
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!content) {
-      const finishReason = data.candidates?.[0]?.finishReason ?? 'N/A'
-      const blockReason = data.promptFeedback?.blockReason ?? 'N/A'
-      console.warn(`[Gemini] Vision sin content — finish=${finishReason} block=${blockReason} candidates=${data.candidates?.length ?? 0}`)
-      return null
-    }
+    const textResponse = result.response.text()
+    console.log(`[Gemini] Vision OK — ${buffer.length}b mime=${mime} → ${textResponse.slice(0, 120)}`)
 
-    try {
-      return JSON.parse(content) as AnalisisImagen
-    } catch {
-      console.warn(`[Gemini] Vision content no es JSON: ${content.slice(0, 200)}`)
-      return null
-    }
+    const cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim()
+    return JSON.parse(cleanJson) as AnalisisImagen
   } catch (e) {
-    console.error('[Gemini] Error en analizarImagen:', e)
+    console.error('[Gemini] Error en analizarImagen:', e instanceof Error ? e.message : e)
     return null
   }
 }
