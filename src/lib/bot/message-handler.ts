@@ -376,6 +376,16 @@ export async function handleIncomingMessage({
           }
         } catch { /* no bloquear el flujo por fallo en la alerta */ }
       }
+
+      // Si el error es rate limit (429) o timeout, no tiene sentido llamar al classic DeepSeek
+      // de inmediato — también fallará. Respondemos directo y ahorramos retries redundantes.
+      const esRateLimit = errMsg.includes('429') || errMsg.includes('rate limit') || errMsg.includes('Too Many')
+      const esTimeout   = errMsg.toLowerCase().includes('abort') || errMsg.includes('timeout')
+      if (esRateLimit || esTimeout) {
+        const msg = 'Un momento, estoy procesando demasiadas consultas. Por favor escríbeme en unos segundos. 🙏'
+        await guardarMensaje(supabase, conversacion.id, 'bot', msg)
+        return { respuesta: msg, conversacionId: conversacion.id }
+      }
     }
   }
 

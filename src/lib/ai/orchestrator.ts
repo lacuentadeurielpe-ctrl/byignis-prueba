@@ -266,14 +266,21 @@ async function callDeepSeekOnce(
   })
   clearTimeout(timer)
 
+  const rawBody = await response.text()
+
   if (!response.ok) {
-    const txt = await response.text()
-    throw new Error(`DeepSeek ${response.status}: ${txt.slice(0, 200)}`)
+    throw new Error(`DeepSeek ${response.status}: ${rawBody.slice(0, 300)}`)
   }
 
-  const data = await response.json()
+  let data: any
+  try {
+    data = JSON.parse(rawBody)
+  } catch {
+    throw new Error(`DeepSeek body no es JSON (status=${response.status}): ${rawBody.slice(0, 300)}`)
+  }
+
   const choice = data.choices?.[0]
-  if (!choice) throw new Error('DeepSeek respuesta vacía')
+  if (!choice) throw new Error('DeepSeek respuesta vacía en orquestador')
   return choice
 }
 
