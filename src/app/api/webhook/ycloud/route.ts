@@ -82,12 +82,13 @@ export async function POST(request: Request) {
       const telefonoRawOut = extraerTelefonoFerreteria(payload)
       const telefonoNormOut = telefonoRawOut?.replace(/^\+/, '') ?? ''
       const supabaseOut = createAdminClient()
-      const { data: ferreteriaOut } = await supabaseOut
-        .from('ferreterias')
-        .select('id')
-        .or(`telefono_whatsapp.eq.${telefonoNormOut},telefono_whatsapp.eq.+${telefonoNormOut}`)
-        .eq('activo', true)
+      const { data: ycOut } = await supabaseOut
+        .from('configuracion_ycloud')
+        .select('ferreteria_id')
+        .or(`numero_whatsapp.eq.${telefonoNormOut},numero_whatsapp.eq.+${telefonoNormOut}`)
+        .eq('estado_conexion', 'activo')
         .single()
+      const ferreteriaOut = ycOut ? { id: ycOut.ferreteria_id } : null
       if (ferreteriaOut) {
         const telefonoDestino = msgOut.to.replace(/^\+/, '')
         console.log(`[Webhook] Mensaje manual del dueño → pausar bot para ${telefonoDestino}`)
@@ -108,25 +109,32 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient()
 
-  const { data: ferreteria } = await supabase
-    .from('ferreterias')
-    .select('*')
-    .or(`telefono_whatsapp.eq.${telefonoNorm},telefono_whatsapp.eq.+${telefonoNorm}`)
-    .eq('activo', true)
+  // ── 2a. Buscar tenant por número en configuracion_ycloud (fuente de verdad) ─
+  const { data: ycloudConfig } = await supabase
+    .from('configuracion_ycloud')
+    .select('ferreteria_id, api_key_enc, webhook_secret_enc')
+    .or(`numero_whatsapp.eq.${telefonoNorm},numero_whatsapp.eq.+${telefonoNorm}`)
+    .eq('estado_conexion', 'activo')
     .single()
 
-  if (!ferreteria) {
+  if (!ycloudConfig) {
     console.warn(`[Webhook] FERRETERIA_NO_ENCONTRADA numero=${telefonoRaw ?? 'desconocido'}`)
     // Devolver 200 para que YCloud no reintente indefinidamente
     return NextResponse.json({ ok: true })
   }
 
-  // ── 3. Cargar credenciales YCloud del tenant ──────────────────────────────
-  const { data: ycloudConfig } = await supabase
-    .from('configuracion_ycloud')
-    .select('api_key_enc, webhook_secret_enc')
-    .eq('ferreteria_id', ferreteria.id)
+  // ── 2b. Cargar la ferretería por ID ───────────────────────────────────────
+  const { data: ferreteria } = await supabase
+    .from('ferreterias')
+    .select('*')
+    .eq('id', ycloudConfig.ferreteria_id)
+    .eq('activo', true)
     .single()
+
+  if (!ferreteria) {
+    console.warn(`[Webhook] FERRETERIA_INACTIVA id=${ycloudConfig.ferreteria_id}`)
+    return NextResponse.json({ ok: true })
+  }
 
   // Desencriptar api_key del tenant (fallback al env var para compatibilidad)
   let tenantApiKey: string | undefined
