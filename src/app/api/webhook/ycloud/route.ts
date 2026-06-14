@@ -259,19 +259,26 @@ export async function POST(request: Request) {
     }
 
   } else if (mensaje.type === 'image') {
-    // Imagen: analizar con GPT-4o-mini Vision
+    // Imagen: analizar con Gemini Vision
     // YCloud envía URL directo en `image.link` — preferirlo sobre `image.id` (que da 404)
     const imageObj: Record<string, unknown> = mensaje.image ?? {}
     const imageId: string | null =
       (imageObj.link as string) || (imageObj.url as string) || (imageObj.id as string) ||
       mensaje.wamid || mensaje.id || null
+    // imageMime desde el payload YCloud es más fiable que el Content-Type del CDN (puede ser octet-stream)
     const imageMime = (imageObj.mimeType as string) || 'image/jpeg'
     console.log(`[Webhook] Imagen — mediaId=${imageId ?? 'NULL'}, mime=${imageMime}, openAI=${openAIDisponible()}`)
     if (openAIDisponible() && imageId) {
       try {
         const media = await descargarMedia(imageId, tenantApiKey)
         if (media) {
-          const analisis = await analizarImagen(media.buffer, media.mimeType)
+          // Preferir el MIME del payload YCloud sobre el Content-Type del CDN
+          // (CDNs a veces devuelven application/octet-stream, lo que hace fallar a Gemini)
+          const mimeParaVision = (media.mimeType && media.mimeType !== 'application/octet-stream')
+            ? media.mimeType
+            : imageMime
+          console.log(`[Webhook] Vision: ${media.buffer.length}b mime=${mimeParaVision}`)
+          const analisis = await analizarImagen(media.buffer, mimeParaVision)
           if (analisis) {
             console.log(`[Webhook] Imagen tipo: ${analisis.tipo}`)
             if (analisis.tipo === 'lista_productos' && analisis.productosDetectados?.length) {
@@ -285,7 +292,7 @@ export async function POST(request: Request) {
               console.log(`[Webhook] Comprobante de pago detectado — ejecutando extractor F5`)
 
               // Re-analizar con el extractor especializado (más detallado que analizarImagen)
-              const datosComprobante = await extraerComprobante(media.buffer, media.mimeType)
+              const datosComprobante = await extraerComprobante(media.buffer, mimeParaVision)
 
               // Buscar cliente en la ferretería actual — FERRETERÍA AISLADA
               const telefonoClienteNorm = normalizarTelefono(telefonoCliente)
