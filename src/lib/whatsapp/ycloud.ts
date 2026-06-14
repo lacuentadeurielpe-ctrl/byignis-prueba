@@ -258,8 +258,14 @@ export async function descargarMedia(
   // Si YCloud envía una URL directa de descarga (en lugar de un media ID)
   if (mediaId.startsWith('https://') || mediaId.startsWith('http://')) {
     console.log(`[YCloud] descargarMedia: URL directa — ${mediaId.slice(0, 80)}`)
+    const effectiveKey = apiKeyParam ?? process.env.YCLOUD_API_KEY
     try {
-      const res = await fetch(mediaId)
+      // Intentar sin auth primero (pre-signed URLs tipo S3), luego con API key
+      let res = await fetch(mediaId)
+      if (!res.ok && effectiveKey) {
+        console.warn(`[YCloud] URL directa sin auth falló (${res.status}), reintentando con API key`)
+        res = await fetch(mediaId, { headers: { 'X-API-Key': effectiveKey } })
+      }
       if (!res.ok) {
         console.error(`[YCloud] Error descargando URL directa: HTTP ${res.status}`)
         return null

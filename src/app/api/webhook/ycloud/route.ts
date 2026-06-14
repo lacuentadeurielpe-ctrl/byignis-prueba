@@ -367,12 +367,10 @@ export async function POST(request: Request) {
       if (captionImg) {
         textoMensaje = captionImg
       } else {
-        await enviarMensaje({
-          from: telefonoEnvio, to: telefonoCliente,
-          texto: '📷 Vi tu foto! Cuéntame qué necesitas y te ayudo con precios o consultas 🙌',
-          apiKey: tenantApiKey,
-        }).catch(() => {})
-        return NextResponse.json({ ok: true })
+        // Vision falló o no está disponible — pasar al bot con contexto genérico
+        // para que quede guardado en historial y el bot pueda responder apropiadamente
+        textoMensaje = '[imagen]'
+        notaParaBot = '[El cliente envió una imagen. No se pudo analizar automáticamente. Pídele que describa qué necesita o que escriba la lista de productos.]'
       }
     }
 
