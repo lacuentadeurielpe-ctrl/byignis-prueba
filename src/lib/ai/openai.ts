@@ -57,7 +57,14 @@ export async function transcribirAudio(
   }
 }
 
-// ── Imagen → Análisis (GPT-4o Vision) ────────────────────────────────────────
+// ── Imagen → Análisis (Gemini Vision) ───────────────────────────────────────
+
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
+const GEMINI_MODEL = 'gemini-2.0-flash'
+
+function getGeminiKey(): string | null {
+  return process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? null
+}
 
 export interface AnalisisImagen {
   tipo: 'lista_productos' | 'producto_individual' | 'comprobante_pago' | 'consulta' | 'otro'
@@ -73,7 +80,7 @@ export interface AnalisisImagen {
 }
 
 /**
- * Analiza una imagen con GPT-4o-mini Vision.
+ * Analiza una imagen con Gemini Vision.
  * Detecta si es una lista de productos, una foto de producto, comprobante de pago o algo genérico.
  * Retorna un análisis estructurado para que el bot pueda responder apropiadamente.
  */
@@ -81,11 +88,10 @@ export async function analizarImagen(
   buffer: Buffer,
   mimeType: string,
 ): Promise<AnalisisImagen | null> {
-  const apiKey = getKey()
+  const apiKey = getGeminiKey()
   if (!apiKey) return null
 
   const base64 = buffer.toString('base64')
-  const imageUrl = `data:${mimeType};base64,${base64}`
 
   const systemPrompt = `Eres el asistente de una ferretería peruana. Analiza la imagen del cliente.
 
@@ -100,52 +106,50 @@ Responde SOLO en JSON:
 {
   "tipo": "lista_productos" | "producto_individual" | "comprobante_pago" | "consulta" | "otro",
   "descripcion": "respuesta amigable en español peruano para el cliente (máx 150 chars)",
-  "productosDetectados": [{"nombre": "...", "cantidad": 2}],  // solo si tipo=lista_productos
+  "productosDetectados": [{"nombre": "...", "cantidad": 2}],
   "pago": {
-    "monto": 150.00,               // número extraído del comprobante, null si no se ve
-    "destinatario": "...",         // nombre o número del destinatario, null si no se ve
-    "operacion_id": "...",         // código de operación/transacción, null si no se ve
-    "fecha": "..."                 // fecha tal como aparece, null si no se ve
-  }  // solo si tipo=comprobante_pago
+    "monto": 150.00,
+    "destinatario": "...",
+    "operacion_id": "...",
+    "fecha": "..."
+  }
 }`
 
   try {
-    const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        max_tokens: 400,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
-              { type: 'text', text: 'Analiza esta imagen del cliente.' },
+    const res = await fetch(
+      `${GEMINI_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{
+            parts: [
+              { inlineData: { mimeType, data: base64 } },
+              { text: 'Analiza esta imagen del cliente.' },
             ],
+          }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 400,
           },
-        ],
-      }),
-    })
+        }),
+      }
+    )
 
     if (!res.ok) {
       const err = await res.text()
-      console.error('[OpenAI] Error Vision:', res.status, err)
+      console.error('[Gemini] Error Vision:', res.status, err)
       return null
     }
 
     const data = await res.json()
-    const content = data.choices?.[0]?.message?.content
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text
     if (!content) return null
 
     return JSON.parse(content) as AnalisisImagen
   } catch (e) {
-    console.error('[OpenAI] Error en analizarImagen:', e)
+    console.error('[Gemini] Error en analizarImagen:', e)
     return null
   }
 }
@@ -153,5 +157,6 @@ Responde SOLO en JSON:
 // ── Disponibilidad ────────────────────────────────────────────────────────────
 
 export function openAIDisponible(): boolean {
-  return !!getKey()
+  // Vision now uses Gemini; audio still uses OpenAI Whisper
+  return !!(getKey() || getGeminiKey())
 }
