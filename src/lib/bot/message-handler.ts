@@ -100,6 +100,7 @@ function mensajeNecesitaCatalogo(_texto: string): boolean {
 }
 
 function estaEnHorario(ferreteria: Ferreteria): boolean {
+  if ((ferreteria as any).bot_siempre_activo) return true
   if (!ferreteria.horario_apertura || !ferreteria.horario_cierre) return true
 
   const ahoraLima = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Lima' }))

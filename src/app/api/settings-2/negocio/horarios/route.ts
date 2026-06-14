@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   try {
     const { data, error } = await supabase
       .from('ferreterias')
-      .select('dias_atencion, horario_apertura, horario_cierre, mensaje_bienvenida, mensaje_fuera_horario')
+      .select('dias_atencion, horario_apertura, horario_cierre, mensaje_bienvenida, mensaje_fuera_horario, bot_siempre_activo')
       .eq('id', session.ferreteriaId)
       .single()
 
@@ -44,12 +44,13 @@ export async function PATCH(request: Request) {
     if (body.horario_cierre !== undefined) updateData.horario_cierre = body.horario_cierre
     if (body.mensaje_bienvenida !== undefined) updateData.mensaje_bienvenida = body.mensaje_bienvenida
     if (body.mensaje_fuera_horario !== undefined) updateData.mensaje_fuera_horario = body.mensaje_fuera_horario
+    if (body.bot_siempre_activo   !== undefined) updateData.bot_siempre_activo   = body.bot_siempre_activo
 
     const { data, error } = await supabase
       .from('ferreterias')
       .update(updateData)
       .eq('id', session.ferreteriaId)
-      .select('dias_atencion, horario_apertura, horario_cierre, mensaje_bienvenida, mensaje_fuera_horario')
+      .select('dias_atencion, horario_apertura, horario_cierre, mensaje_bienvenida, mensaje_fuera_horario, bot_siempre_activo')
       .single()
 
     if (error) {

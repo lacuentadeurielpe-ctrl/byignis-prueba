@@ -156,6 +156,7 @@ export interface Ferreteria {
   bot_agentes_activos: string[] | null
   modulos_activos: string[] | null
   bot_modo_catalogo: 'fisicos' | 'digitales' | 'ambos'
+  bot_siempre_activo: boolean
   // ── Políticas de negocio (settings-2 → Avanzado) ────────────────
   permitir_venta_sin_stock: boolean
   requiere_aprobacion_credito: boolean
