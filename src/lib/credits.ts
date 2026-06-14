@@ -64,6 +64,7 @@ export function estimarCostoUsd(
 /**
  * Comprueba si la ferretería tiene créditos suficientes para la tarea.
  * No descuenta — solo consulta.
+ * Si no existe fila en suscripciones (modo trial/dev), devuelve true.
  */
 export async function tieneCreditos(
   ferreteriaId: string,
@@ -72,12 +73,16 @@ export async function tieneCreditos(
   const admin = createAdminClient()
   const creditos = COSTO_CREDITOS[tipoTarea]
 
-  const { data } = await admin.rpc('tiene_creditos', {
-    p_ferreteria_id: ferreteriaId,
-    p_creditos_necesarios: creditos,
-  })
+  // Verificar si existe suscripción — sin registro = trial ilimitado
+  const { data: sus } = await admin
+    .from('suscripciones')
+    .select('creditos_disponibles')
+    .eq('ferreteria_id', ferreteriaId)
+    .maybeSingle()
 
-  return data === true
+  if (!sus) return true  // trial: sin registro = siempre tiene créditos
+
+  return sus.creditos_disponibles >= creditos
 }
 
 // ── Verificar y descontar atómicamente ───────────────────────────────────────
@@ -108,6 +113,17 @@ export async function verificarYDescontarCreditos(
 
   if (ferreteria?.estado_tenant === 'suspendido' || ferreteria?.estado_tenant === 'cancelado') {
     return { ok: false, motivo: 'tenant_suspendido' }
+  }
+
+  // Si no existe fila en suscripciones → trial ilimitado, no descontar
+  const { data: susExiste } = await admin
+    .from('suscripciones')
+    .select('creditos_disponibles, creditos_del_mes')
+    .eq('ferreteria_id', ferreteriaId)
+    .maybeSingle()
+
+  if (!susExiste) {
+    return { ok: true }  // trial: sin registro = créditos ilimitados
   }
 
   // Descontar atómicamente usando la función SQL
