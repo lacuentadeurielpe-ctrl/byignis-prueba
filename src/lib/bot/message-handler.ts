@@ -109,7 +109,7 @@ function estaEnHorario(ferreteria: Ferreteria): boolean {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 
   const diasNorm = (ferreteria.dias_atencion ?? []).map((d) =>
-    d.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    d.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   )
   if (!diasNorm.includes(diaSemana)) return false
 

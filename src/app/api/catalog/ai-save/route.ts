@@ -103,21 +103,24 @@ export async function POST(request: Request) {
 
   // ── Actualizar existentes (en paralelo) ───────────────────────────────────
   if (paraActualizar.length > 0) {
-    const updates = paraActualizar.map((item) =>
-      supabase
+    const updates = paraActualizar.map((item) => {
+      // Solo actualizar campos que la IA extrajo explícitamente — nunca pisar con 0 o null
+      const patch: Record<string, unknown> = {
+        nombre: item.nombre.trim(),
+        descripcion: item.descripcion?.trim() ?? null,
+        categoria_id: item.categoria ? (mapaCategoria[item.categoria] ?? null) : null,
+      }
+      if (item.precio_base   != null) patch.precio_base   = item.precio_base
+      if (item.precio_compra != null) patch.precio_compra = item.precio_compra
+      if (item.unidad        != null) patch.unidad        = item.unidad
+      if (item.stock         != null) patch.stock         = item.stock
+
+      return supabase
         .from('productos')
-        .update({
-          nombre: item.nombre.trim(),
-          descripcion: item.descripcion?.trim() || null,
-          categoria_id: item.categoria ? (mapaCategoria[item.categoria] ?? null) : null,
-          precio_base: item.precio_base ?? 0,
-          precio_compra: item.precio_compra ?? 0,
-          unidad: item.unidad || 'unidad',
-          stock: item.stock ?? 0,
-        })
+        .update(patch)
         .eq('id', item.producto_existente_id!)
         .eq('ferreteria_id', session.ferreteriaId)
-    )
+    })
 
     const resultados = await Promise.all(updates)
     const errores = resultados.filter((r) => r.error)

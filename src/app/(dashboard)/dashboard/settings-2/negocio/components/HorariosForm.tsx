@@ -15,6 +15,19 @@ interface HorariosFormData {
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
+// Normaliza un nombre de día a minúsculas sin tildes para comparación
+function normDia(d: string) {
+  return d.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+// Mapea cualquier variante del día (lunes/Lunes/miercoles/Miércoles) al formato canónico del array DIAS
+function canonizarDias(dias: string[]): string[] {
+  return dias.map(d => {
+    const n = normDia(d)
+    return DIAS.find(dia => normDia(dia) === n) ?? d
+  })
+}
+
 export default function HorariosForm() {
   const { save, isSaving, error } = useSettingsSave()
   const [data, setData] = useState<HorariosFormData>({})
@@ -27,6 +40,10 @@ export default function HorariosForm() {
         const res = await fetch('/api/settings-2/negocio/horarios')
         if (res.ok) {
           const result = await res.json()
+          // Normalizar días al formato canónico del form para que los checkboxes muestren estado correcto
+          if (result.dias_atencion) {
+            result.dias_atencion = canonizarDias(result.dias_atencion)
+          }
           setData(result)
         }
       } finally {
