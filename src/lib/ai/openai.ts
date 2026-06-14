@@ -145,9 +145,19 @@ Responde SOLO en JSON:
 
     const data = await res.json()
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!content) return null
+    if (!content) {
+      const finishReason = data.candidates?.[0]?.finishReason ?? 'N/A'
+      const blockReason = data.promptFeedback?.blockReason ?? 'N/A'
+      console.warn(`[Gemini] Vision sin content — finish=${finishReason} block=${blockReason} candidates=${data.candidates?.length ?? 0}`)
+      return null
+    }
 
-    return JSON.parse(content) as AnalisisImagen
+    try {
+      return JSON.parse(content) as AnalisisImagen
+    } catch {
+      console.warn(`[Gemini] Vision content no es JSON: ${content.slice(0, 200)}`)
+      return null
+    }
   } catch (e) {
     console.error('[Gemini] Error en analizarImagen:', e)
     return null
