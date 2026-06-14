@@ -6,7 +6,7 @@
 //   3. Si usa tools → ejecutamos cada una (scoped a ferreteriaId) → enviamos resultado al LLM
 //   4. Repetimos hasta max 5 iteraciones o hasta que no haya más tool calls
 //
-// Motor primario: Claude (claude-3-5-haiku-20241022) cuando ANTHROPIC_API_KEY está presente.
+// Motor primario: Claude (claude-sonnet-4-6) cuando ANTHROPIC_API_KEY está presente.
 // Motor fallback: DeepSeek (deepseek-chat) con OpenAI-compatible tool calling.
 //
 // REGLA CRÍTICA: ferretería aislada
@@ -19,7 +19,7 @@ import { withTimeout } from '@/lib/utils'
 
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com'
 const DEEPSEEK_MODEL = 'deepseek-chat'
-const CLAUDE_MODEL   = 'claude-haiku-4-5-20251001'
+const CLAUDE_MODEL   = 'claude-sonnet-4-6'
 const MAX_ITERATIONS = 8
 const TIMEOUT_MS     = 28_000
 const TOOL_TIMEOUT_MS = 9_000   // cada tool tiene 9s antes de devolver error
