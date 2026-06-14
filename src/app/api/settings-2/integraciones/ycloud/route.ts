@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         webhook_secret_enc: webhookSecretEnc,
         numero_whatsapp:    telefono_whatsapp?.trim() || null,
         estado_conexion:    'activo',
-        configurado_por:    session.userId,
+        configurado_por:    null,
         configurado_at:     new Date().toISOString(),
       },
       { onConflict: 'ferreteria_id' }
