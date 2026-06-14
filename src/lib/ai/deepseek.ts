@@ -88,18 +88,30 @@ export async function llamarDeepSeek(mensajes: MensajeChat[]): Promise<Respuesta
 
       clearTimeout(timer)
 
+      const rawBody = await response.text()
+
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`DeepSeek error ${response.status}: ${errorText}`)
+        throw new Error(`DeepSeek error ${response.status}: ${rawBody.slice(0, 300)}`)
       }
 
-      const data = await response.json()
+      let data: any
+      try {
+        data = JSON.parse(rawBody)
+      } catch {
+        throw new Error(`DeepSeek body no es JSON (status=${response.status}): ${rawBody.slice(0, 300)}`)
+      }
+
       const contenido = data.choices?.[0]?.message?.content
 
       if (!contenido) throw new Error('DeepSeek retornó respuesta vacía')
 
       // Parsear el JSON retornado por el modelo
-      const parsed = JSON.parse(contenido) as RespuestaAI
+      let parsed: RespuestaAI
+      try {
+        parsed = JSON.parse(contenido) as RespuestaAI
+      } catch {
+        throw new Error(`DeepSeek contenido no es JSON: ${String(contenido).slice(0, 300)}`)
+      }
 
       // Validación básica de la estructura
       if (!parsed.intent || !parsed.respuesta) {
