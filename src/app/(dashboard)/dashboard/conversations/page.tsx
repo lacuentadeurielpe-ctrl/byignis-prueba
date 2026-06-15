@@ -9,7 +9,8 @@ import { ChatRepository }      from '@/lib/db/repositories/chat'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ConversationsPage() {
+export default async function ConversationsPage({ searchParams }: { searchParams: Promise<{ filtro?: string }> }) {
+  const { filtro } = await searchParams
   const session = await getSessionInfo()
   if (!session) redirect('/auth/login')
 
@@ -46,7 +47,7 @@ export default async function ConversationsPage() {
 
       {/* Lista — pantalla completa en mobile, panel izquierdo en desktop */}
       <div className="w-full md:w-72 shrink-0 md:border-r border-zinc-100 bg-white flex flex-col">
-        <ConversationsList inicial={enriquecidas} ferreteriaId={session.ferreteriaId} />
+        <ConversationsList inicial={enriquecidas} ferreteriaId={session.ferreteriaId} initialFiltro={filtro === 'pausado' ? 'pausado' : filtro === 'bot' ? 'bot' : undefined} />
       </div>
 
       {/* Placeholder — solo visible en desktop cuando no hay conversación activa */}

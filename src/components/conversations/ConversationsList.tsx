@@ -19,6 +19,7 @@ interface ConversacionItem {
 interface ConversationsListProps {
   inicial: ConversacionItem[]
   ferreteriaId: string
+  initialFiltro?: Filtro
 }
 
 type Filtro = 'todos' | 'pausado' | 'bot'
@@ -38,14 +39,14 @@ const FILTROS: { id: Filtro; label: string }[] = [
   { id: 'bot',     label: 'Bot activo' },
 ]
 
-export default function ConversationsList({ inicial, ferreteriaId }: ConversationsListProps) {
+export default function ConversationsList({ inicial, ferreteriaId, initialFiltro }: ConversationsListProps) {
   const router               = useRouter()
   const params               = useParams()
   const conversacionActiva   = params?.id as string | undefined
 
   const [conversaciones, setConversaciones] = useState(inicial)
   const [busqueda, setBusqueda]             = useState('')
-  const [filtro,   setFiltro]               = useState<Filtro>('todos')
+  const [filtro,   setFiltro]               = useState<Filtro>(initialFiltro ?? 'todos')
 
   // ── Filtrado local ──────────────────────────────────────────────────────────
   const conversacionesFiltradas = useMemo(() => {

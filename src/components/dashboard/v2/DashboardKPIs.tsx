@@ -31,12 +31,12 @@ export default function DashboardKPIs({ esDueno, periodo }: { esDueno: boolean, 
   const { periodoLabel, totalPerPedidos, perEntregados, perIngresos, perGanancia, ticketProm, tasaEntrega, clientesNuevosPer, convPer, convActivas, cambios } = data
 
   const kpiCards = [
-    { label: 'Pedidos', rawVal: totalPerPedidos, isCurrency: false, sub: `${perEntregados} entregados`, delta: cambios.pedidos, icon: ShoppingCart, accent: 'text-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400', visible: true, href: '/dashboard/ventas?tab=pedidos' },
-    { label: 'Ingresos', rawVal: perIngresos, isCurrency: true, sub: esDueno && perGanancia > 0 ? `Gan. ${formatPEN(perGanancia)}` : ' ', delta: cambios.ingresos, icon: Banknote, accent: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400', visible: esDueno, href: '/dashboard/ventas?tab=pagos' },
+    { label: 'Pedidos', rawVal: totalPerPedidos, isCurrency: false, sub: `${perEntregados} entregados`, delta: cambios.pedidos, icon: ShoppingCart, accent: 'text-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400', visible: true, href: '/dashboard/ventas?tab=pedidos&estado=pendiente' },
+    { label: 'Ingresos', rawVal: perIngresos, isCurrency: true, sub: esDueno && perGanancia > 0 ? `Gan. ${formatPEN(perGanancia)}` : ' ', delta: cambios.ingresos, icon: Banknote, accent: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400', visible: esDueno, href: '/dashboard/ventas?tab=pagos&estado=cobrado' },
     { label: 'Ticket prom.', rawVal: ticketProm, isCurrency: true, sub: 'por pedido', delta: cambios.ticket, icon: Target, accent: 'text-violet-600 bg-violet-50 dark:bg-violet-900/30 dark:text-violet-400', visible: esDueno, href: '/dashboard/ventas?tab=pedidos' },
-    { label: 'Tasa entrega', rawVal: tasaEntrega, isCurrency: false, format: (v: number) => `${v}%`, sub: `${perEntregados} de ${totalPerPedidos}`, delta: cambios.tasa, icon: Truck, accent: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400', visible: true, href: '/dashboard/ventas?tab=pedidos' },
+    { label: 'Tasa entrega', rawVal: tasaEntrega, isCurrency: false, format: (v: number) => `${v}%`, sub: `${perEntregados} de ${totalPerPedidos}`, delta: cambios.tasa, icon: Truck, accent: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400', visible: true, href: '/dashboard/ventas?tab=pedidos&estado=entregado' },
     { label: 'Clientes nuevos', rawVal: clientesNuevosPer ?? 0, isCurrency: false, sub: 'del período', delta: cambios.clientes, icon: Users, accent: 'text-sky-600 bg-sky-50 dark:bg-sky-900/30 dark:text-sky-400', visible: esDueno, href: '/dashboard/clientes' },
-    { label: 'Conversaciones', rawVal: convPer ?? 0, isCurrency: false, sub: `${convActivas ?? 0} pausadas`, delta: cambios.conv, icon: MessageSquare, accent: 'text-zinc-600 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-400', visible: true, href: '/dashboard/conversations' },
+    { label: 'Conversaciones', rawVal: convPer ?? 0, isCurrency: false, sub: `${convActivas ?? 0} pausadas`, delta: cambios.conv, icon: MessageSquare, accent: 'text-zinc-600 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-400', visible: true, href: '/dashboard/conversations?filtro=pausado' },
   ].filter(k => k.visible)
 
   return (

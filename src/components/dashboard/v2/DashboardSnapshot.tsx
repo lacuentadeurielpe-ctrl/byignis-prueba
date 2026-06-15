@@ -41,7 +41,7 @@ export default function DashboardSnapshot({ esDueno }: { esDueno: boolean }) {
         <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Resumen de hoy</p>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 relative z-10">
-        <Link href="/dashboard/ventas?tab=pagos" className="group p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.04] hover:bg-zinc-100 dark:hover:bg-white/[0.08] transition cursor-pointer backdrop-blur-sm border border-zinc-200/50 dark:border-white/5">
+        <Link href={esDueno ? "/dashboard/ventas?tab=pagos&estado=cobrado" : "/dashboard/ventas?tab=pedidos"} className="group p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.04] hover:bg-zinc-100 dark:hover:bg-white/[0.08] transition cursor-pointer backdrop-blur-sm border border-zinc-200/50 dark:border-white/5">
           <p className="text-2xl sm:text-3xl font-bold tabular-nums">
             {esDueno ? <NumberTicker value={ingresosHoy} format={formatPEN} /> : <NumberTicker value={pedidosHoyN} />}
           </p>
@@ -56,17 +56,17 @@ export default function DashboardSnapshot({ esDueno }: { esDueno: boolean }) {
           </div>
         </Link>
         
-        <Link href="/dashboard/ventas?tab=pedidos" className="group p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.04] hover:bg-zinc-100 dark:hover:bg-white/[0.08] transition cursor-pointer backdrop-blur-sm border border-zinc-200/50 dark:border-white/5">
+        <Link href="/dashboard/ventas?tab=pedidos&estado=pendiente" className="group p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.04] hover:bg-zinc-100 dark:hover:bg-white/[0.08] transition cursor-pointer backdrop-blur-sm border border-zinc-200/50 dark:border-white/5">
           <p className="text-2xl sm:text-3xl font-bold tabular-nums"><NumberTicker value={pedidosActivosN} /></p>
           <p className="text-xs text-zinc-500 mt-1">pedidos en curso</p>
         </Link>
         
-        <Link href="/dashboard/ventas?tab=pedidos" className="group p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.04] hover:bg-zinc-100 dark:hover:bg-white/[0.08] transition cursor-pointer backdrop-blur-sm border border-zinc-200/50 dark:border-white/5">
+        <Link href="/dashboard/ventas?tab=pagos&estado=pendiente_revision" className="group p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.04] hover:bg-zinc-100 dark:hover:bg-white/[0.08] transition cursor-pointer backdrop-blur-sm border border-zinc-200/50 dark:border-white/5">
           <p className={cn('text-2xl sm:text-3xl font-bold tabular-nums', cobrosN > 0 ? 'text-amber-500 dark:text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.3)]' : '')}><NumberTicker value={cobrosN} /></p>
           <p className="text-xs text-zinc-500 mt-1">por cobrar hoy</p>
         </Link>
         
-        <Link href="/dashboard/conversations" className="group p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.04] hover:bg-zinc-100 dark:hover:bg-white/[0.08] transition cursor-pointer backdrop-blur-sm border border-zinc-200/50 dark:border-white/5">
+        <Link href="/dashboard/conversations?filtro=pausado" className="group p-3 rounded-xl bg-zinc-50 dark:bg-white/[0.04] hover:bg-zinc-100 dark:hover:bg-white/[0.08] transition cursor-pointer backdrop-blur-sm border border-zinc-200/50 dark:border-white/5">
           <p className={cn('text-2xl sm:text-3xl font-bold tabular-nums', convActivas > 0 ? 'text-sky-500 dark:text-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.3)]' : '')}><NumberTicker value={convActivas} /></p>
           <p className="text-xs text-zinc-500 mt-1">chats pausados</p>
         </Link>
