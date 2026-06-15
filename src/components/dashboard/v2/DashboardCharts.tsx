@@ -21,7 +21,10 @@ export default function DashboardCharts() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-      <p className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-3">Últimos 30 días</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Tendencias</p>
+        <p className="text-xs text-zinc-400 dark:text-zinc-500">Últimos 30 días</p>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         <Link href="/dashboard/ventas?tab=pedidos" className="lg:col-span-2 bg-white/80 dark:bg-zinc-900/50 backdrop-blur-sm rounded-2xl border border-zinc-100 dark:border-zinc-800/50 p-5 hover:border-zinc-200 dark:hover:border-zinc-700 hover:shadow-sm transition block group">

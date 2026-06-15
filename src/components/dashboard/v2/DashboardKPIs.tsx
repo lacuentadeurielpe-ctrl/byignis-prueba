@@ -41,7 +41,10 @@ export default function DashboardKPIs({ esDueno, periodo }: { esDueno: boolean, 
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-      <p className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-3">{periodoLabel}</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Números clave</p>
+        <p className="text-xs text-zinc-400 dark:text-zinc-500">{periodoLabel}</p>
+      </div>
       <div className={cn('grid gap-3', kpiCards.length <= 3 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6')}>
         {kpiCards.map((k, idx) => (
           <motion.div key={k.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 + 0.1 }}>
