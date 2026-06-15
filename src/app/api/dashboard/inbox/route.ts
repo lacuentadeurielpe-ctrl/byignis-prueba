@@ -58,7 +58,7 @@ export async function GET() {
     // 3. Pagos pendientes de revisión older than 24h
     const hace24Horas = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const { count: pagosPendientes } = await supabase
-      .from('pagos_recibidos')
+      .from('pagos_registrados')
       .select('id', { count: 'exact', head: true })
       .eq('ferreteria_id', fid)
       .eq('estado', 'pendiente_revision')
