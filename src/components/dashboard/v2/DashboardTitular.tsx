@@ -2,161 +2,218 @@
 
 import useSWR from 'swr'
 import Link from 'next/link'
-import { TrendingUp, TrendingDown, ShoppingCart, Banknote, MessageSquare, ArrowUpRight } from 'lucide-react'
+import { TrendingUp, TrendingDown, ShoppingCart, CheckCircle2, Target, MessageSquare, Banknote, Clock, ArrowUpRight } from 'lucide-react'
 import { cn, formatPEN } from '@/lib/utils'
 import { NumberTicker } from '@/components/ui/NumberTicker'
 import { motion } from 'framer-motion'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
-export default function DashboardTitular({ esDueno }: { esDueno: boolean }) {
-  const { data, isLoading } = useSWR('/api/dashboard/snapshot', fetcher, { revalidateOnFocus: false })
+export default function DashboardTitular({ esDueno, periodo }: { esDueno: boolean; periodo: string }) {
+  // KPI data — respeta el período seleccionado
+  const { data: kpi, isLoading: kpiLoading } = useSWR(`/api/dashboard/kpi?p=${periodo}`, fetcher, { revalidateOnFocus: false })
+  // Snapshot — siempre en tiempo real (activos ahora mismo)
+  const { data: snap } = useSWR('/api/dashboard/snapshot', fetcher, { revalidateOnFocus: false })
 
-  if (isLoading) {
+  if (kpiLoading) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 animate-pulse">
-        <div className="h-44 rounded-2xl bg-zinc-100 dark:bg-zinc-800" />
-        <div className="h-44 rounded-2xl bg-zinc-100 dark:bg-zinc-800" />
+      <div className="space-y-3 animate-pulse">
+        <div className="h-48 rounded-2xl bg-zinc-100 dark:bg-zinc-800" />
+        <div className="h-16 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60" />
       </div>
     )
   }
 
-  if (!data) return null
+  if (!kpi) return null
 
-  const { ingresosHoy, ingresosAyer, cmbHoy, pedidosHoyN, pedidosActivosN, cobrosN, convActivas } = data
-  const ticketProm = pedidosHoyN > 0 ? ingresosHoy / pedidosHoyN : 0
+  const {
+    periodoLabel,
+    totalPerPedidos, perEntregados, perIngresos, perGanancia,
+    ticketProm, tasaEntrega, cambios
+  } = kpi
 
-  const opItems = [
-    {
-      icon: ShoppingCart,
-      label: 'pedidos en curso',
-      value: pedidosActivosN,
-      color: pedidosActivosN > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-400',
-      href: '/dashboard/ventas?tab=pedidos&estado=pendiente',
-    },
-    {
-      icon: Banknote,
-      label: 'por cobrar',
-      value: cobrosN,
-      color: cobrosN > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400',
-      href: '/dashboard/ventas?tab=pagos&estado=pendiente_revision',
-    },
-    {
-      icon: MessageSquare,
-      label: 'chats pausados',
-      value: convActivas,
-      color: convActivas > 0 ? 'text-sky-600 dark:text-sky-400' : 'text-zinc-400',
-      href: '/dashboard/conversations?filtro=pausado',
-    },
-  ]
+  const pedidosActivos = snap?.pedidosActivosN ?? 0
+  const cobrosN        = snap?.cobrosN ?? 0
+  const convActivas    = snap?.convActivas ?? 0
+
+  const deltaIngresos = cambios?.ingresos
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className="grid grid-cols-1 lg:grid-cols-2 gap-3"
-    >
-      {/* ── DINERO ─────────────────────────────────────────────────────────── */}
-      {esDueno ? (
-        <Link
-          href="/dashboard/ventas?tab=pagos&estado=cobrado"
-          className="group relative overflow-hidden rounded-2xl bg-zinc-950 dark:bg-zinc-900 p-6 flex flex-col justify-between min-h-[160px] border border-zinc-800 hover:border-zinc-700 transition"
-        >
-          {/* Fondo decorativo */}
-          <div className="pointer-events-none absolute -right-10 -top-10 w-52 h-52 rounded-full bg-white/[0.03]" />
-          <div className="pointer-events-none absolute -right-2   top-12 w-28 h-28 rounded-full bg-white/[0.02]" />
+    <div className="space-y-3">
 
-          <div className="relative z-10">
-            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Ventas de hoy</p>
+      {/* ── BLOQUE PRINCIPAL ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
 
-            <div className="flex items-end gap-3 mb-2">
-              <p className="text-4xl sm:text-5xl font-bold text-white tabular-nums leading-none">
-                <NumberTicker value={ingresosHoy} format={formatPEN} />
+        {/* DINERO — 3/5 del ancho */}
+        {esDueno ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            className="lg:col-span-3 relative overflow-hidden rounded-2xl bg-zinc-950 dark:bg-zinc-900 p-6 border border-zinc-800 min-h-[180px] flex flex-col justify-between"
+          >
+            <div className="pointer-events-none absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/[0.025]" />
+            <div className="pointer-events-none absolute right-8 bottom-4 w-32 h-32 rounded-full bg-white/[0.015]" />
+
+            <div className="relative z-10">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-5">
+                Ingresos · {periodoLabel}
               </p>
-              {cmbHoy && (
-                <span className={cn(
-                  'inline-flex items-center gap-1 text-sm font-bold px-2 py-1 rounded-lg mb-1',
-                  cmbHoy.sube
-                    ? 'bg-emerald-500/15 text-emerald-400'
-                    : 'bg-red-500/15 text-red-400'
-                )}>
-                  {cmbHoy.sube ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                  {cmbHoy.pct}%
-                </span>
+
+              <div className="flex items-end gap-3 mb-3">
+                <p className="text-4xl sm:text-5xl font-bold text-white tabular-nums leading-none">
+                  <NumberTicker value={perIngresos} format={formatPEN} />
+                </p>
+                {deltaIngresos && (
+                  <span className={cn(
+                    'inline-flex items-center gap-1 text-sm font-bold px-2.5 py-1 rounded-lg mb-1 shrink-0',
+                    deltaIngresos.sube ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+                  )}>
+                    {deltaIngresos.sube ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                    {deltaIngresos.pct}% vs anterior
+                  </span>
+                )}
+              </div>
+
+              {perGanancia > 0 && (
+                <p className="text-sm text-zinc-500">
+                  Ganancia estimada: <span className="text-emerald-400 font-semibold">{formatPEN(perGanancia)}</span>
+                </p>
               )}
             </div>
 
-            <div className="flex items-center gap-3 text-zinc-500 text-xs">
-              <span>vs ayer {formatPEN(ingresosAyer)}</span>
-              {ticketProm > 0 && (
-                <>
-                  <span className="w-px h-3 bg-zinc-700" />
-                  <span>Ticket prom. <span className="text-zinc-400 font-semibold">{formatPEN(ticketProm)}</span></span>
-                </>
-              )}
+            <Link href="/dashboard/ventas?tab=pagos" className="relative z-10 flex items-center justify-between mt-4 pt-4 border-t border-zinc-800/60 group">
+              <span className="text-xs text-zinc-600">{totalPerPedidos} pedidos en este período</span>
+              <ArrowUpRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-300 transition" />
+            </Link>
+          </motion.div>
+        ) : (
+          /* Vendedor: ve pedidos del período */
+          <motion.div
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            className="lg:col-span-3 relative overflow-hidden rounded-2xl bg-zinc-950 dark:bg-zinc-900 p-6 border border-zinc-800 min-h-[180px] flex flex-col justify-between"
+          >
+            <div className="pointer-events-none absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/[0.025]" />
+            <div className="relative z-10">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-5">Pedidos · {periodoLabel}</p>
+              <p className="text-5xl font-bold text-white tabular-nums leading-none mb-2">
+                <NumberTicker value={totalPerPedidos} />
+              </p>
+              <p className="text-sm text-zinc-500">{perEntregados} entregados · {totalPerPedidos - perEntregados} en proceso</p>
             </div>
-          </div>
+          </motion.div>
+        )}
 
-          <div className="relative z-10 flex items-center justify-between mt-4 pt-4 border-t border-zinc-800/60">
-            <span className="text-xs text-zinc-600">{pedidosHoyN} pedidos procesados hoy</span>
-            <ArrowUpRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
-          </div>
-        </Link>
-      ) : (
-        /* Vendedor: ve pedidos de hoy en vez de dinero */
-        <Link
-          href="/dashboard/ventas?tab=pedidos"
-          className="group relative overflow-hidden rounded-2xl bg-zinc-950 dark:bg-zinc-900 p-6 flex flex-col justify-between min-h-[160px] border border-zinc-800 hover:border-zinc-700 transition"
+        {/* MÉTRICAS RÁPIDAS — 2/5 del ancho */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+          className="lg:col-span-2 grid grid-cols-2 gap-3"
         >
-          <div className="pointer-events-none absolute -right-10 -top-10 w-52 h-52 rounded-full bg-white/[0.03]" />
-          <div className="relative z-10">
-            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Pedidos de hoy</p>
-            <p className="text-5xl font-bold text-white tabular-nums leading-none mb-2">
-              <NumberTicker value={pedidosHoyN} />
-            </p>
-            <p className="text-xs text-zinc-500">{pedidosActivosN} aún en curso</p>
+          {/* Pedidos del período */}
+          <Link href="/dashboard/ventas?tab=pedidos" className="group rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-3">
+              <ShoppingCart className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 tabular-nums leading-none">
+                <NumberTicker value={totalPerPedidos} />
+              </p>
+              <p className="text-xs text-zinc-400 mt-1">pedidos</p>
+            </div>
+          </Link>
+
+          {/* Entregados */}
+          <Link href="/dashboard/ventas?tab=pedidos&estado=entregado" className="group rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center mb-3">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 tabular-nums leading-none">
+                <NumberTicker value={perEntregados} />
+              </p>
+              <p className="text-xs text-zinc-400 mt-1">entregados</p>
+            </div>
+          </Link>
+
+          {/* Ticket promedio */}
+          {esDueno && (
+            <Link href="/dashboard/ventas?tab=pedidos" className="group rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition">
+              <div className="w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-900/30 flex items-center justify-center mb-3">
+                <Target className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-zinc-900 dark:text-zinc-50 tabular-nums leading-none">
+                  {ticketProm > 0 ? <NumberTicker value={ticketProm} format={formatPEN} /> : '—'}
+                </p>
+                <p className="text-xs text-zinc-400 mt-1">ticket prom.</p>
+              </div>
+            </Link>
+          )}
+
+          {/* Tasa de entrega */}
+          <Link href="/dashboard/ventas?tab=pedidos&estado=entregado" className="group rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition">
+            <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center mb-3">
+              <Banknote className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 tabular-nums leading-none">
+                {tasaEntrega > 0 ? `${tasaEntrega}%` : '—'}
+              </p>
+              <p className="text-xs text-zinc-400 mt-1">completados</p>
+            </div>
+          </Link>
+        </motion.div>
+      </div>
+
+      {/* ── FRANJA TIEMPO REAL ───────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
+        className="grid grid-cols-3 gap-3"
+      >
+        <Link
+          href="/dashboard/ventas?tab=pedidos&estado=confirmado"
+          className="group flex items-center gap-3 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-4 py-3.5 hover:border-zinc-300 dark:hover:border-zinc-700 transition"
+        >
+          <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center shrink-0', pedidosActivos > 0 ? 'bg-blue-50 dark:bg-blue-900/30' : 'bg-zinc-50 dark:bg-zinc-800')}>
+            <Clock className={cn('w-4 h-4', pedidosActivos > 0 ? 'text-blue-500' : 'text-zinc-400')} />
           </div>
-          <div className="relative z-10 flex items-center justify-end mt-4 pt-4 border-t border-zinc-800/60">
-            <ArrowUpRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400 transition" />
+          <div className="min-w-0">
+            <p className={cn('text-xl font-bold tabular-nums leading-none', pedidosActivos > 0 ? 'text-zinc-900 dark:text-zinc-50' : 'text-zinc-300 dark:text-zinc-600')}>
+              {pedidosActivos}
+            </p>
+            <p className="text-xs text-zinc-400 mt-0.5 truncate">activos ahora</p>
           </div>
         </Link>
-      )}
 
-      {/* ── OPERACIÓN ──────────────────────────────────────────────────────── */}
-      <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 flex flex-col justify-between min-h-[160px]">
-        <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-4">Operación ahora</p>
+        <Link
+          href="/dashboard/ventas?tab=pagos&estado=pendiente_revision"
+          className="group flex items-center gap-3 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-4 py-3.5 hover:border-zinc-300 dark:hover:border-zinc-700 transition"
+        >
+          <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center shrink-0', cobrosN > 0 ? 'bg-amber-50 dark:bg-amber-900/30' : 'bg-zinc-50 dark:bg-zinc-800')}>
+            <Banknote className={cn('w-4 h-4', cobrosN > 0 ? 'text-amber-500' : 'text-zinc-400')} />
+          </div>
+          <div className="min-w-0">
+            <p className={cn('text-xl font-bold tabular-nums leading-none', cobrosN > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-300 dark:text-zinc-600')}>
+              {cobrosN}
+            </p>
+            <p className="text-xs text-zinc-400 mt-0.5 truncate">por cobrar</p>
+          </div>
+        </Link>
 
-        <div className="space-y-3">
-          {opItems.map((item, i) => {
-            const Icon = item.icon
-            return (
-              <motion.div
-                key={item.label}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 + i * 0.07 }}
-              >
-                <Link
-                  href={item.href}
-                  className="flex items-center justify-between group rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 px-3 py-2.5 -mx-3 transition"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className={cn('w-4 h-4 shrink-0', item.color)} />
-                    <span className="text-sm text-zinc-500 dark:text-zinc-400">{item.label}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={cn('text-xl font-bold tabular-nums leading-none', item.value > 0 ? item.color : 'text-zinc-300 dark:text-zinc-600')}>
-                      <NumberTicker value={item.value} />
-                    </span>
-                    <ArrowUpRight className="w-3.5 h-3.5 text-zinc-300 dark:text-zinc-600 group-hover:text-zinc-500 dark:group-hover:text-zinc-400 transition" />
-                  </div>
-                </Link>
-              </motion.div>
-            )
-          })}
-        </div>
-      </div>
-    </motion.div>
+        <Link
+          href="/dashboard/conversations?filtro=pausado"
+          className="group flex items-center gap-3 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-4 py-3.5 hover:border-zinc-300 dark:hover:border-zinc-700 transition"
+        >
+          <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center shrink-0', convActivas > 0 ? 'bg-sky-50 dark:bg-sky-900/30' : 'bg-zinc-50 dark:bg-zinc-800')}>
+            <MessageSquare className={cn('w-4 h-4', convActivas > 0 ? 'text-sky-500' : 'text-zinc-400')} />
+          </div>
+          <div className="min-w-0">
+            <p className={cn('text-xl font-bold tabular-nums leading-none', convActivas > 0 ? 'text-sky-600 dark:text-sky-400' : 'text-zinc-300 dark:text-zinc-600')}>
+              {convActivas}
+            </p>
+            <p className="text-xs text-zinc-400 mt-0.5 truncate">chats pausados</p>
+          </div>
+        </Link>
+      </motion.div>
+
+    </div>
   )
 }

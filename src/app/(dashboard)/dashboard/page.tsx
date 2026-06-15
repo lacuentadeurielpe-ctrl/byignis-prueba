@@ -19,7 +19,7 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ p?: string }>
 }) {
-  const { p: periodo = 'hoy' } = await searchParams
+  const { p: periodo = 'semana' } = await searchParams
   const session = await getSessionInfo()
   if (!session) redirect('/auth/login')
 
@@ -46,8 +46,8 @@ export default async function DashboardPage({
         </Suspense>
       </div>
 
-      {/* ── 1. TITULAR DEL DÍA — dinero + operación lado a lado ───────────── */}
-      <DashboardTitular esDueno={esDueno} />
+      {/* ── 1. TITULAR — ingresos del período + métricas + tiempo real ──── */}
+      <DashboardTitular esDueno={esDueno} periodo={periodo} />
 
       {/* ── 2. NECESITA TU ATENCIÓN — alertas accionables priorizadas ──────── */}
       <DashboardAtencion />
