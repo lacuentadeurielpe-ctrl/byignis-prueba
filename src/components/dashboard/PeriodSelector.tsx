@@ -1,7 +1,8 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Calendar, ChevronDown } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Calendar, ChevronDown, Check } from 'lucide-react'
 
 const PERIODOS = [
   { value: 'hoy',          label: 'Hoy' },
@@ -16,25 +17,52 @@ const PERIODOS = [
 export default function PeriodSelector() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const actual = searchParams.get('p') ?? 'hoy'
+  const actual = searchParams.get('p') ?? 'semana'
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const labelActual = PERIODOS.find(p => p.value === actual)?.label ?? 'Esta semana'
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   return (
-    <div className="relative group">
-      <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 shadow-sm transition hover:border-zinc-300 dark:hover:border-zinc-700 focus-within:ring-2 focus-within:ring-zinc-900 focus-within:border-zinc-900 dark:focus-within:ring-zinc-100 dark:focus-within:border-zinc-100">
-        <Calendar className="w-4 h-4 text-zinc-400 dark:text-zinc-500 shrink-0" />
-        <select
-          value={actual}
-          onChange={(e) => router.push(`/dashboard?p=${e.target.value}`)}
-          className="appearance-none bg-transparent border-none text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-0 pr-6 cursor-pointer w-full"
-        >
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+      >
+        <Calendar className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" />
+        <span>{labelActual}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg overflow-hidden z-50 py-1">
           {PERIODOS.map(({ value, label }) => (
-            <option key={value} value={value} className="text-zinc-900 bg-white">
+            <button
+              key={value}
+              onClick={() => {
+                router.push(`/dashboard?p=${value}`)
+                setOpen(false)
+              }}
+              className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 transition-colors ${
+                actual === value
+                  ? 'bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-medium'
+                  : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-zinc-100'
+              }`}
+            >
               {label}
-            </option>
+              {actual === value && <Check className="w-3.5 h-3.5 shrink-0 text-zinc-900 dark:text-zinc-100" />}
+            </button>
           ))}
-        </select>
-        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500 pointer-events-none group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
-      </div>
+        </div>
+      )}
     </div>
   )
 }
