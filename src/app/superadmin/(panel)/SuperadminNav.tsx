@@ -12,7 +12,6 @@ import {
   Bot,
   HeartPulse,
   LogOut,
-  Wrench,
 } from 'lucide-react'
 
 interface Props {
@@ -44,10 +43,9 @@ export default function SuperadminNav({ session }: Props) {
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-14">
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center">
-            <Wrench className="w-4 h-4 text-gray-900" />
-          </div>
-          <span className="font-bold text-white">FerroBot</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/uintegrus_favicon.svg" alt="Uintegrus" className="w-7 h-7 rounded-lg" />
+          <span className="font-bold text-white">Uintegrus</span>
           <span className="text-gray-600 text-xs border border-gray-700 rounded px-1.5 py-0.5">Superadmin</span>
         </div>
 

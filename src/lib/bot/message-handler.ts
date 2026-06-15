@@ -370,7 +370,7 @@ export async function handleIncomingMessage({
             enviarWhatsApp({
               from:   ferreteria.telefono_whatsapp,
               to:     ferreteria.telefono_dueno,
-              texto:  `⚠️ *FerroBot — Alerta técnica*\nEl bot tuvo un problema y está en modo básico por ahora.\n\nError: ${errMsg.slice(0, 150)}\n\nTu bot sigue respondiendo pero con funciones reducidas. Revisa los logs si persiste.`,
+              texto:  `⚠️ *Uintegrus — Alerta técnica*\nEl bot tuvo un problema y está en modo básico por ahora.\n\nError: ${errMsg.slice(0, 150)}\n\nTu bot sigue respondiendo pero con funciones reducidas. Revisa los logs si persiste.`,
               apiKey: ycloudApiKey,
             }).catch(() => {})
           }

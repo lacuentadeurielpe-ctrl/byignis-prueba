@@ -266,7 +266,7 @@ export interface PerfilBot {
   tipo_negocio?:        string  // "ferretería" | "farmacia" | "bodega" | "restaurante" | ...
   descripcion_negocio?: string  // texto libre con expertise y contexto del negocio
   tono_bot?:            string  // "amigable_peruano" | "formal" | "casual"
-  nombre_bot?:          string  // nombre del asistente virtual, ej: "Ferrobot"
+  nombre_bot?:          string  // nombre del asistente virtual, ej: "Asistente"
 }
 
 // Agentes configurables por tenant — F4

@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { getSuperadminSession } from '@/lib/auth/superadmin'
 import SuperadminNav from './SuperadminNav'
 
-export const metadata = { title: 'Superadmin — FerroBot' }
+export const metadata = { title: 'Superadmin — Uintegrus' }
 
 export default async function SuperadminLayout({ children }: { children: React.ReactNode }) {
   const session = await getSuperadminSession()

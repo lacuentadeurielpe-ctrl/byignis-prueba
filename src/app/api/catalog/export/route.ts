@@ -19,7 +19,7 @@ export async function GET() {
   if (error) return NextResponse.json({ error: 'Error al cargar productos' }, { status: 500 })
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'FerroBot'
+  wb.creator = 'Uintegrus'
   wb.created = new Date()
 
   const ws = wb.addWorksheet('Inventario', {

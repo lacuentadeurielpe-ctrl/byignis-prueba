@@ -701,7 +701,7 @@ export default function OnboardingPage() {
                 className="flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-medium rounded-lg text-sm transition"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {loading ? 'Guardando...' : 'Empezar a usar FerreBot'}
+                {loading ? 'Guardando...' : 'Empezar a usar Uintegrus'}
               </button>
             )}
           </div>

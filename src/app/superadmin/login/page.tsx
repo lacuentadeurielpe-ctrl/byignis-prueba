@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Wrench } from 'lucide-react'
 
 export default function SuperadminLoginPage() {
   const [email, setEmail] = useState('')
@@ -48,10 +47,8 @@ export default function SuperadminLoginPage() {
       <div className="w-full max-w-md">
         {/* Logo / Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl mb-4">
-            <Wrench className="w-7 h-7 text-gray-900" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">FerroBot</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/uintegrus_logo_dark.svg" alt="Uintegrus" className="mx-auto w-44 h-auto mb-2" />
           <p className="text-gray-400 text-sm mt-1">Panel de Superadmin</p>
         </div>
 
@@ -73,7 +70,7 @@ export default function SuperadminLoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="superadmin@ferrobot.app"
+                placeholder="superadmin@uintegrus.com"
               />
             </div>
 

@@ -6,7 +6,7 @@ import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
 
 export const metadata = {
-  title: 'Caja POS | Ferrobot'
+  title: 'Caja POS | Uintegrus'
 }
 
 export default async function POSPage() {

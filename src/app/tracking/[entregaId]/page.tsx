@@ -13,7 +13,7 @@ function adminClient() {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ entregaId: string }> }) {
-  return { title: 'Seguimiento de entrega · FerroBot' }
+  return { title: 'Seguimiento de entrega · Uintegrus' }
 }
 
 export default async function TrackingPage({

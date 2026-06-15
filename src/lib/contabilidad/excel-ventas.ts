@@ -46,7 +46,7 @@ export async function generarExcelVentas(
   ferreteria:   DatosFerreteria,
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
-  wb.creator  = 'FerroBot'
+  wb.creator  = 'Uintegrus'
   wb.created  = new Date()
 
   const ws = wb.addWorksheet('F 14.1 Reg. de Ventas', {

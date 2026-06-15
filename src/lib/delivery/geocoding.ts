@@ -15,7 +15,7 @@
 
 const NOMINATIM_URL     = 'https://nominatim.openstreetmap.org/search'
 const GOOGLE_GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json'
-const USER_AGENT        = 'FerroBot/1.0 (ferrobot-flax.vercel.app; contacto@ferrobot.pe)'
+const USER_AGENT        = 'Uintegrus/1.0 (uintegrus.com; contacto@uintegrus.com)'
 
 export interface Coordenadas {
   lat: number

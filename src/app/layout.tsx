@@ -10,7 +10,7 @@ const geist = Geist({
 })
 
 export const metadata: Metadata = {
-  title: 'FerreBot — Panel de gestión',
+  title: 'Uintegrus — Panel de gestión',
   description: 'Sistema de cotización y atención al cliente por WhatsApp para ferreterías',
 }
 
