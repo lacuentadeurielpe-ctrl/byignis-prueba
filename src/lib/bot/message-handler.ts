@@ -18,11 +18,12 @@ import {
   pausarBot,
   mensajeYaProcesado,
   yaEnvioMensajeFueraHorario,
+  verificarAutoReanudar,
 } from '@/lib/bot/session'
 import { ChatRepository } from '@/lib/db/repositories/chat'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { formatHora } from '@/lib/utils'
-import { enviarMensaje as enviarWhatsApp } from '@/lib/whatsapp/ycloud'
+import { enviarMensaje as enviarWhatsApp, enviarEscribiendo } from '@/lib/whatsapp/ycloud'
 import { generarYEnviarComprobante, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -181,10 +182,18 @@ export async function handleIncomingMessage({
 
   // ── 4. ¿Bot pausado? ──────────────────────────────────────────────────────
   if (conversacion.bot_pausado) {
-    const retomado = await verificarRetomarBot(supabase, conversacion, timeoutIntervacion)
-    if (!retomado) {
-      console.log(`[Bot] PAUSADO — no retomado para conversacion=${conversacion.id}`)
-      return { respuesta: null, conversacionId: conversacion.id }
+    // Primero: verificar auto-resume por timer (bot_pausado_hasta)
+    const autoReanudado = await verificarAutoReanudar(
+      supabase, conversacion.id,
+      (conversacion as any).bot_pausado_hasta ?? null
+    )
+    if (!autoReanudado) {
+      // Segundo: verificar timeout de intervención manual del dueño (dueno_activo_at)
+      const retomado = await verificarRetomarBot(supabase, conversacion, timeoutIntervacion)
+      if (!retomado) {
+        console.log(`[Bot] PAUSADO — no retomado para conversacion=${conversacion.id}`)
+        return { respuesta: null, conversacionId: conversacion.id }
+      }
     }
   }
 
@@ -298,6 +307,12 @@ export async function handleIncomingMessage({
         perfilBot,
         cierreCotizacionActivo,     // F5
       })
+
+      // Typing indicator antes de esperar la respuesta del AI
+      if (ycloudApiKey) {
+        const fromNum = (ferreteria as any).telefono_whatsapp ?? ''
+        enviarEscribiendo({ from: fromNum, to: telefonoCliente, apiKey: ycloudApiKey }).catch(() => {})
+      }
 
       const resultado = await ejecutarOrquestador(
         systemPromptOrq,

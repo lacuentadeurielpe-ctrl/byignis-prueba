@@ -1,15 +1,17 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn, truncar, matchesFuzzy } from '@/lib/utils'
-import { MessageSquare, Search, X } from 'lucide-react'
+import { MessageSquare, Search, X, Bot, UserCheck, Timer } from 'lucide-react'
 
 interface ConversacionItem {
   id: string
   estado: string
   bot_pausado: boolean
+  bot_pausado_hasta: string | null
+  bot_pausado_motivo: string | null
   ultima_actividad: string
   clientes: { nombre: string | null; telefono: string } | null
   ultimo_mensaje?: string
@@ -99,6 +101,44 @@ export default function ConversationsList({ inicial, ferreteriaId, initialFiltro
     if (h < 24)   return `${h}h`
     return `${Math.floor(h / 24)}d`
   }
+
+  // Tiempo restante hasta auto-reanudación
+  function getTimerLabel(hasta: string | null): string | null {
+    if (!hasta) return null
+    const diff = new Date(hasta).getTime() - Date.now()
+    if (diff <= 0) return null
+    const min = Math.ceil(diff / 60_000)
+    if (min < 60) return `${min}m`
+    return `${Math.ceil(min / 60)}h`
+  }
+
+  const MOTIVO_LABEL: Record<string, string> = {
+    owner_dashboard: 'Dashboard',
+    owner_ycloud: 'WhatsApp',
+    ia_escalation: 'Escalado IA',
+    cliente_pidio: 'Cliente pidió',
+  }
+
+  const [botControlLoading, setBotControlLoading] = useState<string | null>(null)
+
+  const toggleBotControl = useCallback(async (e: React.MouseEvent, conv: ConversacionItem) => {
+    e.stopPropagation()
+    setBotControlLoading(conv.id)
+    try {
+      await fetch(`/api/conversations/${conv.id}/bot-control`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          conv.bot_pausado
+            ? { paused: false }
+            : { paused: true, motivo: 'owner_dashboard' }
+        ),
+      })
+      router.refresh()
+    } finally {
+      setBotControlLoading(null)
+    }
+  }, [router])
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -209,12 +249,38 @@ export default function ConversationsList({ inicial, ferreteriaId, initialFiltro
                           : <span className="italic">Sin mensajes</span>
                         }
                       </p>
-                      {conv.bot_pausado && (
-                        <span className="shrink-0 text-[10px] font-medium bg-zinc-100 text-zinc-500
-                                        px-1.5 py-0.5 rounded-full border border-zinc-200">
-                          Tú
-                        </span>
-                      )}
+
+                      {/* Control de pausa + indicadores */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {conv.bot_pausado && conv.bot_pausado_hasta && (
+                          <span className="flex items-center gap-0.5 text-[10px] text-amber-600">
+                            <Timer className="w-2.5 h-2.5" />
+                            {getTimerLabel(conv.bot_pausado_hasta)}
+                          </span>
+                        )}
+                        {conv.bot_pausado && conv.bot_pausado_motivo && (
+                          <span className="text-[10px] text-zinc-400">
+                            {MOTIVO_LABEL[conv.bot_pausado_motivo] ?? conv.bot_pausado_motivo}
+                          </span>
+                        )}
+                        <button
+                          onClick={(e) => toggleBotControl(e, conv)}
+                          disabled={botControlLoading === conv.id}
+                          title={conv.bot_pausado ? 'Reanudar bot' : 'Pausar bot'}
+                          className={cn(
+                            'p-1 rounded-full transition-colors',
+                            conv.bot_pausado
+                              ? 'bg-zinc-100 text-zinc-500 hover:bg-emerald-50 hover:text-emerald-600'
+                              : 'bg-zinc-100 text-zinc-400 hover:bg-amber-50 hover:text-amber-600',
+                            botControlLoading === conv.id && 'opacity-50 cursor-not-allowed'
+                          )}
+                        >
+                          {conv.bot_pausado
+                            ? <UserCheck className="w-3 h-3" />
+                            : <Bot className="w-3 h-3" />
+                          }
+                        </button>
+                      </div>
                     </div>
                   </div>
 

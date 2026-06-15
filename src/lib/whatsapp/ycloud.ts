@@ -373,7 +373,213 @@ export async function descargarMedia(
   }
 }
 
-// Mantener por compatibilidad (ya no se usa externamente pero evita breaking changes)
+// ── Mensajes interactivos ────────────────────────────────────────────────────
+
+export interface BotonRespuesta {
+  id: string     // max 256 chars, identificador único
+  titulo: string // max 20 chars, texto visible
+}
+
+interface EnviarBotonesParams {
+  from: string
+  to: string
+  texto: string          // body del mensaje (max 1024 chars)
+  botones: BotonRespuesta[] // 1-3 botones
+  header?: string        // texto de encabezado opcional
+  footer?: string        // texto de pie opcional
+  apiKey?: string
+}
+
+// Envía un mensaje con botones de respuesta rápida (max 3)
+export async function enviarBotones({
+  from, to, texto, botones, header, footer, apiKey: apiKeyParam,
+}: EnviarBotonesParams): Promise<void> {
+  if (botones.length === 0 || botones.length > 3) throw new Error('Se necesitan entre 1 y 3 botones')
+  const apiKey = resolverApiKey(apiKeyParam)
+
+  const body: Record<string, unknown> = {
+    from: e164(from),
+    to: e164(to),
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      ...(header ? { header: { type: 'text', text: header } } : {}),
+      body: { text: texto },
+      ...(footer ? { footer: { text: footer } } : {}),
+      action: {
+        buttons: botones.map(b => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.titulo.slice(0, 20) },
+        })),
+      },
+    },
+  }
+
+  const res = await fetch(`${YCLOUD_BASE_URL}/whatsapp/messages/sendDirectly`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) console.error(`[YCloud] enviarBotones error ${res.status}: ${await res.text()}`)
+}
+
+export interface ItemLista {
+  id: string
+  titulo: string       // max 24 chars
+  descripcion?: string // max 72 chars
+}
+
+export interface SeccionLista {
+  titulo: string       // max 24 chars
+  items: ItemLista[]   // 1-10 items por sección
+}
+
+interface EnviarListaParams {
+  from: string
+  to: string
+  texto: string
+  botonApertura: string   // texto del botón que abre la lista (max 20 chars)
+  secciones: SeccionLista[]
+  header?: string
+  footer?: string
+  apiKey?: string
+}
+
+// Envía un mensaje con lista de opciones seleccionables
+export async function enviarLista({
+  from, to, texto, botonApertura, secciones, header, footer, apiKey: apiKeyParam,
+}: EnviarListaParams): Promise<void> {
+  const apiKey = resolverApiKey(apiKeyParam)
+
+  const body: Record<string, unknown> = {
+    from: e164(from),
+    to: e164(to),
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      ...(header ? { header: { type: 'text', text: header } } : {}),
+      body: { text: texto },
+      ...(footer ? { footer: { text: footer } } : {}),
+      action: {
+        button: botonApertura.slice(0, 20),
+        sections: secciones.map(s => ({
+          title: s.titulo.slice(0, 24),
+          rows: s.items.map(i => ({
+            id: i.id,
+            title: i.titulo.slice(0, 24),
+            ...(i.descripcion ? { description: i.descripcion.slice(0, 72) } : {}),
+          })),
+        })),
+      },
+    },
+  }
+
+  const res = await fetch(`${YCLOUD_BASE_URL}/whatsapp/messages/sendDirectly`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) console.error(`[YCloud] enviarLista error ${res.status}: ${await res.text()}`)
+}
+
+// ── Templates (HSM) ──────────────────────────────────────────────────────────
+
+export interface ParametroTemplate {
+  type: 'text' | 'currency' | 'date_time'
+  text?: string
+  currency?: { fallback_value: string; code: string; amount_1000: number }
+}
+
+interface EnviarTemplateParams {
+  from: string
+  to: string
+  templateName: string
+  languageCode?: string  // default 'es'
+  parametrosCuerpo?: ParametroTemplate[]
+  parametrosEncabezado?: ParametroTemplate[]
+  apiKey?: string
+}
+
+// Envía un template HSM pre-aprobado por Meta/WhatsApp
+export async function enviarTemplate({
+  from, to, templateName, languageCode = 'es',
+  parametrosCuerpo = [], parametrosEncabezado = [],
+  apiKey: apiKeyParam,
+}: EnviarTemplateParams): Promise<boolean> {
+  const apiKey = resolverApiKey(apiKeyParam)
+
+  const components: unknown[] = []
+  if (parametrosEncabezado.length > 0) {
+    components.push({ type: 'header', parameters: parametrosEncabezado })
+  }
+  if (parametrosCuerpo.length > 0) {
+    components.push({ type: 'body', parameters: parametrosCuerpo })
+  }
+
+  const body = {
+    from: e164(from),
+    to: e164(to),
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: languageCode },
+      ...(components.length > 0 ? { components } : {}),
+    },
+  }
+
+  const res = await fetch(`${YCLOUD_BASE_URL}/whatsapp/messages/sendDirectly`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    console.error(`[YCloud] enviarTemplate "${templateName}" error ${res.status}: ${await res.text()}`)
+    return false
+  }
+  return true
+}
+
+// ── Typing indicator ─────────────────────────────────────────────────────────
+
+interface EnviarEscribiendoParams {
+  from: string
+  to: string
+  apiKey?: string
+}
+
+// Muestra el indicador "escribiendo..." en el chat del cliente
+// YCloud: algunos planes lo soportan, falla silenciosamente si no
+export async function enviarEscribiendo({ from, to, apiKey: apiKeyParam }: EnviarEscribiendoParams): Promise<void> {
+  const apiKey = resolverApiKey(apiKeyParam)
+  try {
+    await fetch(`${YCLOUD_BASE_URL}/whatsapp/messages/sendDirectly`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      body: JSON.stringify({
+        from: e164(from),
+        to: e164(to),
+        type: 'typing',
+      }),
+    })
+  } catch { /* silencioso — no todos los planes lo soportan */ }
+}
+
+// ── Marcar mensaje como leído ────────────────────────────────────────────────
+
+// Marca un mensaje entrante como leído → el cliente ve los ticks azules
+export async function marcarLeido(messageId: string, apiKey?: string): Promise<void> {
+  const key = apiKey ?? process.env.YCLOUD_API_KEY
+  if (!key || !messageId) return
+  try {
+    await fetch(`${YCLOUD_BASE_URL}/whatsapp/messages/${messageId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+      body: JSON.stringify({ status: 'read' }),
+    })
+  } catch { /* silencioso */ }
+}
+
+// ── Mantener por compatibilidad (ya no se usa externamente pero evita breaking changes)
 export async function obtenerUrlMedia(
   mediaId: string,
   apiKeyParam?: string

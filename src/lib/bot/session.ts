@@ -124,3 +124,60 @@ export async function yaEnvioMensajeFueraHorario(
   const repo = new ChatRepository(supabase)
   return repo.yaEnvioMensajeFueraHorario(conversacionId)
 }
+
+// ── Control de pausa mejorado ────────────────────────────────────────────────
+
+export type MotivoPausa = 'owner_dashboard' | 'owner_ycloud' | 'ia_escalation' | 'cliente_pidio'
+
+// Pausa el bot con motivo opcional y timer opcional (minutos hasta auto-reanudar)
+export async function pausarBotConMotivo(
+  supabase: SupabaseClient,
+  conversacionId: string,
+  motivo: MotivoPausa = 'owner_dashboard',
+  minutos?: number
+): Promise<void> {
+  const ahora = new Date().toISOString()
+  const hasta = minutos ? new Date(Date.now() + minutos * 60 * 1000).toISOString() : null
+
+  await supabase
+    .from('conversaciones')
+    .update({
+      bot_pausado: true,
+      bot_pausado_hasta: hasta,
+      bot_pausado_motivo: motivo,
+      pausado_at: ahora,
+      dueno_activo_at: ahora,
+    })
+    .eq('id', conversacionId)
+}
+
+// Reanuda el bot manualmente (limpia todos los campos de pausa)
+export async function reanudarBot(
+  supabase: SupabaseClient,
+  conversacionId: string
+): Promise<void> {
+  await supabase
+    .from('conversaciones')
+    .update({
+      bot_pausado: false,
+      bot_pausado_hasta: null,
+      bot_pausado_motivo: null,
+      pausado_at: null,
+      dueno_activo_at: null,
+    })
+    .eq('id', conversacionId)
+}
+
+// Verifica si hay un timer de auto-reanudación expirado y lo aplica.
+// Devuelve true si el bot fue reactivado automáticamente.
+export async function verificarAutoReanudar(
+  supabase: SupabaseClient,
+  conversacionId: string,
+  botPausadoHasta: string | null
+): Promise<boolean> {
+  if (!botPausadoHasta) return false
+  if (new Date(botPausadoHasta) > new Date()) return false
+
+  await reanudarBot(supabase, conversacionId)
+  return true
+}

@@ -14,6 +14,7 @@ import {
   verificarFirmaWebhook,
   extraerMensaje,
   descargarMedia,
+  marcarLeido,
   type YCloudWebhookPayload,
   enviarMensaje,
   enviarImagen,
@@ -182,6 +183,11 @@ export async function POST(request: Request) {
   const telefonoFerreteria = mensaje.to
   const ycloudMessageId = mensaje.id
   const telefonoEnvio = telefonoFerreteria.replace(/^\+/, '')
+
+  // Marcar como leído inmediatamente → ticks azules para el cliente (fire & forget)
+  if (ycloudMessageId) {
+    marcarLeido(ycloudMessageId, tenantApiKey).catch(() => {})
+  }
 
   // Bug 1 fix: ignorar si el remitente es la propia ferretería (eco del bot)
   const clienteNorm = telefonoCliente.replace(/^\+/, '')

@@ -234,7 +234,7 @@ export class ChatRepository {
   async obtenerConversacionesList(ferreteriaId: string, limite = 50) {
     const { data, error } = await this.supabase
       .from('conversaciones')
-      .select('id, estado, bot_pausado, ultima_actividad, clientes(nombre, telefono)')
+      .select('id, estado, bot_pausado, bot_pausado_hasta, bot_pausado_motivo, ultima_actividad, clientes(nombre, telefono)')
       .eq('ferreteria_id', ferreteriaId)
       .order('ultima_actividad', { ascending: false })
       .limit(limite)
