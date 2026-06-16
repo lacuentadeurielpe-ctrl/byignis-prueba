@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, Trash2, Search, Box, FileDown } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Plus, Trash2, Search, Box, FileDown, X } from 'lucide-react'
+import { matchesFuzzy } from '@/lib/utils'
 
 type TipoCatalogo = 'fisico' | 'digital'
 
@@ -9,6 +10,9 @@ interface Opcion {
   id: string
   nombre: string
   tipo: TipoCatalogo
+  searchText: string
+  precio?: number | null
+  categoria?: string | null
 }
 
 interface Par {
@@ -20,60 +24,46 @@ interface Par {
 
 function Badge({ tipo }: { tipo: TipoCatalogo }) {
   return tipo === 'digital' ? (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 rounded">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-violet-100 text-violet-700 rounded shrink-0">
       <FileDown className="w-2.5 h-2.5" /> Digital
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-zinc-100 text-zinc-600 rounded">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-zinc-100 text-zinc-600 rounded shrink-0">
       <Box className="w-2.5 h-2.5" /> Físico
     </span>
   )
 }
 
-let digitalesCache: Opcion[] | null = null
-
+// Catálogo combinado (físico + digital) cargado una sola vez para ambos pickers —
+// igual al patrón de ProductsTable: todo en memoria, filtrado instantáneo con matchesFuzzy.
 function ProductoPicker({
   placeholder,
+  catalogo,
+  cargandoCatalogo,
+  excluirId,
   onSelect,
   selected,
 }: {
   placeholder: string
+  catalogo: Opcion[]
+  cargandoCatalogo: boolean
+  excluirId?: string
   onSelect: (op: Opcion | null) => void
   selected: Opcion | null
 }) {
   const [query, setQuery] = useState('')
-  const [opciones, setOpciones] = useState<Opcion[]>([])
   const [abierto, setAbierto] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const buscar = useCallback(async (q: string) => {
-    setLoading(true)
-    try {
-      const [resFisicos, digitales] = await Promise.all([
-        fetch(`/api/products?activos=true${q ? `&q=${encodeURIComponent(q)}` : ''}`).then(r => r.ok ? r.json() : []),
-        digitalesCache
-          ? Promise.resolve(digitalesCache)
-          : fetch('/api/catalog/digital').then(r => r.ok ? r.json() : []).then((arr: any[]) => {
-              digitalesCache = arr.filter(d => d.activo).map(d => ({ id: d.id, nombre: d.nombre, tipo: 'digital' as const }))
-              return digitalesCache
-            }),
-      ])
+  const resultados = useMemo(() => {
+    const base = excluirId ? catalogo.filter(o => o.id !== excluirId) : catalogo
+    if (!query.trim()) return base.slice(0, 8)
+    return base.filter(o => matchesFuzzy(o.searchText, query)).slice(0, 8)
+  }, [catalogo, query, excluirId])
 
-      const fis: Opcion[] = (resFisicos ?? []).map((p: any) => ({ id: p.id, nombre: p.nombre, tipo: 'fisico' as const }))
-      const dig: Opcion[] = (digitales ?? []).filter((d: Opcion) => !q || d.nombre.toLowerCase().includes(q.toLowerCase()))
-
-      setOpciones([...fis, ...dig].slice(0, 15))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!abierto) return
-    const t = setTimeout(() => buscar(query), 250)
-    return () => clearTimeout(t)
-  }, [query, abierto, buscar])
+  useEffect(() => { setActiveIndex(0) }, [resultados])
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -83,13 +73,27 @@ function ProductoPicker({
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
+  function elegir(op: Opcion) {
+    onSelect(op)
+    setAbierto(false)
+    setQuery('')
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (!abierto) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIndex(i => Math.min(i + 1, resultados.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIndex(i => Math.max(i - 1, 0)) }
+    else if (e.key === 'Enter') { e.preventDefault(); const op = resultados[activeIndex]; if (op) elegir(op) }
+    else if (e.key === 'Escape') { setAbierto(false) }
+  }
+
   if (selected) {
     return (
       <div className="flex items-center gap-2 px-3 py-2.5 border border-zinc-200 rounded-lg bg-zinc-50">
         <Badge tipo={selected.tipo} />
-        <span className="text-sm text-zinc-900 flex-1 truncate">{selected.nombre}</span>
-        <button onClick={() => onSelect(null)} className="text-zinc-400 hover:text-rose-600 text-xs font-medium">
-          Cambiar
+        <span className="text-sm text-zinc-900 flex-1 truncate" title={selected.nombre}>{selected.nombre}</span>
+        <button onClick={() => onSelect(null)} className="text-zinc-400 hover:text-rose-600 shrink-0" title="Quitar">
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
     )
@@ -100,29 +104,37 @@ function ProductoPicker({
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
         <input
+          ref={inputRef}
           value={query}
-          onChange={e => setQuery(e.target.value)}
-          onFocus={() => { setAbierto(true); buscar(query) }}
-          placeholder={placeholder}
-          className="w-full pl-9 pr-3 py-2.5 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          onChange={e => { setQuery(e.target.value); setAbierto(true) }}
+          onFocus={() => setAbierto(true)}
+          onKeyDown={onKeyDown}
+          placeholder={cargandoCatalogo ? 'Cargando catálogo...' : placeholder}
+          disabled={cargandoCatalogo}
+          className="w-full pl-9 pr-3 py-2.5 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-zinc-50 disabled:cursor-wait"
         />
       </div>
 
-      {abierto && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-zinc-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-          {loading ? (
-            <p className="px-3 py-3 text-xs text-zinc-400 text-center">Buscando...</p>
-          ) : opciones.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-zinc-400 text-center">Sin resultados</p>
+      {abierto && !cargandoCatalogo && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-zinc-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+          {resultados.length === 0 ? (
+            <p className="px-3 py-3 text-xs text-zinc-400 text-center">
+              {query ? `Sin resultados para "${query}"` : 'Sin productos en el catálogo'}
+            </p>
           ) : (
-            opciones.map(op => (
+            resultados.map((op, idx) => (
               <button
                 key={`${op.tipo}-${op.id}`}
-                onClick={() => { onSelect(op); setAbierto(false); setQuery('') }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-indigo-50 transition"
+                onMouseEnter={() => setActiveIndex(idx)}
+                onClick={() => elegir(op)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left transition ${
+                  idx === activeIndex ? 'bg-indigo-50' : 'hover:bg-zinc-50'
+                }`}
               >
                 <Badge tipo={op.tipo} />
-                <span className="text-sm text-zinc-800 truncate">{op.nombre}</span>
+                <span className="text-sm text-zinc-800 truncate flex-1">{op.nombre}</span>
+                {op.categoria && <span className="text-[10px] text-zinc-400 shrink-0">{op.categoria}</span>}
+                {op.precio != null && <span className="text-xs font-medium text-zinc-500 tabular-nums shrink-0">S/{op.precio.toFixed(2)}</span>}
               </button>
             ))
           )}
@@ -134,6 +146,8 @@ function ProductoPicker({
 
 export default function BotComplementariosTab() {
   const [items, setItems] = useState<Par[]>([])
+  const [catalogo, setCatalogo] = useState<Opcion[]>([])
+  const [cargandoCatalogo, setCargandoCatalogo] = useState(true)
   const [loading, setLoading] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -150,7 +164,39 @@ export default function BotComplementariosTab() {
     }
   }
 
-  useEffect(() => { cargar() }, [])
+  const cargarCatalogo = async () => {
+    setCargandoCatalogo(true)
+    try {
+      const [fisicos, digitales] = await Promise.all([
+        fetch('/api/products?activos=true').then(r => r.ok ? r.json() : []),
+        fetch('/api/catalog/digital').then(r => r.ok ? r.json() : []),
+      ])
+
+      const fis: Opcion[] = (fisicos ?? []).map((p: any) => ({
+        id: p.id,
+        nombre: p.nombre,
+        tipo: 'fisico' as const,
+        precio: p.precio_base,
+        categoria: p.categorias?.nombre ?? null,
+        searchText: `${p.nombre} ${p.descripcion ?? ''} ${p.marca ?? ''} ${p.proveedor ?? ''} ${p.codigo_barras ?? ''} ${p.codigo_interno ?? ''}`,
+      }))
+
+      const dig: Opcion[] = (digitales ?? []).filter((d: any) => d.activo).map((d: any) => ({
+        id: d.id,
+        nombre: d.nombre,
+        tipo: 'digital' as const,
+        precio: d.precio,
+        categoria: d.categoria ?? null,
+        searchText: `${d.nombre} ${d.descripcion ?? ''} ${d.categoria ?? ''} ${d.subcategoria ?? ''} ${(d.tags ?? []).join(' ')}`,
+      }))
+
+      setCatalogo([...fis, ...dig])
+    } finally {
+      setCargandoCatalogo(false)
+    }
+  }
+
+  useEffect(() => { cargar(); cargarCatalogo() }, [])
 
   const agregar = async () => {
     if (!productoSel || !complementarioSel) return
@@ -198,15 +244,29 @@ export default function BotComplementariosTab() {
       </div>
 
       <div className="p-5 border border-zinc-200 rounded-xl bg-white space-y-3">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-3">
           <div>
             <label className="block text-[11px] font-medium text-zinc-500 mb-1.5">Cuando compran</label>
-            <ProductoPicker placeholder="Buscar producto..." selected={productoSel} onSelect={setProductoSel} />
+            <ProductoPicker
+              placeholder="Buscar producto..."
+              catalogo={catalogo}
+              cargandoCatalogo={cargandoCatalogo}
+              excluirId={complementarioSel?.id}
+              selected={productoSel}
+              onSelect={setProductoSel}
+            />
           </div>
           <span className="text-zinc-300 text-lg mt-5">→</span>
           <div>
             <label className="block text-[11px] font-medium text-zinc-500 mb-1.5">Sugerir</label>
-            <ProductoPicker placeholder="Buscar producto..." selected={complementarioSel} onSelect={setComplementarioSel} />
+            <ProductoPicker
+              placeholder="Buscar producto..."
+              catalogo={catalogo}
+              cargandoCatalogo={cargandoCatalogo}
+              excluirId={productoSel?.id}
+              selected={complementarioSel}
+              onSelect={setComplementarioSel}
+            />
           </div>
         </div>
 
