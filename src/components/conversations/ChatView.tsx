@@ -84,6 +84,7 @@ export default function ChatView({ conversacion, mensajesIniciales, ferreteriaId
   const [texto,      setTexto]      = useState('')
   const [enviando,   setEnviando]   = useState(false)
   const [resumiendo, setResumiendo] = useState(false)
+  const [pausando,   setPausando]   = useState(false)
   const [error,      setError]      = useState<string | null>(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -169,6 +170,26 @@ export default function ChatView({ conversacion, mensajesIniciales, ferreteriaId
     }
   }
 
+  // ── Pausar bot (toma de control manual) ────────────────────────────────────
+  async function handlePausar() {
+    setPausando(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/conversations/${conversacion.id}/bot-control`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ paused: true, motivo: 'owner_dashboard' }),
+      })
+      if (!res.ok) throw new Error('Error al pausar el bot')
+      setBotPausado(true)
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setPausando(false)
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -242,11 +263,24 @@ export default function ChatView({ conversacion, mensajesIniciales, ferreteriaId
               </button>
             </>
           ) : (
-            <span className="flex items-center gap-1.5 text-[11px] text-zinc-400 bg-zinc-50
-                            px-2.5 py-1 rounded-full border border-zinc-100 font-medium">
-              <Bot className="w-3 h-3" />
-              <span className="hidden sm:inline">Bot activo</span>
-            </span>
+            <>
+              <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-400 bg-zinc-50
+                              px-2.5 py-1 rounded-full border border-zinc-100 font-medium">
+                <Bot className="w-3 h-3" />
+                Bot activo
+              </span>
+              <button
+                onClick={handlePausar}
+                disabled={pausando}
+                title="Pausar bot y tomar el control"
+                className="text-xs bg-zinc-100 hover:bg-amber-50 hover:text-amber-700 text-zinc-600 px-3 py-1.5 rounded-lg
+                           flex items-center gap-1.5 transition disabled:opacity-50 font-medium"
+              >
+                <Bot className={cn('w-3 h-3', pausando && 'animate-pulse')} />
+                <span className="hidden sm:inline">Tomar control</span>
+                <span className="sm:hidden">Pausar</span>
+              </button>
+            </>
           )}
         </div>
       </div>
