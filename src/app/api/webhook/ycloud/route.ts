@@ -486,6 +486,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
 
+    // Demora configurable para simular tiempo de escritura humano (Settings → Bot → Comportamiento)
+    const delayRespuestaMs = (ferreteria as any).bot_delay_respuesta_ms ?? 0
+    if (delayRespuestaMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayRespuestaMs))
+    }
+
     await enviarMensaje({ from: telefonoEnvio, to: telefonoCliente, texto: respuesta, apiKey: tenantApiKey })
     console.log(`[Webhook] ENVIADO OK a ${telefonoCliente} (${respuesta.length} chars)`)
 

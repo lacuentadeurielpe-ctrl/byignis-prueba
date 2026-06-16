@@ -149,9 +149,9 @@ export interface Ferreteria {
   bot_nombre: string | null
   bot_instrucciones: string | null
   bot_personalidad: string | null     // 'amigable_peruano' | 'formal' | 'casual'
-  bot_margen_minimo: number
+  bot_margen_minimo: number            // umbral de upsell en S/ (nombre histórico, ver umbral_upsell_soles)
   bot_debounce_ms: number
-  bot_grace_period_min: number
+  bot_delay_respuesta_ms: number       // demora artificial antes de responder (simula tiempo de escritura)
   bot_autoclose_cotizacion: boolean
   bot_agentes_activos: string[] | null
   modulos_activos: string[] | null
@@ -267,7 +267,22 @@ export interface PerfilBot {
   descripcion_negocio?: string  // texto libre con expertise y contexto del negocio
   tono_bot?:            string  // "amigable_peruano" | "formal" | "casual"
   nombre_bot?:          string  // nombre del asistente virtual, ej: "Asistente"
+  instrucciones_extra?: string  // reglas adicionales en texto libre — inyectadas en el prompt v2
 }
+
+// Claves de sección del prompt del orquestador — ver src/lib/ai/orchestrator-prompt.ts
+// Nota: "instrucciones adicionales" del negocio NO es una sección del template (no tiene
+// "predeterminado" al que volver) — es un dato del tenant en perfil_bot.instrucciones_extra,
+// inyectado siempre como bloque fijo. Solo el texto de las REGLAS del bot es "resettable".
+export type PromptSectionKey =
+  | 'identidad'
+  | 'upsell'
+  | 'reglas_catalogo'
+  | 'reglas_alucinacion'
+  | 'flujo_pedido'
+
+// Overrides de texto libre por sección, almacenados en configuracion_bot.prompt_overrides
+export type PromptOverrides = Partial<Record<PromptSectionKey, string>>
 
 // Agentes configurables por tenant — F4
 // Semántica opt-out: campo ausente o true = activo, false = desactivado
@@ -291,6 +306,7 @@ export interface ConfiguracionBot {
   agentes_activos: AgentesActivos    // F4: tools habilitadas por agente — default todo ON
   cierre_cotizacion_activo: boolean  // F5: cierre natural post-cotización — default true
   umbral_upsell_soles: number        // F5: monto mínimo S/ para activar upsell — default 0
+  prompt_overrides: PromptOverrides  // texto editable por sección del prompt del orquestador — default {}
 }
 
 export type TipoCliente = 'persona' | 'empresa' | 'anonimo'

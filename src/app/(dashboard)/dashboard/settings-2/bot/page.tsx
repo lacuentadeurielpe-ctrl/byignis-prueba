@@ -7,14 +7,16 @@ import BotPerfilTab from './components/BotPerfilTab'
 import BotAgentesTab from './components/BotAgentesTab'
 import BotComplementariosTab from './components/BotComplementariosTab'
 import BotComportamientoTab from './components/BotComportamientoTab'
+import BotPromptTab from './components/BotPromptTab'
 
-type Tab = 'perfil' | 'agentes' | 'complementarios' | 'comportamiento'
+type Tab = 'perfil' | 'agentes' | 'complementarios' | 'comportamiento' | 'prompt'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'perfil', label: 'Perfil' },
   { id: 'agentes', label: 'Agentes' },
   { id: 'complementarios', label: 'Complementarios' },
   { id: 'comportamiento', label: 'Comportamiento' },
+  { id: 'prompt', label: 'Prompt' },
 ]
 
 export default function BotPage() {
@@ -52,6 +54,7 @@ export default function BotPage() {
           {activeTab === 'agentes' && <BotAgentesTab />}
           {activeTab === 'complementarios' && <BotComplementariosTab />}
           {activeTab === 'comportamiento' && <BotComportamientoTab />}
+          {activeTab === 'prompt' && <BotPromptTab />}
         </div>
       </div>
     </div>
