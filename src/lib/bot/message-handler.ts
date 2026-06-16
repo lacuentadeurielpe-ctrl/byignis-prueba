@@ -8,7 +8,7 @@ import { llamarClaude, claudeDisponible, buildSystemPromptClaude } from '@/lib/a
 import { buildSystemPrompt, buildSystemPromptLite, buildHistorialMensajes } from '@/lib/ai/prompt'
 import { ejecutarOrquestador } from '@/lib/ai/orchestrator'
 import { buildOrchestratorSystemPrompt } from '@/lib/ai/orchestrator-prompt'
-import { aplicarCompaction } from '@/lib/ai/compaction'
+import { aplicarCompaction, UMBRAL_MENSAJES as UMBRAL_COMPACTACION } from '@/lib/ai/compaction'
 import { procesarItemsSolicitados, formatearCotizacion } from '@/lib/bot/catalog-search'
 import {
   getOrCreateSession,
@@ -246,7 +246,12 @@ export async function handleIncomingMessage({
   // ── 8. Historial + llamada a DeepSeek (intent + respuesta) ────────────────
   const necesitaCatalogo = mensajeNecesitaCatalogo(textoMensaje) || !!datosFlujo
   const limiteHistorial = necesitaCatalogo ? maxContexto : Math.min(maxContexto, 4)
-  const historial = await getHistorial(supabase, conversacion.id, limiteHistorial)
+  // Se busca más de lo que se va a usar (limiteHistorial) para que aplicarCompaction()
+  // pueda ver si la conversación ya superó su umbral — si se buscara solo limiteHistorial
+  // (≤10 por defecto), el umbral de compactación (20) nunca se alcanzaría y nunca se
+  // generaría un resumen, aunque la conversación tenga cientos de mensajes.
+  const limiteFetch = Math.max(limiteHistorial, UMBRAL_COMPACTACION + 1)
+  const historial = await getHistorial(supabase, conversacion.id, limiteFetch)
   const historialParaAI = historial.slice(0, -1)
 
   // ── 8a. F1: Orquestador v2 (tool-calling) — activo por defecto ──────────
@@ -292,6 +297,12 @@ export async function handleIncomingMessage({
           `[Bot] Compaction error — usando historial crudo conv=${conversacion.id}:`,
           eCompact instanceof Error ? eCompact.message : eCompact
         )
+      }
+
+      // El fetch trajo hasta limiteFetch mensajes (para que compaction pudiera ver el
+      // umbral) — si no se activó compaction, recortar al límite configurado por el dueño.
+      if (mensajesRecientes.length > limiteHistorial) {
+        mensajesRecientes = mensajesRecientes.slice(-limiteHistorial)
       }
 
       const systemPromptOrq = buildOrchestratorSystemPrompt({
@@ -403,6 +414,10 @@ export async function handleIncomingMessage({
       }
     }
   }
+
+  // Flujo legacy (sin orquestador v2): historialParaAI se buscó más grande para que la
+  // compactación del flujo v2 pudiera ver el umbral — aquí se recorta al límite configurado.
+  historialParaAI.splice(0, historialParaAI.length - limiteHistorial)
 
   // Siempre incluir catálogo completo — mensajeNecesitaCatalogo() siempre retorna true
   const systemPrompt = buildSystemPrompt({

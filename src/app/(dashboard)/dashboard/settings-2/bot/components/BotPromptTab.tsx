@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, RotateCcw, Eye, AlertTriangle } from 'lucide-react'
+import { ChevronDown, RotateCcw, Eye, AlertTriangle, Check, Save } from 'lucide-react'
 
 interface Seccion {
   key: string
@@ -18,20 +18,25 @@ interface Tag {
 
 function SeccionCard({
   seccion,
+  savedTexto,
   onChange,
-  onBlurSave,
+  onSave,
   onReset,
   tags,
   saving,
+  justSaved,
 }: {
   seccion: Seccion
+  savedTexto: string
   onChange: (texto: string) => void
-  onBlurSave: () => void
+  onSave: () => void
   onReset: () => void
   tags: Tag[]
   saving: boolean
+  justSaved: boolean
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const dirty = seccion.texto !== savedTexto
 
   const insertarTag = (tag: string) => {
     const el = textareaRef.current
@@ -65,7 +70,6 @@ function SeccionCard({
         ref={textareaRef}
         value={seccion.texto}
         onChange={e => onChange(e.target.value)}
-        onBlur={onBlurSave}
         rows={6}
         className="w-full px-3 py-2.5 border border-zinc-200 rounded-lg text-xs font-mono leading-relaxed
                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y"
@@ -87,18 +91,40 @@ function SeccionCard({
         <span className="text-[11px] text-zinc-400 shrink-0 ml-2">{seccion.texto.length}/8000</span>
       </div>
 
-      {!seccion.esDefault && (
-        <p className="text-[11px] text-indigo-600 font-medium">● Personalizado — distinto del predeterminado</p>
-      )}
+      <div className="flex items-center justify-between pt-1">
+        {!seccion.esDefault ? (
+          <p className="text-[11px] text-indigo-600 font-medium">● Personalizado — distinto del predeterminado</p>
+        ) : <span />}
+
+        <button
+          onClick={onSave}
+          disabled={!dirty || saving}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+            dirty
+              ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+          }`}
+        >
+          {saving ? (
+            <>⏳ Guardando...</>
+          ) : justSaved && !dirty ? (
+            <><Check className="w-3.5 h-3.5" /> Guardado</>
+          ) : (
+            <><Save className="w-3.5 h-3.5" /> Guardar esta sección</>
+          )}
+        </button>
+      </div>
     </div>
   )
 }
 
 export default function BotPromptTab() {
   const [secciones, setSecciones] = useState<Seccion[]>([])
+  const [guardadas, setGuardadas] = useState<Record<string, string>>({})
   const [tags, setTags] = useState<Tag[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
+  const [justSaved, setJustSaved] = useState<string | null>(null)
   const [avanzadoAbierto, setAvanzadoAbierto] = useState(false)
   const [previewAbierto, setPreviewAbierto] = useState(false)
 
@@ -108,7 +134,9 @@ export default function BotPromptTab() {
       const res = await fetch('/api/settings-2/bot/prompt')
       if (res.ok) {
         const json = await res.json()
-        setSecciones(json.secciones ?? [])
+        const secs: Seccion[] = json.secciones ?? []
+        setSecciones(secs)
+        setGuardadas(Object.fromEntries(secs.map(s => [s.key, s.texto])))
         setTags(json.tags ?? [])
       }
     } finally {
@@ -120,16 +148,23 @@ export default function BotPromptTab() {
 
   const setTexto = (key: string, texto: string) => {
     setSecciones(prev => prev.map(s => s.key === key ? { ...s, texto, esDefault: false } : s))
+    setJustSaved(null)
   }
 
-  const guardar = async (key: string, texto: string) => {
+  const guardar = async (key: string) => {
+    const seccion = secciones.find(s => s.key === key)
+    if (!seccion) return
     setSaving(key)
     try {
-      await fetch('/api/settings-2/bot/prompt', {
+      const res = await fetch('/api/settings-2/bot/prompt', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, texto }),
+        body: JSON.stringify({ key, texto: seccion.texto }),
       })
+      if (res.ok) {
+        setGuardadas(prev => ({ ...prev, [key]: seccion.texto }))
+        setJustSaved(key)
+      }
     } finally {
       setSaving(null)
     }
@@ -173,7 +208,7 @@ export default function BotPromptTab() {
     <div className="space-y-5 max-w-3xl">
       <div className="flex items-center justify-between">
         <p className="text-xs text-zinc-500 max-w-md">
-          Este es el texto exacto que el bot usa como instrucciones. Cada cambio se guarda al salir del campo (blur).
+          Este es el texto exacto que el bot usa como instrucciones. Edita y presiona &quot;Guardar esta sección&quot; para aplicar el cambio.
           Usa los tags para insertar datos dinámicos del negocio.
         </p>
         <div className="flex items-center gap-2 shrink-0">
@@ -200,10 +235,12 @@ export default function BotPromptTab() {
           <SeccionCard
             key={s.key}
             seccion={s}
+            savedTexto={guardadas[s.key] ?? s.texto}
             tags={tags}
             saving={saving === s.key}
+            justSaved={justSaved === s.key}
             onChange={(texto) => setTexto(s.key, texto)}
-            onBlurSave={() => guardar(s.key, secciones.find(sec => sec.key === s.key)?.texto ?? s.texto)}
+            onSave={() => guardar(s.key)}
             onReset={() => resetear(s.key)}
           />
         ))}
@@ -231,10 +268,12 @@ export default function BotPromptTab() {
               <SeccionCard
                 key={s.key}
                 seccion={s}
+                savedTexto={guardadas[s.key] ?? s.texto}
                 tags={tags}
                 saving={saving === s.key}
+                justSaved={justSaved === s.key}
                 onChange={(texto) => setTexto(s.key, texto)}
-                onBlurSave={() => guardar(s.key, secciones.find(sec => sec.key === s.key)?.texto ?? s.texto)}
+                onSave={() => guardar(s.key)}
                 onReset={() => resetear(s.key)}
               />
             ))}

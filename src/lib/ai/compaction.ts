@@ -11,7 +11,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com'
-const UMBRAL_MENSAJES = 20
+export const UMBRAL_MENSAJES = 20
 const MANTENER_RECIENTES = 12
 
 interface MensajeHistorial {
