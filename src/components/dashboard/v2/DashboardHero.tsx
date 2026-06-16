@@ -2,7 +2,6 @@
 
 import useSWR from 'swr'
 import Link from 'next/link'
-import { TrendingUp, TrendingDown } from 'lucide-react'
 import { formatPEN } from '@/lib/utils'
 import { NumberTicker } from '@/components/ui/NumberTicker'
 import { motion } from 'framer-motion'
@@ -29,12 +28,11 @@ export default function DashboardHero({ esDueno, periodo }: { esDueno: boolean; 
 
   const {
     periodoLabel, perIngresos, totalPerPedidos,
-    perEntregados, ticketProm, tasaEntrega, cambios,
+    perEntregados, ticketProm, tasaEntrega,
   } = kpi
 
   const pedidosActivos = snap?.pedidosActivosN ?? 0
   const cobrosN        = snap?.cobrosN ?? 0
-  const deltaIngresos  = cambios?.ingresos
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
@@ -50,21 +48,9 @@ export default function DashboardHero({ esDueno, periodo }: { esDueno: boolean; 
             </p>
 
             {esDueno ? (
-              <div className="flex items-baseline gap-3 flex-wrap">
-                <span className="text-[2.75rem] leading-none font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 tabular-nums">
-                  <NumberTicker value={perIngresos} format={formatPEN} />
-                </span>
-                {deltaIngresos && (
-                  <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border ${
-                    deltaIngresos.sube
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900'
-                      : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-900'
-                  }`}>
-                    {deltaIngresos.sube ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    {deltaIngresos.pct}% vs período anterior
-                  </span>
-                )}
-              </div>
+              <span className="text-[2.75rem] leading-none font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 tabular-nums">
+                <NumberTicker value={perIngresos} format={formatPEN} />
+              </span>
             ) : (
               <span className="text-[2.75rem] leading-none font-semibold tracking-tight text-zinc-950 dark:text-zinc-50 tabular-nums">
                 <NumberTicker value={totalPerPedidos} />
@@ -89,18 +75,20 @@ export default function DashboardHero({ esDueno, periodo }: { esDueno: boolean; 
 
         <Link href="/dashboard/ventas?tab=pedidos" className="group px-5 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
           <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-1.5 uppercase tracking-wider">Pedidos</p>
-          <p className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums leading-none">{totalPerPedidos}</p>
-          {cambios?.pedidos ? (
-            <p className={`text-xs mt-1.5 font-medium ${cambios.pedidos.sube ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-              {cambios.pedidos.sube ? '↑' : '↓'} {cambios.pedidos.pct}%
-            </p>
-          ) : <p className="text-xs mt-1.5 text-zinc-300 dark:text-zinc-600">—</p>}
+          <p className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums leading-none">
+            {totalPerPedidos > 0 ? totalPerPedidos : <span className="text-zinc-300 dark:text-zinc-600">0</span>}
+          </p>
+          <p className="text-xs mt-1.5 text-zinc-400 dark:text-zinc-500">{periodoLabel.toLowerCase()}</p>
         </Link>
 
         <Link href="/dashboard/ventas?tab=pedidos&estado=entregado" className="group px-5 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
           <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-1.5 uppercase tracking-wider">Entregados</p>
-          <p className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums leading-none">{perEntregados}</p>
-          <p className="text-xs mt-1.5 text-zinc-400 dark:text-zinc-500">{tasaEntrega}% del total</p>
+          <p className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums leading-none">
+            {perEntregados > 0 ? perEntregados : <span className="text-zinc-300 dark:text-zinc-600">0</span>}
+          </p>
+          <p className="text-xs mt-1.5 text-zinc-400 dark:text-zinc-500">
+            {totalPerPedidos > 0 ? `${tasaEntrega}% del total` : 'sin pedidos'}
+          </p>
         </Link>
 
         {esDueno ? (
@@ -114,7 +102,9 @@ export default function DashboardHero({ esDueno, periodo }: { esDueno: boolean; 
         ) : (
           <Link href="/dashboard/ventas?tab=pedidos&estado=entregado" className="group px-5 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
             <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-1.5 uppercase tracking-wider">Tasa entrega</p>
-            <p className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums leading-none">{tasaEntrega}%</p>
+            <p className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums leading-none">
+              {tasaEntrega > 0 ? `${tasaEntrega}%` : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
+            </p>
             <p className="text-xs mt-1.5 text-zinc-400 dark:text-zinc-500">completados</p>
           </Link>
         )}

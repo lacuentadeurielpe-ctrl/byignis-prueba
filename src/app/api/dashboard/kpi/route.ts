@@ -41,20 +41,14 @@ function calcPeriodo(p: string): { inicio: string; fin: string; prevInicio: stri
   }
 }
 
-function cambio(actual: number, prev: number): { pct: number; sube: boolean } | null {
-  if (prev === 0) return actual > 0 ? { pct: 100, sube: true } : null
-  const pct = Math.round(((actual - prev) / prev) * 100)
-  return { pct: Math.abs(pct), sube: pct >= 0 }
-}
-
 export async function GET(request: Request) {
   const session = await getSessionInfo()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
-  const p = searchParams.get('p') || 'hoy'
+  const p = searchParams.get('p') || 'semana'
   const per = calcPeriodo(p)
-  
+
   const supabase = await createClient()
   const ventasRepo = new VentasRepository(supabase)
   const chatRepo = new ChatRepository(supabase)
@@ -65,34 +59,22 @@ export async function GET(request: Request) {
   try {
     const [
       kpiPer,
-      kpiPrevPer,
       convPer,
-      convPrevPer,
       clientesNuevosPer,
-      clientesPrevPer,
       convActivas
     ] = await Promise.all([
       ventasRepo.obtenerKPIsRango(fid, per.inicio, per.fin),
-      ventasRepo.obtenerKPIsRango(fid, per.prevInicio, per.prevFin),
       chatRepo.contarConversacionesActivasRango(fid, per.inicio, per.fin),
-      chatRepo.contarConversacionesActivasRango(fid, per.prevInicio, per.prevFin),
       clientesRepo.contarClientesNuevosRango(fid, per.inicio, per.fin),
-      clientesRepo.contarClientesNuevosRango(fid, per.prevInicio, per.prevFin),
       chatRepo.contarConversacionesPausadas(fid),
     ])
 
     const totalPerPedidos = Number(kpiPer.pedidos_n)
-    const prevPerPedidos  = Number(kpiPrevPer.pedidos_n)
     const perEntregados   = Number(kpiPer.entregados_n)
-    const prevEntregados  = Number(kpiPrevPer.entregados_n)
     const perIngresos     = Number(kpiPer.ingresos_total)
-    const prevPerIngresos = Number(kpiPrevPer.ingresos_total)
     const perGanancia     = session.rol !== 'vendedor' ? Number(kpiPer.ganancia_total) : 0
-    
-    const ticketProm      = totalPerPedidos > 0 ? Math.round(perIngresos / totalPerPedidos) : 0
-    const prevTicket      = prevPerPedidos  > 0 ? Math.round(prevPerIngresos / prevPerPedidos) : 0
+    const ticketProm      = perEntregados > 0 ? Math.round(perIngresos / perEntregados) : 0
     const tasaEntrega     = totalPerPedidos > 0 ? Math.round((perEntregados / totalPerPedidos) * 100) : 0
-    const prevTasaEntrega = prevPerPedidos  > 0 ? Math.round((prevEntregados / prevPerPedidos) * 100) : 0
 
     return NextResponse.json({
       periodoLabel: per.label,
@@ -105,14 +87,6 @@ export async function GET(request: Request) {
       clientesNuevosPer: clientesNuevosPer ?? 0,
       convPer: convPer ?? 0,
       convActivas: convActivas ?? 0,
-      cambios: {
-        pedidos: cambio(totalPerPedidos, prevPerPedidos),
-        ingresos: cambio(perIngresos, prevPerIngresos),
-        ticket: cambio(ticketProm, prevTicket),
-        tasa: cambio(tasaEntrega, prevTasaEntrega),
-        clientes: cambio(clientesNuevosPer ?? 0, clientesPrevPer ?? 0),
-        conv: cambio(convPer ?? 0, convPrevPer ?? 0)
-      }
     })
   } catch (err) {
     console.error('Error en /api/dashboard/kpi:', err)

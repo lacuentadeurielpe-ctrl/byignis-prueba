@@ -581,12 +581,12 @@ export class VentasRepository {
    * Calcula directamente sin necesidad de una función SQL personalizada.
    */
   async obtenerKPIsRango(ferreteriaId: string, inicio: string, fin: string) {
-    // 1. Obtener pedidos confirmados del rango (excluye pendiente, cancelado, programado)
+    // Todos los pedidos del período (excepto cancelados) para el conteo total
     const { data: pedidos, error: pedidosError } = await this.supabase
       .from('pedidos')
       .select('id, estado, total')
       .eq('ferreteria_id', ferreteriaId)
-      .not('estado', 'in', '(pendiente,cancelado,programado)')
+      .neq('estado', 'cancelado')
       .gte('created_at', inicio)
       .lt('created_at', fin)
 
@@ -599,10 +599,18 @@ export class VentasRepository {
 
     const pedidos_n    = pedidosList.length
     const entregados_n = pedidosList.filter((p: any) => p.estado === 'entregado').length
-    const ingresos_total = pedidosList.reduce((sum: number, p: any) => sum + Number(p.total ?? 0), 0)
 
-    // 2. Calcular COGS a partir de items_pedido + precio_compra de productos
-    const pedidoIds = pedidosList.map((p: any) => p.id)
+    // Ingresos: solo pedidos confirmados/en tránsito/entregados (excluye pendiente y programado que aún no son venta)
+    const ESTADOS_INGRESO = new Set(['confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado'])
+    const pedidosFacturables = pedidosList.filter((p: any) => ESTADOS_INGRESO.has(p.estado))
+    const ingresos_total = pedidosFacturables.reduce((sum: number, p: any) => sum + Number(p.total ?? 0), 0)
+
+    // COGS solo sobre pedidos facturables
+    if (pedidosFacturables.length === 0) {
+      return { pedidos_n, entregados_n, ingresos_total: 0, ganancia_total: 0 }
+    }
+
+    const pedidoIds = pedidosFacturables.map((p: any) => p.id)
     const { data: items } = await this.supabase
       .from('items_pedido')
       .select('pedido_id, cantidad, producto_id, productos(precio_compra)')
