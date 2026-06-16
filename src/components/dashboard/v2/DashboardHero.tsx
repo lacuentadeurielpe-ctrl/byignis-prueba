@@ -8,10 +8,11 @@ import { NumberTicker } from '@/components/ui/NumberTicker'
 import { motion } from 'framer-motion'
 import ActivityChart from '@/components/dashboard/ActivityChart'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = (url: string) =>
+  fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
 
 export default function DashboardHero({ esDueno, periodo }: { esDueno: boolean; periodo: string }) {
-  const { data: kpi, isLoading } = useSWR(`/api/dashboard/kpi?p=${periodo}`, fetcher, { revalidateOnFocus: false })
+  const { data: kpi, error: kpiError, isLoading } = useSWR(`/api/dashboard/kpi?p=${periodo}`, fetcher, { revalidateOnFocus: false })
   const { data: snap } = useSWR('/api/dashboard/snapshot', fetcher, { revalidateOnFocus: false })
   const { data: charts } = useSWR('/api/dashboard/charts', fetcher, { revalidateOnFocus: false })
 
@@ -24,7 +25,7 @@ export default function DashboardHero({ esDueno, periodo }: { esDueno: boolean; 
     )
   }
 
-  if (!kpi) return null
+  if (kpiError || !kpi) return null
 
   const {
     periodoLabel, perIngresos, totalPerPedidos,

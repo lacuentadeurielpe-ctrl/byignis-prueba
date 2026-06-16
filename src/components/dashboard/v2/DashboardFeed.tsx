@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = (url: string) =>
+  fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
 
 function tiempoRelativo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -41,7 +42,7 @@ export default function DashboardFeed() {
     return <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl h-80 animate-pulse" />
   }
 
-  if (error || !data) return null
+  if (error || !data || !Array.isArray(data.feed)) return null
 
   const { feed } = data
 

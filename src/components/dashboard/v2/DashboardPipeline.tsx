@@ -6,7 +6,8 @@ import { formatPEN, labelEstadoPedido } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = (url: string) =>
+  fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
 
 const ESTADOS = [
   { key: 'pendiente',  label: 'Pendiente',  dot: 'bg-amber-400' },
@@ -34,7 +35,7 @@ export default function DashboardPipeline() {
     return <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl h-80 animate-pulse" />
   }
 
-  if (error || !data) return null
+  if (error || !data || !data.pipeline) return null
 
   const { pipeline, pedidosRecientes } = data
 
@@ -74,13 +75,13 @@ export default function DashboardPipeline() {
         )}
 
         {/* Lista de pedidos recientes */}
-        {pedidosRecientes.length === 0 ? (
+        {(pedidosRecientes ?? []).length === 0 ? (
           <div className="px-5 py-8 text-center">
             <p className="text-sm text-zinc-400 dark:text-zinc-500">Sin pedidos activos</p>
           </div>
         ) : (
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {pedidosRecientes.map((p: any) => {
+            {(pedidosRecientes ?? []).map((p: any) => {
               const badge = STATUS_BADGE[p.estado] ?? { dot: 'bg-zinc-300', label: labelEstadoPedido(p.estado) }
               return (
                 <Link

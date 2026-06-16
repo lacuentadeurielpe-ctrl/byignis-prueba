@@ -62,7 +62,7 @@ export async function GET() {
       .select('id', { count: 'exact', head: true })
       .eq('ferreteria_id', fid)
       .eq('estado', 'pendiente_revision')
-      .lte('created_at', hace24Horas)
+      .lte('registrado_at', hace24Horas)
 
     if (pagosPendientes && pagosPendientes > 0) {
       alerts.push({

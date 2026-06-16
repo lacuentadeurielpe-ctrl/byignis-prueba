@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AlertTriangle, Info, ArrowRight, CheckCircle2 } from 'lucide-react'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const fetcher = (url: string) =>
+  fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
 
 type AlertType = 'warning' | 'info' | 'success'
 
