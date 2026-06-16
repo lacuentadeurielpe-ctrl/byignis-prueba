@@ -1075,13 +1075,24 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       }
     }
 
-    const productosActuales = ctx.productos.filter((p) => productoIds.includes(p.id))
-    const categoriasActuales = new Set(productosActuales.map((p) => p.categoria_id).filter(Boolean))
+    // Catálogo unificado: el producto puede ser físico o digital, y el complementario
+    // sugerido también puede ser de cualquiera de los dos.
+    type ItemUnificado = { id: string; nombre: string; categoriaKey: string | null; precioUnitario: number; unidad: string; stock: number | null; activo: boolean }
+    const fisicosPorId = new Map<string, ItemUnificado>(
+      ctx.productos.map((p) => [p.id, { id: p.id, nombre: p.nombre, categoriaKey: p.categoria_id ?? null, precioUnitario: p.precio_base, unidad: p.unidad, stock: p.stock, activo: p.activo }])
+    )
+    const digitalesPorId = new Map<string, ItemUnificado>(
+      (ctx.productosDigitales ?? []).map((p) => [p.id, { id: p.id, nombre: p.nombre, categoriaKey: p.categoria ?? null, precioUnitario: p.precio, unidad: p.unidad, stock: p.stock, activo: p.activo }])
+    )
+    const resolverItem = (id: string): ItemUnificado | undefined => fisicosPorId.get(id) ?? digitalesPorId.get(id)
+
+    const productosActuales = productoIds.map(resolverItem).filter((p): p is ItemUnificado => !!p)
+    const categoriasActuales = new Set(productosActuales.map((p) => p.categoriaKey).filter(Boolean))
     const tokensActuales = tokenizarProductos(productosActuales.map((p) => p.nombre))
 
     const { data: pares, error } = await ctx.supabase
       .from('productos_complementarios')
-      .select('complementario_id, tipo, frecuencia')
+      .select('complementario_id, complementario_tipo, tipo, frecuencia')
       .eq('ferreteria_id', ctx.ferreteriaId)    // FERRETERÍA AISLADA
       .in('producto_id', productoIds)
       .eq('activo', true)
@@ -1094,30 +1105,33 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     const candidatos = pares.filter((p) => !idsYaEnCotizacion.has(p.complementario_id))
     if (candidatos.length === 0) return { ok: true, data: { sugerencias: [] } }
 
-    const idsCanditatos = [...new Set(candidatos.map((c) => c.complementario_id))]
-    const complementariosInfo = ctx.productos.filter((p) => idsCanditatos.includes(p.id) && p.activo && p.stock > 0)
-
-    const candidatosFiltrados = complementariosInfo.filter((comp) => {
-      const parOrigen = candidatos.find((c) => c.complementario_id === comp.id)
-      if (!parOrigen) return false
-      if (parOrigen.tipo === 'manual') return true
-      if (comp.categoria_id && categoriasActuales.has(comp.categoria_id)) return true
-      const tokensComp = [...tokenizarProductos([comp.nombre])]
-      return tokensComp.some((t) => tokensActuales.has(t))
-    })
+    const candidatosFiltrados = candidatos
+      .map((par) => ({ par, comp: resolverItem(par.complementario_id) }))
+      .filter((c): c is { par: typeof candidatos[number]; comp: ItemUnificado } =>
+        !!c.comp && c.comp.activo && (c.comp.stock === null || c.comp.stock > 0)
+      )
+      .filter(({ par, comp }) => {
+        if (par.tipo === 'manual') return true
+        if (comp.categoriaKey && categoriasActuales.has(comp.categoriaKey)) return true
+        const tokensComp = [...tokenizarProductos([comp.nombre])]
+        return tokensComp.some((t) => tokensActuales.has(t))
+      })
 
     if (candidatosFiltrados.length === 0) return { ok: true, data: { sugerencias: [] } }
 
     const ordenados = candidatosFiltrados
-      .map((comp) => { const par = candidatos.find((c) => c.complementario_id === comp.id)!; return { comp, tipo: par.tipo, frecuencia: par.frecuencia } })
-      .sort((a, b) => { if (a.tipo === 'manual' && b.tipo !== 'manual') return -1; if (a.tipo !== 'manual' && b.tipo === 'manual') return 1; return b.frecuencia - a.frecuencia })
+      .sort((a, b) => {
+        if (a.par.tipo === 'manual' && b.par.tipo !== 'manual') return -1
+        if (a.par.tipo !== 'manual' && b.par.tipo === 'manual') return 1
+        return b.par.frecuencia - a.par.frecuencia
+      })
       .slice(0, 2)
 
     return {
       ok: true,
       data: {
         sugerencias: ordenados.map(({ comp }) => ({
-          id: comp.id, nombre: comp.nombre, precio_unitario: comp.precio_base, unidad: comp.unidad, stock: comp.stock,
+          id: comp.id, nombre: comp.nombre, precio_unitario: comp.precioUnitario, unidad: comp.unidad, stock: comp.stock,
         })),
       },
     }
