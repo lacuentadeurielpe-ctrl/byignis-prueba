@@ -54,7 +54,7 @@ export async function PATCH(
   // Cargar pedido — filtrado por ferreteria_id (TENANT AISLADO)
   const { data: pedidoActual } = await supabase
     .from('pedidos')
-    .select('id, numero_pedido, estado, estado_pago, total, monto_pagado, cobrado_monto, cliente_id, telefono_cliente, eta_minutos, clientes(telefono)')
+    .select('id, numero_pedido, estado, estado_pago, total, monto_pagado, cobrado_monto, cliente_id, telefono_cliente, eta_minutos, ventana_inicio, ventana_fin, clientes(telefono)')
     .eq('id', pedidoId)
     .eq('ferreteria_id', repartidor.ferreteria_id)   // TENANT AISLADO
     .single()
@@ -319,7 +319,10 @@ export async function PATCH(
       // ── "En camino" — multi-channel notification + Inngest delay detector ──
       if (accion === 'cambiar_estado' && nuevo_estado === 'enviado' && telefono) {
         const etaMin = (pedidoActual as any).eta_minutos as number | null
-        notificarEnRuta(notifCtx, etaMin, supabase)
+        const vIni = (pedidoActual as any).ventana_inicio as string | null
+        const vFin = (pedidoActual as any).ventana_fin as string | null
+        const ventana = vIni && vFin ? { inicio: new Date(vIni), fin: new Date(vFin) } : null
+        notificarEnRuta(notifCtx, etaMin, supabase, ventana)
           .catch(e => console.error('[Delivery] Error notif en_ruta:', e))
 
         // Disparar Inngest para detectar retraso si ETA existe

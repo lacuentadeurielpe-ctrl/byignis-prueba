@@ -161,6 +161,7 @@ export interface ParamsCrearEntrega {
   zonaDeliveryId?:   string | null
   horaProgramadaAt?: Date | null         // para pedidos programados
   multiStop?:        boolean             // agregar a ruta activa del repartidor
+  omitirCascadaEta?: boolean             // saltar cascade-eta (la agenda define el tiempo)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase:          SupabaseClient<any>
 }
@@ -186,6 +187,7 @@ export async function crearEntrega(params: ParamsCrearEntrega): Promise<string |
     zonaDeliveryId,
     horaProgramadaAt,
     multiStop     = false,
+    omitirCascadaEta = false,
     supabase,
   } = params
 
@@ -220,10 +222,11 @@ export async function crearEntrega(params: ParamsCrearEntrega): Promise<string |
     }
 
     // ── 3. Calcular ETA real con cascade-eta ─────────────────────────────────
+    // (se omite cuando el tiempo lo define la agenda de ventanas — módulo agenda)
     let etaFinal = etaMinutos
-    let etaTimestamp: string | null = null
+    let etaTimestamp: string | null = etaMinutos ? new Date(Date.now() + etaMinutos * 60_000).toISOString() : null
 
-    try {
+    if (!omitirCascadaEta) try {
       // Obtener coordenadas del pedido para calcular ETA
       const { data: pedido } = await supabase
         .from('pedidos')

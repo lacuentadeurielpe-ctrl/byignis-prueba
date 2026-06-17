@@ -53,6 +53,9 @@ export interface Pedido {
   nombre_cliente: string
   telefono_cliente: string
   eta_minutos: number | null
+  ventana_inicio: string | null
+  ventana_fin: string | null
+  ventana_confirmada: boolean | null
   direccion_entrega: string | null
   fecha_entrega_programada: string | null
   clientes: { nombre: string | null; telefono: string | null; dni_ruc: string | null } | null

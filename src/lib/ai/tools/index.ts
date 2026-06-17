@@ -16,8 +16,8 @@ import { enviarMensaje, enviarDocumento, enviarImagen } from '@/lib/whatsapp/ycl
 import { withTimeout } from '@/lib/utils'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { geocodificarDireccion, resolverGoogleApiKey } from '@/lib/delivery/geocoding'
-import { calcularETAInteligente, registrarPrediccion } from '@/lib/delivery/intelligence'
 import { crearEntrega } from '@/lib/delivery/assignment'
+import { acomodarPedidoEnAgenda } from '@/lib/delivery/agenda/acomodar'
 import { notificarAsignacion } from '@/lib/notifications/delivery.notifications'
 import type { DeliveryNotificationContext } from '@/lib/notifications/types'
 
@@ -805,7 +805,10 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       console.error('[crear_pedido] Error instrucciones pago:', e)
     }
 
-    // ── Logística de delivery: ETA inteligente + entrega + notificación ──────
+    // ── Logística de delivery: entrega + ventana de agenda + notificación ────
+    // La ventana de entrega la define la agenda del vehículo (declarada/encadenada
+    // por el repartidor), no un ETA algorítmico. Geocodificamos solo para guardar
+    // coords (tracking/mapas), de forma best-effort.
     if (modalidad === 'delivery' && direccionEntrega) {
       ;(async () => {
         try {
@@ -815,59 +818,46 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
             .eq('id', ctx.ferreteriaId)
             .single()
 
-          if (!ferr?.lat || !ferr?.lng) return
+          // Geocodificar para guardar coords del cliente (best-effort)
+          if (ferr?.lat && ferr?.lng) {
+            try {
+              const mapsKey = await resolverGoogleApiKey(ctx.supabase, ctx.ferreteriaId)
+              const coords = await geocodificarDireccion(
+                direccionEntrega,
+                (ferr as unknown as { nombre?: string }).nombre ?? 'Lima',
+                { lat: ferr.lat, lng: ferr.lng, radiusKm: 80 },
+                mapsKey,
+              )
+              if (coords) {
+                await ctx.supabase
+                  .from('pedidos')
+                  .update({ cliente_lat: coords.lat, cliente_lng: coords.lng })
+                  .eq('id', pedidoId)
+                  .eq('ferreteria_id', ctx.ferreteriaId)
+              }
+            } catch (e) {
+              console.warn('[crear_pedido] geocoding falló (continúa):', e)
+            }
+          }
 
-          const mapsKey = await resolverGoogleApiKey(ctx.supabase, ctx.ferreteriaId)
-          const coords = await geocodificarDireccion(
-            direccionEntrega,
-            (ferr as unknown as { nombre?: string }).nombre ?? 'Lima',
-            { lat: ferr.lat, lng: ferr.lng, radiusKm: 80 },
-            mapsKey,
-          )
-          if (!coords) return
-
-          const { count: cola } = await ctx.supabase
-            .from('pedidos')
-            .select('id', { count: 'exact', head: true })
-            .eq('ferreteria_id', ctx.ferreteriaId)
-            .eq('modalidad', 'delivery')
-            .in('estado', ['confirmado', 'en_preparacion', 'enviado'])
-
-          const etaResult = await calcularETAInteligente({
-            ferreteriaId: ctx.ferreteriaId,
-            ferreteriaLat: ferr.lat as number,
-            ferreteriaLng: ferr.lng as number,
-            clienteLat: coords.lat,
-            clienteLng: coords.lng,
-            zonaDeliveryId: zonaId,
-            pedidosEnCola: Math.max(0, (cola ?? 1) - 1),
-            supabase: ctx.supabase,
-          })
-
-          await ctx.supabase
-            .from('pedidos')
-            .update({ eta_minutos: etaResult.etaMinutos, cliente_lat: coords.lat, cliente_lng: coords.lng })
-            .eq('id', pedidoId)
-            .eq('ferreteria_id', ctx.ferreteriaId)
-
+          // Crear la entrega y acomodar el pedido en la agenda → ventana
           const entregaId = await crearEntrega({
             ferreteriaId: ctx.ferreteriaId,
             pedidoId,
             repartidorId: null,
-            etaMinutos: etaResult.etaMinutos,
+            etaMinutos: null,
+            zonaDeliveryId: zonaId,
             supabase: ctx.supabase,
           })
 
-          if (entregaId) {
-            await registrarPrediccion({
-              ferreteriaId: ctx.ferreteriaId,
-              entregaId,
-              pedidoId,
-              zonaDeliveryId: zonaId,
-              result: etaResult,
-              supabase: ctx.supabase,
-            })
+          const ventana = await acomodarPedidoEnAgenda({
+            supabase: ctx.supabase,
+            ferreteriaId: ctx.ferreteriaId,
+            pedidoId,
+            entregaId,
+          })
 
+          if (entregaId) {
             const telefonoWA = (ferr as unknown as { telefono_whatsapp?: string }).telefono_whatsapp
             if (telefonoWA) {
               const notifCtx: DeliveryNotificationContext = {
@@ -880,7 +870,12 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
                 telefonoCliente: ctx.telefonoCliente,
                 apiKey: ctx.ycloudApiKey,
               }
-              await notificarAsignacion(notifCtx, etaResult.etaMinutos, ctx.supabase)
+              await notificarAsignacion(
+                notifCtx,
+                null,
+                ctx.supabase,
+                ventana ? { inicio: ventana.ventanaInicio, fin: ventana.ventanaFin } : null,
+              )
             }
           }
         } catch (e) {

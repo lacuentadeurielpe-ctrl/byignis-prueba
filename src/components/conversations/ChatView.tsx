@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn, formatFecha, formatHora } from '@/lib/utils'
 import { Send, RefreshCw, ArrowLeft, Bot, Mic } from 'lucide-react'
+import VentanaEntregaBadge from '@/components/delivery/VentanaEntregaBadge'
 
 interface Mensaje {
   id: string
@@ -86,6 +87,9 @@ export default function ChatView({ conversacion, mensajesIniciales, ferreteriaId
   const [resumiendo, setResumiendo] = useState(false)
   const [pausando,   setPausando]   = useState(false)
   const [error,      setError]      = useState<string | null>(null)
+  const [ventanaPedido, setVentanaPedido] = useState<
+    { numero: string; inicio: string | null; fin: string | null; confirmada: boolean } | null
+  >(null)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLTextAreaElement>(null)
@@ -94,6 +98,33 @@ export default function ChatView({ conversacion, mensajesIniciales, ferreteriaId
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [mensajes])
+
+  // Última ventana de entrega prometida al cliente (lo que ve el bot)
+  useEffect(() => {
+    const tel = conversacion.clientes?.telefono
+    if (!tel) return
+    const supabase = createClient()
+    supabase
+      .from('pedidos')
+      .select('numero_pedido, ventana_inicio, ventana_fin, ventana_confirmada')
+      .eq('ferreteria_id', ferreteriaId)
+      .eq('telefono_cliente', tel)
+      .eq('modalidad', 'delivery')
+      .not('ventana_inicio', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setVentanaPedido({
+            numero: data.numero_pedido as string,
+            inicio: data.ventana_inicio as string | null,
+            fin: data.ventana_fin as string | null,
+            confirmada: !!data.ventana_confirmada,
+          })
+        }
+      })
+  }, [conversacion.clientes?.telefono, ferreteriaId])
 
   // Realtime
   useEffect(() => {
@@ -284,6 +315,18 @@ export default function ChatView({ conversacion, mensajesIniciales, ferreteriaId
           )}
         </div>
       </div>
+
+      {/* ── Ventana de entrega prometida (lo que ve el cliente) ─────────────── */}
+      {ventanaPedido && (
+        <div className="px-4 py-2 border-b border-zinc-100 bg-zinc-50 flex items-center gap-2 shrink-0">
+          <span className="text-[11px] text-zinc-500 font-medium">Entrega {ventanaPedido.numero}:</span>
+          <VentanaEntregaBadge
+            inicio={ventanaPedido.inicio}
+            fin={ventanaPedido.fin}
+            confirmada={ventanaPedido.confirmada}
+          />
+        </div>
+      )}
 
       {/* ── Mensajes ───────────────────────────────────────────────────────── */}
       <div

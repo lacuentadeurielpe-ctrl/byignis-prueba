@@ -4,6 +4,9 @@
 
 export type EstadoEntrega = 'asignado' | 'en_camino' | 'entregado' | 'rechazado' | 'devuelto' | 'cancelado'
 
+/** Cómo se calculó la ventana de entrega (migración 069). */
+export type OrigenVentana = 'base' | 'encadenada' | 'manual' | 'programada' | 'agrupada'
+
 export interface Entrega {
   id: string
   ferreteria_id: string
@@ -23,6 +26,11 @@ export interface Entrega {
   distancia_km?: number
   duracion_estimada_min?: number
   duracion_real_min?: number
+  // Ventana de entrega declarada/encadenada (migración 069)
+  ventana_inicio?: string
+  ventana_fin?: string
+  ventana_origen?: OrigenVentana
+  ventana_confirmada?: boolean
   comprobante_fotos?: string[]
   firma_cliente_url?: string
   nota_entrega?: string

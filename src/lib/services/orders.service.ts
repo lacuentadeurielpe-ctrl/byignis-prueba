@@ -3,8 +3,8 @@ import { VentasRepository, ItemPedidoInput, PedidoInput } from '../db/repositori
 import { ChatRepository } from '../db/repositories/chat'
 import { DeliveryRepository } from '../db/repositories/logistica'
 import { geocodificarDireccion, resolverGoogleApiKey } from '../delivery/geocoding'
-import { calcularETAInteligente, registrarPrediccion } from '../delivery/intelligence'
 import { crearEntrega } from '../delivery/assignment'
+import { acomodarPedidoEnAgenda } from '../delivery/agenda/acomodar'
 import { normalizarTelefono } from '../utils'
 import { OrderStateService } from './order-state.service'
 
@@ -114,82 +114,89 @@ export class OrdersService {
       }))
     )
 
-    // Si no es programado, orquestar delivery inicial (ETA y registro)
-    if (payload.modalidad === 'delivery' && !payload.fecha_entrega_programada) {
-      this.iniciarLogisticaDelivery(pedido.id, payload.direccion_entrega ?? '')
+    // Delivery: crear entrega + acomodar en la agenda (ventana). Se espera para
+    // que la respuesta al POS/Ventas ya incluya la ventana propuesta.
+    if (payload.modalidad === 'delivery') {
+      const ventana = await this.iniciarLogisticaDelivery(
+        pedido.id,
+        payload.direccion_entrega ?? '',
+        payload.fecha_entrega_programada ?? null,
+      )
+      if (ventana) {
+        // Reflejar la ventana en el objeto devuelto (además de la BD)
+        ;(pedido as Record<string, unknown>).ventana_inicio = ventana.ventanaInicio.toISOString()
+        ;(pedido as Record<string, unknown>).ventana_fin = ventana.ventanaFin.toISOString()
+        ;(pedido as Record<string, unknown>).ventana_confirmada = ventana.confirmada
+      }
     }
 
     return pedido
   }
 
-  private async iniciarLogisticaDelivery(pedidoId: string, direccion: string) {
-    const dirEta = direccion.trim()
-    if (!dirEta) return
-
+  /**
+   * Crea la entrega y acomoda el pedido en la agenda del vehículo. El tiempo de
+   * entrega lo define la VENTANA (declarada/encadenada por el repartidor), no un
+   * ETA algorítmico. Geocodifica solo para guardar coords (best-effort).
+   * Devuelve la ventana propuesta para mostrarla en la confirmación.
+   */
+  private async iniciarLogisticaDelivery(
+    pedidoId: string,
+    direccion: string,
+    fechaProgramada: string | null,
+  ): Promise<Awaited<ReturnType<typeof acomodarPedidoEnAgenda>>> {
     try {
-      const { data: ferreteria } = await this.supabase
-        .from('ferreterias')
-        .select('lat, lng, nombre')
-        .eq('id', this.ferreteriaId)
-        .single()
-
-      let etaMinutos: number | null = null
-
-      let etaResult: Awaited<ReturnType<typeof calcularETAInteligente>> | null = null
-
-      if (ferreteria?.lat && ferreteria?.lng) {
-        const mapsApiKey = await resolverGoogleApiKey(this.supabase, this.ferreteriaId)
-        const coords = await geocodificarDireccion(
-          dirEta,
-          ferreteria.nombre ?? 'Perú',
-          { lat: ferreteria.lat, lng: ferreteria.lng, radiusKm: 80 },
-          mapsApiKey,
-        )
-        if (coords) {
-          const vehiculos = await this.deliveryRepo.listarVehiculosActivos(this.ferreteriaId)
-          const velocidadKmh = vehiculos?.[0]?.velocidad_promedio_kmh ?? 30
-          const cola = await this.deliveryRepo.contarEntregasEnCola(this.ferreteriaId, pedidoId)
-
-          etaResult = await calcularETAInteligente({
-            ferreteriaId: this.ferreteriaId,
-            ferreteriaLat: ferreteria.lat,
-            ferreteriaLng: ferreteria.lng,
-            clienteLat: coords.lat,
-            clienteLng: coords.lng,
-            velocidadKmh,
-            pedidosEnCola: cola ?? 0,
-            supabase: this.supabase,
-          })
-
-          etaMinutos = etaResult.etaMinutos
-          await this.supabase
-            .from('pedidos')
-            .update({ eta_minutos: etaMinutos, cliente_lat: coords.lat, cliente_lng: coords.lng })
-            .eq('id', pedidoId)
-            .eq('ferreteria_id', this.ferreteriaId)
+      const dirEta = direccion.trim()
+      // Geocodificar para guardar coords del cliente (tracking/mapas) — best-effort
+      if (dirEta) {
+        try {
+          const { data: ferreteria } = await this.supabase
+            .from('ferreterias')
+            .select('lat, lng, nombre')
+            .eq('id', this.ferreteriaId)
+            .single()
+          if (ferreteria?.lat && ferreteria?.lng) {
+            const mapsApiKey = await resolverGoogleApiKey(this.supabase, this.ferreteriaId)
+            const coords = await geocodificarDireccion(
+              dirEta,
+              ferreteria.nombre ?? 'Perú',
+              { lat: ferreteria.lat, lng: ferreteria.lng, radiusKm: 80 },
+              mapsApiKey,
+            )
+            if (coords) {
+              await this.supabase
+                .from('pedidos')
+                .update({ cliente_lat: coords.lat, cliente_lng: coords.lng })
+                .eq('id', pedidoId)
+                .eq('ferreteria_id', this.ferreteriaId)
+            }
+          }
+        } catch (e) {
+          console.warn('[OrdersService] geocoding falló (continúa):', e)
         }
       }
 
       const entregaId = await crearEntrega({
         ferreteriaId: this.ferreteriaId,
-        pedidoId: pedidoId,
+        pedidoId,
         repartidorId: null,
-        etaMinutos,
+        etaMinutos: null,
+        prioridad: fechaProgramada ? 5 : 3,
+        horaProgramadaAt: fechaProgramada ? new Date(fechaProgramada) : null,
+        omitirCascadaEta: true,
         supabase: this.supabase,
       })
 
-      // Register prediction for training
-      if (entregaId && etaResult) {
-        registrarPrediccion({
-          ferreteriaId: this.ferreteriaId,
-          entregaId,
-          pedidoId,
-          result: etaResult,
-          supabase: this.supabase,
-        }).catch(e => console.error('[OrdersService] Error registrando predicción:', e))
-      }
+      return await acomodarPedidoEnAgenda({
+        supabase: this.supabase,
+        ferreteriaId: this.ferreteriaId,
+        pedidoId,
+        entregaId,
+        esProgramado: !!fechaProgramada,
+        fechaProgramada: fechaProgramada ? new Date(fechaProgramada) : null,
+      })
     } catch (e) {
       console.error('[OrdersService] Error al iniciar logística', e)
+      return null
     }
   }
 

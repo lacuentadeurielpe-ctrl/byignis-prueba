@@ -3,6 +3,7 @@
 import { Pedido, Repartidor } from './OrdersPremiumView'
 import { cn, formatPEN, formatFechaHoraLima, labelEstadoPedido, colorEstadoPedido, labelEstadoPago, colorEstadoPago } from '@/lib/utils'
 import { usePedidoEstados } from '../hooks/usePedidoEstados'
+import VentanaEntregaBadge from '@/components/delivery/VentanaEntregaBadge'
 import { X, MapPin, Phone, User, Package, Clock, CreditCard, ChevronRight, FileText, Send, CheckCircle2, Truck, ExternalLink, Pencil, Trash2 } from 'lucide-react'
 
 export default function OrderDetailPane({
@@ -63,6 +64,16 @@ export default function OrderDetailPane({
             <p className="text-sm font-medium text-zinc-500 mt-0.5">
               {formatFechaHoraLima(pedido.created_at)} · {pedido.modalidad === 'delivery' ? 'Delivery' : 'Recojo en tienda'}
             </p>
+            {pedido.modalidad === 'delivery' && (
+              <div className="mt-1.5">
+                <VentanaEntregaBadge
+                  inicio={pedido.ventana_inicio}
+                  fin={pedido.ventana_fin}
+                  confirmada={!!pedido.ventana_confirmada}
+                  size="md"
+                />
+              </div>
+            )}
           </div>
         </div>
 

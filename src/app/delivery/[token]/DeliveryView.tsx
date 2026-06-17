@@ -8,6 +8,7 @@ import {
   ExternalLink, Camera, Image as ImageIcon, XCircle, Wrench, WifiOff, Timer,
 } from 'lucide-react'
 import PinModal from '@/components/ui/PinModal'
+import AgendaTab from './AgendaTab'
 import { cn, formatPEN, labelEstadoPago, colorEstadoPago } from '@/lib/utils'
 
 // ── Helpers de offline queue ──────────────────────────────────────────────────
@@ -149,7 +150,7 @@ const ESTADO_LABELS: Record<string, { label: string; icon: string; color: string
 
 // labelEstadoPago / colorEstadoPago importados desde @/lib/utils (fuente única de verdad)
 
-type Tab = 'mis_pedidos' | 'disponibles' | 'rendicion'
+type Tab = 'mis_pedidos' | 'disponibles' | 'agenda' | 'rendicion'
 
 export default function DeliveryView({
   pedidos: inicialAsignados,
@@ -1036,6 +1037,7 @@ export default function DeliveryView({
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: 'mis_pedidos',  label: 'Mis pedidos',  count: pedidos.length },
     ...(modo === 'libre' ? [{ id: 'disponibles' as Tab, label: 'Disponibles', count: disponibles.length }] : []),
+    { id: 'agenda', label: 'Agenda' },
     { id: 'rendicion', label: 'Mi día', count: cobrosHoy.length },
   ]
 
@@ -1313,6 +1315,9 @@ export default function DeliveryView({
           )}
         </div>
       )}
+
+      {/* Tab: Agenda (ventanas de entrega) */}
+      {tab === 'agenda' && <AgendaTab token={token} />}
 
       {/* Tab: Mi día (rendición) */}
       {tab === 'rendicion' && (

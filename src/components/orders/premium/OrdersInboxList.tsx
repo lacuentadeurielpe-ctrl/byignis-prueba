@@ -4,6 +4,7 @@ import { Pedido } from './OrdersPremiumView'
 import { cn, formatPEN, formatFechaHoraLima, colorEstadoPedido, labelEstadoPedido } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { Package, Clock, CreditCard } from 'lucide-react'
+import VentanaEntregaBadge from '@/components/delivery/VentanaEntregaBadge'
 
 // Utilidades locales de filtros
 const RANGOS_FECHA = [
@@ -114,7 +115,17 @@ export default function OrdersInboxList({
 
                 <div className="ml-1">
                   <p className="text-sm font-medium text-zinc-700 truncate pr-4">{nombre || 'Sin nombre'}</p>
-                  
+
+                  {pedido.modalidad === 'delivery' && (pedido.ventana_inicio || pedido.eta_minutos) && (
+                    <div className="mt-1.5">
+                      <VentanaEntregaBadge
+                        inicio={pedido.ventana_inicio}
+                        fin={pedido.ventana_fin}
+                        confirmada={!!pedido.ventana_confirmada}
+                      />
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between mt-2 text-[11px] text-zinc-500 font-medium">
                     <div className="flex items-center gap-1.5">
                       <Clock className="w-3 h-3" />
