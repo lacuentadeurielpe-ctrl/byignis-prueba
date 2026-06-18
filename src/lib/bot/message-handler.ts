@@ -777,9 +777,10 @@ export async function handleIncomingMessage({
               await supabase
                 .from('pedidos')
                 .update({
-                  eta_minutos: eta.tiempoTotalMin,
-                  cliente_lat: coords.lat,
-                  cliente_lng: coords.lng,
+                  eta_minutos:   eta.tiempoTotalMin,
+                  eta_timestamp: new Date(Date.now() + eta.tiempoTotalMin * 60_000).toISOString(),
+                  cliente_lat:   coords.lat,
+                  cliente_lng:   coords.lng,
                 })
                 .eq('id', pedido.id)
                 .eq('ferreteria_id', ferreteria.id)   // FERRETERÍA AISLADA
