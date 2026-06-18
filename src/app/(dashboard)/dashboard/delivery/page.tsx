@@ -72,7 +72,7 @@ export default async function DeliveryPage() {
     // ── Flota: repartidores con estado operativo ──
     supabase
       .from('repartidores')
-      .select('id, nombre, estado_operativo, ultima_lat, ultima_lng, gps_actualizado_at')
+      .select('id, nombre, estado_operativo, gps_ultima_lat, gps_ultima_lng, gps_actualizado_at')
       .eq('ferreteria_id', session.ferreteriaId)
       .eq('activo', true)
       .order('nombre')
@@ -114,8 +114,8 @@ export default async function DeliveryPage() {
     id:               r.id,
     nombre:           r.nombre ?? '',
     estado_operativo: r.estado_operativo ?? 'no_disponible',
-    ultima_lat:       r.ultima_lat as number | null,
-    ultima_lng:       r.ultima_lng as number | null,
+    ultima_lat:       r.gps_ultima_lat as number | null,
+    ultima_lng:       r.gps_ultima_lng as number | null,
     gps_actualizado_at: r.gps_actualizado_at as string | null,
     vehiculo:         null,
     entregasActivas:  (entregasActivasMap as Map<string, number>).get(r.id) ?? 0,

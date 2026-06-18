@@ -47,6 +47,7 @@ interface PedidoInfo {
   total: number
   estado: string
   eta_minutos: number | null
+  eta_timestamp: string | null
 }
 
 interface EntregaDashboard {
@@ -664,10 +665,12 @@ export default function DeliveryDashboard({
                               {pedido?.total != null && (
                                 <span className="text-xs font-medium text-zinc-700">{formatPEN(pedido.total)}</span>
                               )}
-                              {etaMin != null && e.estado !== 'entregado' && (
+                              {e.estado !== 'entregado' && (pedido?.eta_timestamp || etaMin != null) && (
                                 <span className="flex items-center gap-0.5 text-[10px] text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-full font-medium">
                                   <Clock className="w-2.5 h-2.5" />
-                                  {formatEta(etaMin)}
+                                  {pedido?.eta_timestamp
+                                    ? `~${new Date(pedido.eta_timestamp).toLocaleTimeString('es-PE', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Lima' })}`
+                                    : formatEta(etaMin)}
                                 </span>
                               )}
                               {e.estado !== 'entregado' && confidenceMap[e.id] && (

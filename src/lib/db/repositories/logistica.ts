@@ -144,7 +144,7 @@ export class DeliveryRepository {
         id, estado, orden_en_ruta, eta_actual,
         distancia_km, duracion_estimada_min, duracion_real_min,
         salio_at, llego_at,
-        pedidos(id, numero_pedido, nombre_cliente, direccion_entrega, total, eta_minutos, estado),
+        pedidos(id, numero_pedido, nombre_cliente, direccion_entrega, total, eta_minutos, eta_timestamp, estado),
         vehiculos(id, nombre, tipo),
         repartidores(id, nombre)
       `)
