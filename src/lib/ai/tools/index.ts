@@ -17,7 +17,7 @@ import { withTimeout } from '@/lib/utils'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { geocodificarDireccion, resolverGoogleApiKey } from '@/lib/delivery/geocoding'
 import { crearEntrega } from '@/lib/delivery/assignment'
-import { acomodarPedidoEnAgenda } from '@/lib/delivery/agenda/acomodar'
+import { calcularETANuevoPedido } from '@/lib/delivery/eta-simple'
 import { notificarAsignacion } from '@/lib/notifications/delivery.notifications'
 import type { DeliveryNotificationContext } from '@/lib/notifications/types'
 
@@ -840,21 +840,26 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
             }
           }
 
-          // Crear la entrega y acomodar el pedido en la agenda → ventana
+          // ETA inicial + crear entrega
+          const { eta, etaMinutos } = await calcularETANuevoPedido(
+            ctx.supabase,
+            ctx.ferreteriaId,
+          )
+
+          // Guardar eta_timestamp en pedido para lecturas rápidas
+          await ctx.supabase
+            .from('pedidos')
+            .update({ eta_timestamp: eta.toISOString() })
+            .eq('id', pedidoId)
+            .eq('ferreteria_id', ctx.ferreteriaId)
+
           const entregaId = await crearEntrega({
             ferreteriaId: ctx.ferreteriaId,
             pedidoId,
             repartidorId: null,
-            etaMinutos: null,
+            etaMinutos,
             zonaDeliveryId: zonaId,
             supabase: ctx.supabase,
-          })
-
-          const ventana = await acomodarPedidoEnAgenda({
-            supabase: ctx.supabase,
-            ferreteriaId: ctx.ferreteriaId,
-            pedidoId,
-            entregaId,
           })
 
           if (entregaId) {
@@ -870,12 +875,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
                 telefonoCliente: ctx.telefonoCliente,
                 apiKey: ctx.ycloudApiKey,
               }
-              await notificarAsignacion(
-                notifCtx,
-                null,
-                ctx.supabase,
-                ventana ? { inicio: ventana.ventanaInicio, fin: ventana.ventanaFin } : null,
-              )
+              await notificarAsignacion(notifCtx, etaMinutos, ctx.supabase, eta)
             }
           }
         } catch (e) {

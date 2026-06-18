@@ -161,7 +161,6 @@ export interface ParamsCrearEntrega {
   zonaDeliveryId?:   string | null
   horaProgramadaAt?: Date | null         // para pedidos programados
   multiStop?:        boolean             // agregar a ruta activa del repartidor
-  omitirCascadaEta?: boolean             // saltar cascade-eta (la agenda define el tiempo)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase:          SupabaseClient<any>
 }
@@ -170,11 +169,8 @@ export interface ParamsCrearEntrega {
  * Crea el registro de entrega para un pedido de delivery.
  * Idempotente — si ya existe una entrega para el pedido, retorna su id sin duplicar.
  *
- * Flujo completo:
- *   1. Encola el pedido en delivery_queue con prioridad y score
- *   2. Calcula ETA real con cascade-eta (vehículo + repartidor + zona)
- *   3. Si el repartidor está en ruta multi-stop, agrega la parada
- *   4. Crea el registro de entrega con ETA calculado
+ * El ETA que ve el cliente lo controla el repartidor (via hora_fin_declarada).
+ * El parámetro etaMinutos es solo orientativo para logística interna.
  */
 export async function crearEntrega(params: ParamsCrearEntrega): Promise<string | null> {
   const {
@@ -187,7 +183,6 @@ export async function crearEntrega(params: ParamsCrearEntrega): Promise<string |
     zonaDeliveryId,
     horaProgramadaAt,
     multiStop     = false,
-    omitirCascadaEta = false,
     supabase,
   } = params
 
@@ -221,44 +216,11 @@ export async function crearEntrega(params: ParamsCrearEntrega): Promise<string |
       console.warn('[Delivery] Error encolando pedido (continúa):', e)
     }
 
-    // ── 3. Calcular ETA real con cascade-eta ─────────────────────────────────
-    // (se omite cuando el tiempo lo define la agenda de ventanas — módulo agenda)
-    let etaFinal = etaMinutos
-    let etaTimestamp: string | null = etaMinutos ? new Date(Date.now() + etaMinutos * 60_000).toISOString() : null
-
-    if (!omitirCascadaEta) try {
-      // Obtener coordenadas del pedido para calcular ETA
-      const { data: pedido } = await supabase
-        .from('pedidos')
-        .select('cliente_lat, cliente_lng, ferreteria_id, ferreterias!inner(lat, lng)')
-        .eq('id', pedidoId)
-        .single()
-
-      if (pedido?.cliente_lat && pedido?.cliente_lng) {
-        const ferrRow = Array.isArray(pedido.ferreterias)
-          ? (pedido.ferreterias[0] as { lat?: number; lng?: number } | undefined)
-          : (pedido.ferreterias as { lat?: number; lng?: number } | null)
-
-        const cascada = await calcularCascadaETA({
-          ferreteriaId,
-          ferreteriaCoords: { lat: ferrRow?.lat ?? 0, lng: ferrRow?.lng ?? 0 },
-          clienteCoords:    { lat: pedido.cliente_lat as number, lng: pedido.cliente_lng as number },
-          zonaDeliveryId:   zonaDeliveryId ?? undefined,
-          pesoTotalKg,
-          horaProgramadaAt: horaProgramadaAt ?? undefined,
-          supabase,
-        })
-
-        etaFinal      = cascada.etaMinutos
-        etaTimestamp  = new Date(Date.now() + cascada.etaMinutos * 60_000).toISOString()
-      }
-    } catch (e) {
-      console.warn('[Delivery] Error calculando cascade-eta (usando fallback):', e)
-    }
-
-    if (!etaTimestamp && etaMinutos) {
-      etaTimestamp = new Date(Date.now() + etaMinutos * 60_000).toISOString()
-    }
+    // ── 3. ETA orientativo (el ETA real lo declara el repartidor) ───────────
+    const etaFinal = etaMinutos
+    const etaTimestamp: string | null = etaMinutos
+      ? new Date(Date.now() + etaMinutos * 60_000).toISOString()
+      : null
 
     // ── 4. Crear registro de entrega ─────────────────────────────────────────
     const { data: entrega, error } = await supabase

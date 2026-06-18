@@ -67,9 +67,7 @@ export default function OrderDetailPane({
             {pedido.modalidad === 'delivery' && (
               <div className="mt-1.5">
                 <VentanaEntregaBadge
-                  inicio={pedido.ventana_inicio}
-                  fin={pedido.ventana_fin}
-                  confirmada={!!pedido.ventana_confirmada}
+                  etaTimestamp={pedido.eta_timestamp}
                   size="md"
                 />
               </div>

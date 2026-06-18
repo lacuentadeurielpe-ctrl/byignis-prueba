@@ -6,7 +6,7 @@ import { cn, matchesFuzzy } from '@/lib/utils'
 import { X, Plus, Trash2, Search, Loader2, Package, Check, CalendarClock, ScanLine, Clock } from 'lucide-react'
 import ScannerModal from '@/components/ui/ScannerModal'
 import { toast } from 'sonner'
-import { formatearVentanaISO } from '@/lib/delivery/agenda/ventanas'
+import { formatearETADesdeISO } from '@/lib/delivery/eta-simple'
 
 interface Producto {
   id: string
@@ -279,10 +279,10 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
       const pedidoCreado = await res.json()
       const pedidoId = pedidoCreado.id
 
-      // Mostrar la ventana de entrega propuesta (lo que verá el cliente)
+      // Mostrar ETA de entrega propuesto (lo que verá el cliente)
       if (modalidad === 'delivery') {
-        const ventana = formatearVentanaISO(pedidoCreado.ventana_inicio, pedidoCreado.ventana_fin)
-        toast.success(ventana ? `Pedido creado · Entrega entre ${ventana}` : 'Pedido creado')
+        const eta = formatearETADesdeISO(pedidoCreado.eta_timestamp)
+        toast.success(eta ? `Pedido creado · Entrega ~${eta}` : 'Pedido creado')
       }
 
       // Si el dueño lo crea como confirmado Y no es programado, disparar comprobante

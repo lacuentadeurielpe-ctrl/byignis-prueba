@@ -6,15 +6,14 @@
  */
 
 import { formatearDuracion, formatearHoraLlegada } from '@/lib/delivery/eta'
-import { formatearVentana } from '@/lib/delivery/agenda/ventanas'
+import { formatearETA } from '@/lib/delivery/eta-simple'
 
 export interface DeliveryTemplateContext {
   numeroPedido: string
   nombreFerreteria: string
   etaMinutos?: number
-  /** Ventana de entrega declarada (preferida sobre etaMinutos cuando existe). */
-  ventanaInicio?: Date
-  ventanaFin?: Date
+  /** ETA calculado (Date); preferido sobre etaMinutos. */
+  etaTimestamp?: Date
   trackingUrl?: string
   repartidorNombre?: string
   motivo?: string
@@ -22,12 +21,12 @@ export interface DeliveryTemplateContext {
 }
 
 /**
- * Texto de tiempo de llegada: prefiere la ventana declarada por el repartidor;
- * si no hay ventana, cae al ETA en minutos (compatibilidad).
+ * Texto de tiempo de llegada: prefiere el ETA timestamp;
+ * si no hay, cae al ETA en minutos (compatibilidad).
  */
 function textoLlegada(ctx: DeliveryTemplateContext, etiqueta: string): string {
-  if (ctx.ventanaInicio && ctx.ventanaFin) {
-    return `\n🕐 ${etiqueta}: *${formatearVentana(ctx.ventanaInicio, ctx.ventanaFin)}*`
+  if (ctx.etaTimestamp) {
+    return `\n🕐 ${etiqueta}: *${formatearETA(ctx.etaTimestamp)}*`
   }
   if (ctx.etaMinutos) {
     return `\n⏱ ${etiqueta}: *${formatearDuracion(ctx.etaMinutos)}*`
@@ -37,7 +36,7 @@ function textoLlegada(ctx: DeliveryTemplateContext, etiqueta: string): string {
 
 /** Asignado: pedido está siendo preparado */
 export function templateAsignado(ctx: DeliveryTemplateContext): string {
-  const llegada = textoLlegada(ctx, 'Llega entre')
+  const llegada = textoLlegada(ctx, 'Llega a las')
   const repartidor = ctx.repartidorNombre
     ? `\nRepartidor: *${ctx.repartidorNombre}*`
     : ''
@@ -47,7 +46,7 @@ export function templateAsignado(ctx: DeliveryTemplateContext): string {
 
 /** En ruta: pedido está en camino */
 export function templateEnRuta(ctx: DeliveryTemplateContext): string {
-  const llegada = textoLlegada(ctx, 'Llega entre')
+  const llegada = textoLlegada(ctx, 'Llega a las')
   const tracking = ctx.trackingUrl
     ? `\n\n📍 Sigue tu entrega en vivo:\n${ctx.trackingUrl}`
     : ''

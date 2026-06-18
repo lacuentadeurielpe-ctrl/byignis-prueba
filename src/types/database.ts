@@ -125,8 +125,7 @@ export interface Ferreteria {
   // Delivery
   modo_asignacion_delivery: 'manual' | 'libre'
   timeout_aceptacion_min: number
-  delivery_tiempo_base_min: number      // min desde ahora para el 1er pedido con vehículo ocioso (mig. 069)
-  delivery_ventana_tamano_min: number   // ancho por defecto de la ventana de entrega (mig. 069)
+  delivery_tiempo_base_min: number      // min que se suman al max(hora_fin_declarada) para el ETA del próximo pedido
   // Métodos de pago digitales
   datos_yape: DatosYape | null
   datos_transferencia: DatosTransferencia | null
@@ -430,10 +429,8 @@ export interface Pedido {
   incidencia_desc: string | null
   motivo_cancelacion: string | null
   eta_minutos: number | null
-  // ventana de entrega (espejo de entregas.ventana_*, migración 069)
-  ventana_inicio: string | null
-  ventana_fin: string | null
-  ventana_confirmada: boolean
+  /** ETA calculado al crear el pedido (espejo de entregas, migración 070) */
+  eta_timestamp: string | null
   created_at: string
   updated_at: string
   // joins

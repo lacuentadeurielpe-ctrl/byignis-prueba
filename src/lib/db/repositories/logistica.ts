@@ -199,15 +199,15 @@ export class DeliveryRepository {
         id, numero_pedido, nombre_cliente, telefono_cliente,
         direccion_entrega, total, estado, estado_pago, notas,
         cobrado_monto, cobrado_metodo, incidencia_tipo, incidencia_desc,
-        created_at, cliente_id, monto_pagado, eta_minutos,
+        created_at, cliente_id, monto_pagado, eta_minutos, fecha_entrega_programada,
         clientes(nombre, telefono, limite_credito_monto),
         zonas_delivery(nombre),
         items_pedido(id, nombre_producto, cantidad, precio_unitario),
-        entregas(id, estado, eta_actual, orden_en_ruta, salio_at, vehiculo_id, vehiculos(nombre, tipo))
+        entregas(id, estado, eta_actual, hora_fin_declarada, orden_en_ruta, salio_at, vehiculo_id, vehiculos(nombre, tipo))
       `)
       .eq('ferreteria_id', ferreteriaId)
       .eq('repartidor_id', repartidorId)
-      .in('estado', ['confirmado', 'en_preparacion', 'enviado'])
+      .in('estado', ['confirmado', 'en_preparacion', 'enviado', 'programado'])
       .order('created_at', { ascending: true })
 
     if (error) throw error
@@ -244,7 +244,7 @@ export class DeliveryRepository {
         id, numero_pedido, nombre_cliente, telefono_cliente,
         direccion_entrega, total, estado, estado_pago, notas,
         cobrado_monto, cobrado_metodo, incidencia_tipo, incidencia_desc,
-        created_at,
+        created_at, fecha_entrega_programada,
         clientes(nombre, telefono),
         zonas_delivery(nombre),
         items_pedido(id, nombre_producto, cantidad, precio_unitario)
@@ -252,7 +252,7 @@ export class DeliveryRepository {
       .eq('ferreteria_id', ferreteriaId)
       .is('repartidor_id', null)
       .eq('modalidad', 'delivery')
-      .in('estado', ['confirmado', 'en_preparacion'])
+      .in('estado', ['confirmado', 'en_preparacion', 'programado'])
       .order('created_at', { ascending: true })
 
     if (error) throw error

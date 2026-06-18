@@ -116,31 +116,24 @@ async function sendDeliveryNotification(
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-export interface VentanaNotif {
-  inicio: Date
-  fin: Date
-}
-
 export async function notificarAsignacion(
   ctx: DeliveryNotificationContext,
   etaMinutos: number | null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any>,
-  ventana?: VentanaNotif | null,
+  etaTimestamp?: Date | null,
 ): Promise<void> {
   const message = templateAsignado({
     numeroPedido: ctx.numeroPedido,
     nombreFerreteria: ctx.nombreFerreteria,
     etaMinutos: etaMinutos ?? undefined,
-    ventanaInicio: ventana?.inicio,
-    ventanaFin: ventana?.fin,
+    etaTimestamp: etaTimestamp ?? undefined,
     repartidorNombre: ctx.repartidorNombre,
   })
 
   await sendDeliveryNotification(ctx, 'asignado', message, {
     eta_minutos: etaMinutos,
-    ventana_inicio: ventana?.inicio?.toISOString() ?? null,
-    ventana_fin: ventana?.fin?.toISOString() ?? null,
+    eta_timestamp: etaTimestamp?.toISOString() ?? null,
     repartidor: ctx.repartidorNombre,
   }, supabase)
 }
@@ -150,21 +143,19 @@ export async function notificarEnRuta(
   etaMinutos: number | null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any>,
-  ventana?: VentanaNotif | null,
+  etaTimestamp?: Date | null,
 ): Promise<void> {
   const message = templateEnRuta({
     numeroPedido: ctx.numeroPedido,
     nombreFerreteria: ctx.nombreFerreteria,
     etaMinutos: etaMinutos ?? undefined,
-    ventanaInicio: ventana?.inicio,
-    ventanaFin: ventana?.fin,
+    etaTimestamp: etaTimestamp ?? undefined,
     trackingUrl: ctx.trackingUrl,
   })
 
   await sendDeliveryNotification(ctx, 'en_ruta', message, {
     eta_minutos: etaMinutos,
-    ventana_inicio: ventana?.inicio?.toISOString() ?? null,
-    ventana_fin: ventana?.fin?.toISOString() ?? null,
+    eta_timestamp: etaTimestamp?.toISOString() ?? null,
     tracking_url: ctx.trackingUrl,
   }, supabase)
 }

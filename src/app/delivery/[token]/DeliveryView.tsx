@@ -8,7 +8,6 @@ import {
   ExternalLink, Camera, Image as ImageIcon, XCircle, Wrench, WifiOff, Timer,
 } from 'lucide-react'
 import PinModal from '@/components/ui/PinModal'
-import AgendaTab from './AgendaTab'
 import { cn, formatPEN, labelEstadoPago, colorEstadoPago } from '@/lib/utils'
 
 // ── Helpers de offline queue ──────────────────────────────────────────────────
@@ -83,6 +82,7 @@ interface EntregaInfo {
   id: string
   estado: string
   eta_actual: string | null
+  hora_fin_declarada: string | null
   orden_en_ruta: number | null
   salio_at: string | null
   vehiculo_id: string | null
@@ -105,6 +105,7 @@ interface PedidoDelivery {
   incidencia_desc: string | null
   created_at: string
   eta_minutos: number | null
+  fecha_entrega_programada: string | null
   cliente_id: string | null
   /** null = sin límite configurado; number = crédito disponible en S/ */
   credito_disponible: number | null
@@ -150,7 +151,7 @@ const ESTADO_LABELS: Record<string, { label: string; icon: string; color: string
 
 // labelEstadoPago / colorEstadoPago importados desde @/lib/utils (fuente única de verdad)
 
-type Tab = 'mis_pedidos' | 'disponibles' | 'agenda' | 'rendicion'
+type Tab = 'mis_pedidos' | 'disponibles' | 'rendicion'
 
 export default function DeliveryView({
   pedidos: inicialAsignados,
@@ -418,6 +419,55 @@ export default function DeliveryView({
     })
     return initial
   })
+
+  // Hora de finalización declarada por el repartidor: { pedidoId → "HH:MM" }
+  const [horasFin, setHorasFin] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    inicialAsignados.forEach(p => {
+      const hf = p.entregas?.[0]?.hora_fin_declarada
+      if (hf) {
+        const d = new Date(hf)
+        const h = d.toLocaleString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Lima' })
+        initial[p.id] = h
+      }
+    })
+    return initial
+  })
+  const [guardandoHoraFin, setGuardandoHoraFin] = useState<string | null>(null)
+
+  async function declararHoraFin(pedido: PedidoDelivery) {
+    const entrega = pedido.entregas?.[0]
+    if (!entrega) return
+    const hora = horasFin[pedido.id]
+    if (!hora) return
+    setGuardandoHoraFin(pedido.id)
+    try {
+      const [hh, mm] = hora.split(':').map(Number)
+      const ahora = new Date()
+      const limaISO = new Date(
+        new Date().toLocaleString('en-US', { timeZone: 'America/Lima' })
+      )
+      limaISO.setHours(hh, mm, 0, 0)
+      // Convertir de Lima a UTC
+      const offsetMs = ahora.getTime() - new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' })).getTime()
+      const horaFinUTC = new Date(limaISO.getTime() + offsetMs)
+      const res = await fetch(`/api/delivery/${token}/hora-fin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entregaId: entrega.id, pedidoId: pedido.id, horaFin: horaFinUTC.toISOString() }),
+      })
+      if (!res.ok) throw new Error('Error al guardar')
+      setPedidos(prev => prev.map(p =>
+        p.id === pedido.id
+          ? { ...p, entregas: p.entregas?.map(e => e.id === entrega.id ? { ...e, hora_fin_declarada: horaFinUTC.toISOString() } : e) ?? null }
+          : p
+      ))
+    } catch {
+      alert('No se pudo guardar la hora. Intenta de nuevo.')
+    } finally {
+      setGuardandoHoraFin(null)
+    }
+  }
 
   // Estado de fotos por pedido: { pedidoId → urls[] }
   const [fotosMap, setFotosMap] = useState<Record<string, string[]>>({})
@@ -804,6 +854,37 @@ export default function DeliveryView({
               </div>
             </div>
 
+            {/* ── Hora estimada de finalización ── */}
+            {showAcciones && pedido.entregas?.[0] && (
+              <div className="bg-white rounded-xl border border-zinc-200 p-3.5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-zinc-500" />
+                  <p className="text-sm font-semibold text-zinc-800">¿A qué hora terminas esta entrega?</p>
+                </div>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="time"
+                    value={horasFin[pedido.id] ?? ''}
+                    onChange={(e) => setHorasFin(prev => ({ ...prev, [pedido.id]: e.target.value }))}
+                    className="flex-1 border border-zinc-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                  />
+                  <button
+                    onClick={() => declararHoraFin(pedido)}
+                    disabled={!horasFin[pedido.id] || guardandoHoraFin === pedido.id}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-sky-500 text-white hover:bg-sky-600 disabled:opacity-50 transition"
+                  >
+                    {guardandoHoraFin === pedido.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                    Guardar
+                  </button>
+                </div>
+                {pedido.entregas[0].hora_fin_declarada && (
+                  <p className="text-[11px] text-sky-600">
+                    Declarada: ~{new Date(pedido.entregas[0].hora_fin_declarada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' })}
+                  </p>
+                )}
+              </div>
+            )}
+
             {showAcciones && (
               <>
                 {/* ── Selector de estado ── */}
@@ -1037,7 +1118,6 @@ export default function DeliveryView({
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: 'mis_pedidos',  label: 'Mis pedidos',  count: pedidos.length },
     ...(modo === 'libre' ? [{ id: 'disponibles' as Tab, label: 'Disponibles', count: disponibles.length }] : []),
-    { id: 'agenda', label: 'Agenda' },
     { id: 'rendicion', label: 'Mi día', count: cobrosHoy.length },
   ]
 
@@ -1297,27 +1377,38 @@ export default function DeliveryView({
               <p className="text-sm text-zinc-500 mt-1">Regresa en unos momentos</p>
             </div>
           ) : (
-            disponibles.map((p, i) => (
-              <div key={p.id}>
-                <TarjetaPedido pedido={p} idx={i} showAcciones={false} totalPedidos={disponibles.length} />
-                <div className="px-4 py-3 bg-white border border-t-0 border-zinc-200 rounded-b-2xl -mt-2">
-                  <button
-                    onClick={() => aceptarPedido(p.id)}
-                    disabled={aceptando === p.id}
-                    className="w-full flex items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition"
-                  >
-                    {aceptando === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                    Tomar este pedido
-                  </button>
+            disponibles.map((p, i) => {
+              // Pedidos programados solo se pueden tomar el día de entrega
+              const hoyLima = new Date().toLocaleDateString('es-PE', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' })
+              const diaEntrega = p.fecha_entrega_programada
+                ? new Date(p.fecha_entrega_programada).toLocaleDateString('es-PE', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' })
+                : null
+              const esProgramadoFuturo = diaEntrega && diaEntrega !== hoyLima
+              return (
+                <div key={p.id}>
+                  <TarjetaPedido pedido={p} idx={i} showAcciones={false} totalPedidos={disponibles.length} />
+                  <div className="px-4 py-3 bg-white border border-t-0 border-zinc-200 rounded-b-2xl -mt-2">
+                    {esProgramadoFuturo ? (
+                      <div className="text-center text-xs text-zinc-500 bg-zinc-50 rounded-xl py-3 border border-zinc-200">
+                        📅 Programado para {new Date(p.fecha_entrega_programada!).toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Lima' })} — podrás tomarlo ese día
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => aceptarPedido(p.id)}
+                        disabled={aceptando === p.id}
+                        className="w-full flex items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition"
+                      >
+                        {aceptando === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                        Tomar este pedido
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       )}
-
-      {/* Tab: Agenda (ventanas de entrega) */}
-      {tab === 'agenda' && <AgendaTab token={token} />}
 
       {/* Tab: Mi día (rendición) */}
       {tab === 'rendicion' && (

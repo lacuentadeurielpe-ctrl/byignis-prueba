@@ -116,13 +116,9 @@ export default function OrdersInboxList({
                 <div className="ml-1">
                   <p className="text-sm font-medium text-zinc-700 truncate pr-4">{nombre || 'Sin nombre'}</p>
 
-                  {pedido.modalidad === 'delivery' && (pedido.ventana_inicio || pedido.eta_minutos) && (
+                  {pedido.modalidad === 'delivery' && (pedido.eta_timestamp || pedido.eta_minutos) && (
                     <div className="mt-1.5">
-                      <VentanaEntregaBadge
-                        inicio={pedido.ventana_inicio}
-                        fin={pedido.ventana_fin}
-                        confirmada={!!pedido.ventana_confirmada}
-                      />
+                      <VentanaEntregaBadge etaTimestamp={pedido.eta_timestamp} />
                     </div>
                   )}
 
