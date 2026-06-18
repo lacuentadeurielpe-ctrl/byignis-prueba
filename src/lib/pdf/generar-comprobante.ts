@@ -11,6 +11,30 @@ import { ComprobantePDF, type DatosComprobante } from './comprobante'
 import { VentasRepository } from '@/lib/db/repositories/ventas'
 import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
 
+/**
+ * Pre-fetchea la imagen del logo y la convierte a base64 data URL.
+ * @react-pdf/renderer necesita base64 o URLs absolutas estables.
+ * Si falla (URL inaccesible, timeout, formato no soportado) devuelve null
+ * y el componente usará las iniciales como fallback.
+ */
+async function fetchLogoBase64(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(5_000),
+      headers: { Accept: 'image/*' },
+    })
+    if (!res.ok) return null
+    const contentType = res.headers.get('content-type') ?? 'image/png'
+    // Solo aceptar formatos que react-pdf soporta bien
+    if (!contentType.startsWith('image/')) return null
+    const buffer = await res.arrayBuffer()
+    const base64 = Buffer.from(buffer).toString('base64')
+    return `data:${contentType};base64,${base64}`
+  } catch {
+    return null
+  }
+}
+
 export interface ResultadoComprobante {
   ok: boolean
   numero_comprobante?: string
@@ -110,12 +134,18 @@ export async function generarYEnviarComprobante({
     subtotal: i.subtotal,
   }))
 
+  // Pre-fetchear logo como base64 para que react-pdf no tenga que hacer HTTP fetch
+  // en el runtime serverless (puede fallar con CORS/timeouts en URLs de Supabase Storage).
+  const logoBase64 = ferreteria.logo_url
+    ? await fetchLogoBase64(ferreteria.logo_url)
+    : null
+
   const datos: DatosComprobante = {
     nombre_ferreteria:  ferreteria.nombre,
     direccion_ferreteria: ferreteria.direccion ?? null,
     telefono_ferreteria: ferreteria.telefono_whatsapp,
-    logo_url:           ferreteria.logo_url ?? null,
-    color:              ferreteria.color_comprobante ?? '#1e40af',
+    logo_url:           logoBase64,
+    color:              (ferreteria.color_comprobante as string | null) ?? '#1e40af',
     mensaje_pie:        ferreteria.mensaje_comprobante ?? null,
     numero_comprobante: numeroComprobante,
     fecha_emision:      new Date().toISOString(),

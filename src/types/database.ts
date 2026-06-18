@@ -155,6 +155,7 @@ export interface Ferreteria {
   bot_delay_respuesta_ms: number       // demora artificial antes de responder (simula tiempo de escritura)
   bot_autoclose_cotizacion: boolean
   bot_agentes_activos: string[] | null
+  bot_herramientas_desactivadas: string[]   // tools explícitamente apagadas (opt-out; vacío = todo activo)
   modulos_activos: string[] | null
   bot_modo_catalogo: 'fisicos' | 'digitales' | 'ambos'
   bot_siempre_activo: boolean

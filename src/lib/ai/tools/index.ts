@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Producto, ProductoDigital, ZonaDelivery, DatosFlujoPedido, AgentesActivos } from '@/types/database'
+import { AGENT_REGISTRY, CORE_TOOL_NAMES } from '@/lib/ai/agents/registry'
 import { procesarItemsSolicitados, buscarProducto, formatearCotizacion } from '@/lib/bot/catalog-search'
 import { pausarBot } from '@/lib/bot/session'
 import { generarYEnviarComprobante, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
@@ -34,8 +35,10 @@ export interface ToolContext {
   datosFlujo: DatosFlujoPedido | null
   ventanaGraciaMinutos?: number
   ycloudApiKey?: string
-  agentesActivos?: AgentesActivos   // F4: si undefined → todo activo
-  umbralUpsellSoles?: number        // F5: monto mínimo de cotización para activar upsell (0 = siempre)
+  agentesActivos?: AgentesActivos      // F4: si undefined → todo activo
+  herramientasDesactivadas?: string[]  // tools explícitamente apagadas (desde bot_herramientas_desactivadas)
+  integracionesConectadas?: string[]   // tipos de integración activas (para gating de tools que las requieren)
+  umbralUpsellSoles?: number           // F5: monto mínimo de cotización para activar upsell (0 = siempre)
   nubefactTokenPlano?: string       // Inyectado
   productosDigitales?: ProductoDigital[]
   botModoCatalogo?: 'fisicos' | 'digitales' | 'ambos'
@@ -341,29 +344,43 @@ export const TOOL_SCHEMAS = [
   },
 ] as const
 
-// ── Agentes configurables (F4) ───────────────────────────────────────────────
+// ── Agentes y gating de herramientas (basado en AGENT_REGISTRY) ──────────────
 
 export type ToolSchema = (typeof TOOL_SCHEMAS)[number]
 
-// Mapeo agente → tools que controla
-const AGENT_TOOLS: Record<keyof AgentesActivos, string[]> = {
-  ventas:       ['guardar_cotizacion', 'crear_pedido', 'agregar_a_pedido_reciente', 'modificar_pedido'],
-  comprobantes: ['solicitar_comprobante'],
-  upsell:       ['sugerir_complementario'],
-  crm:          ['historial_cliente', 'guardar_dato_cliente'],
-}
-
 /**
  * Devuelve los schemas de tools activos para el tenant.
- * Semántica opt-out: campo ausente / undefined → activo.
+ *
+ * Reglas (opt-out: campo ausente = activo):
+ *  - Tools núcleo (en CORE_TOOL_NAMES) → siempre incluidas.
+ *  - Tools de agente → incluidas si:
+ *      1. el agente NO está en false en `agentes`,  Y
+ *      2. no está en `herramientasDesactivadas`,     Y
+ *      3. no tiene `requiereIntegracion` o la integración está en `integracionesConectadas`.
  */
-export function getActiveToolSchemas(agentes?: AgentesActivos): ToolSchema[] {
-  const disabled = new Set<string>()
-  if (agentes?.ventas       === false) AGENT_TOOLS.ventas.forEach((t) => disabled.add(t))
-  if (agentes?.comprobantes === false) AGENT_TOOLS.comprobantes.forEach((t) => disabled.add(t))
-  if (agentes?.upsell       === false) AGENT_TOOLS.upsell.forEach((t) => disabled.add(t))
-  if (agentes?.crm          === false) AGENT_TOOLS.crm.forEach((t) => disabled.add(t))
-  return (TOOL_SCHEMAS as unknown as ToolSchema[]).filter((s) => !disabled.has(s.function.name))
+export function getActiveToolSchemas(
+  agentes?: AgentesActivos,
+  herramientasDesactivadas?: string[],
+  integracionesConectadas?: string[],
+): ToolSchema[] {
+  const desactivadas  = new Set(herramientasDesactivadas ?? [])
+  const integraciones = new Set(integracionesConectadas ?? [])
+  const disabled      = new Set<string>()
+
+  for (const agent of AGENT_REGISTRY) {
+    const agentKey = agent.id as keyof AgentesActivos
+    const agentOff = agentes?.[agentKey] === false
+
+    for (const tool of agent.tools) {
+      if (agentOff)                                                              { disabled.add(tool.name); continue }
+      if (desactivadas.has(tool.name))                                           { disabled.add(tool.name); continue }
+      if (tool.requiereIntegracion && !integraciones.has(tool.requiereIntegracion)) { disabled.add(tool.name); continue }
+    }
+  }
+
+  return (TOOL_SCHEMAS as unknown as ToolSchema[]).filter(
+    (s) => CORE_TOOL_NAMES.has(s.function.name) || !disabled.has(s.function.name)
+  )
 }
 
 // ── Executors ────────────────────────────────────────────────────────────────

@@ -403,8 +403,12 @@ export async function ejecutarOrquestador(
 
   const t0 = Date.now()
 
-  // Computar schemas activos UNA vez para este tenant (F4: agentes configurables)
-  const activeSchemas = getActiveToolSchemas(ctx.agentesActivos)
+  // Computar schemas activos UNA vez para este tenant
+  const activeSchemas = getActiveToolSchemas(
+    ctx.agentesActivos,
+    ctx.herramientasDesactivadas,
+    ctx.integracionesConectadas,
+  )
   if (activeSchemas.length === 0) {
     // Sin tools disponibles — respuesta directa sin orquestador
     return { respuesta: 'Por el momento no tengo herramientas activas para ayudarte. Contacta al encargado.', toolsUsadas: [], iteraciones: 0, motor: 'claude' }

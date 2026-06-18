@@ -151,7 +151,7 @@ export async function handleIncomingMessage({
   // F4: Agentes configurables — ferreterias.bot_agentes_activos es string[] con los agentes habilitados
   // Si la columna tiene valor, convertir a AgentesActivos (opt-out por ausencia en el array).
   // Fallback: config.agentes_activos (tabla antigua) → si tampoco existe, todo activo (undefined).
-  const botAgentesArr = (ferreteria as unknown as { bot_agentes_activos?: string[] | null }).bot_agentes_activos
+  const botAgentesArr = ferreteria.bot_agentes_activos
   const agentesActivos: AgentesActivos | undefined = botAgentesArr != null
     ? {
         ventas:       botAgentesArr.includes('ventas')       ? undefined : false,
@@ -160,6 +160,9 @@ export async function handleIncomingMessage({
         crm:          botAgentesArr.includes('crm')          ? undefined : false,
       }
     : (config as unknown as { agentes_activos?: AgentesActivos } | null)?.agentes_activos
+
+  // FASE 0: Herramientas desactivadas individualmente
+  const herramientasDesactivadas: string[] = ferreteria.bot_herramientas_desactivadas ?? []
   // F5: Profit engine — preferir columnas directas de ferreterias
   const cierreCotizacionActivo =
     (ferreteria as unknown as { bot_autoclose_cotizacion?: boolean }).bot_autoclose_cotizacion
@@ -346,6 +349,7 @@ export async function handleIncomingMessage({
           ventanaGraciaMinutos: (config as unknown as { ventana_gracia_minutos?: number } | null)?.ventana_gracia_minutos ?? 30,
           ycloudApiKey,
           agentesActivos,                        // F4: tools habilitadas por tenant
+          herramientasDesactivadas,              // FASE 0: tools apagadas individualmente
           umbralUpsellSoles,                     // F5: mínimo para activar upsell
         }
       )
