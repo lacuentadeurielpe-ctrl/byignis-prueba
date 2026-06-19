@@ -168,6 +168,7 @@ export async function handleIncomingMessage({
   const integracionesConectadas: string[] = []
   if (ferreteria.nubefact_token_enc && ferreteria.nubefact_ruta)          integracionesConectadas.push('nubefact')
   if (ferreteria.telegram_bot_token  && ferreteria.telegram_chat_id)      integracionesConectadas.push('telegram')
+  if ((ferreteria as any).resend_api_key && (ferreteria as any).resend_from_email) integracionesConectadas.push('resend')
   // mercadopago: si en algún momento se agrega la columna, añadir aquí
   // F5: Profit engine — preferir columnas directas de ferreterias
   const cierreCotizacionActivo =

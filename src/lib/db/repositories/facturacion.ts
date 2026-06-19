@@ -135,7 +135,7 @@ export class FacturacionRepository {
   async obtenerFerreteriaComprobanteInfo(ferreteriaId: string) {
     const { data, error } = await this.supabase
       .from('ferreterias')
-      .select('id, nombre, direccion, telefono_whatsapp, formas_pago, logo_url, color_comprobante, mensaje_comprobante')
+      .select('id, nombre, ruc, direccion, telefono_whatsapp, formas_pago, metodos_pago_activos, logo_url, color_comprobante, mensaje_comprobante')
       .eq('id', ferreteriaId)
       .single()
 

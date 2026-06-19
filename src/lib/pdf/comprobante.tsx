@@ -29,12 +29,15 @@ export interface DatosComprobante {
   logo_url: string | null
   color: string          // hex — default '#1e40af'
   mensaje_pie: string | null
-  ruc_ferreteria?: string // Opcional, para simular la caja de RUC
+  ruc_ferreteria?: string // Opcional, para la caja de RUC
 
   // Comprobante
   numero_comprobante: string    // CP-000001
   fecha_emision: string         // ISO string
-  esProforma?: boolean          // true = documento pendiente de confirmación
+  /** @deprecated usar tipoDocumento */
+  esProforma?: boolean
+  /** 'cotizacion' = pre-pedido | 'proforma' = pedido pendiente de pago | 'nota_venta' = confirmado */
+  tipoDocumento?: 'cotizacion' | 'proforma' | 'nota_venta'
 
   // Pedido
   numero_pedido: string
@@ -306,13 +309,18 @@ export function ComprobantePDF({ datos }: { datos: DatosComprobante }) {
     ? datos.formas_pago.join(', ')
     : 'Efectivo / A convenir'
 
-  // El RUC de la ferretería usualmente viene en la DB, pero si no está usamos ceros.
-  // Como no pasamos el RUC actualmente en datos, ponemos un placeholder genérico.
   const rucFerreteria = datos.ruc_ferreteria || '00000000000'
+
+  // Título del recuadro según tipo de documento
+  const tituloDoc = datos.tipoDocumento === 'cotizacion'
+    ? 'COTIZACIÓN'
+    : datos.tipoDocumento === 'proforma'
+      ? 'PROFORMA'
+      : 'NOTA DE VENTA'
 
   return (
     <Document
-      title={`Comprobante ${datos.numero_comprobante} — ${datos.nombre_ferreteria}`}
+      title={`${tituloDoc} ${datos.numero_comprobante} — ${datos.nombre_ferreteria}`}
       author={datos.nombre_ferreteria}
     >
       <Page size="A4" style={S.page}>
@@ -339,7 +347,7 @@ export function ComprobantePDF({ datos }: { datos: DatosComprobante }) {
           <View style={S.cajaRuc}>
             <Text style={S.cajaRucTexto}>R.U.C. N° {rucFerreteria}</Text>
             <Text style={S.cajaRucTitulo}>
-              {datos.esProforma ? 'COTIZACIÓN' : 'NOTA DE VENTA'}
+              {tituloDoc}
             </Text>
             <Text style={S.cajaRucNumero}>N° {datos.numero_comprobante}</Text>
           </View>
@@ -436,15 +444,18 @@ export function ComprobantePDF({ datos }: { datos: DatosComprobante }) {
         {/* ── PIE ── */}
         <View style={S.pie}>
           <Text style={S.pieMensaje}>
-            {datos.esProforma ? '¡Gracias por su preferencia!' : '¡Gracias por su compra!'}
+            {datos.tipoDocumento === 'nota_venta' ? '¡Gracias por su compra!' : '¡Gracias por su preferencia!'}
           </Text>
           {datos.mensaje_pie && (
             <Text style={[S.pieDisclaimer, { marginBottom: 4 }]}>{datos.mensaje_pie}</Text>
           )}
           <Text style={S.pieDisclaimer}>
-            {datos.esProforma
-              ? `Este documento es una PROFORMA generada por ${datos.nombre_ferreteria}. Carece de validez tributaria.`
-              : `Este documento es un comprobante de control interno de ${datos.nombre_ferreteria}. No tiene validez tributaria.`}
+            {datos.tipoDocumento === 'cotizacion'
+              ? `Este documento es una COTIZACIÓN de ${datos.nombre_ferreteria}. Precios sujetos a disponibilidad. Carece de validez tributaria.`
+              : datos.tipoDocumento === 'proforma'
+                ? `Este documento es una PROFORMA de ${datos.nombre_ferreteria}. Pendiente de confirmación de pago. Carece de validez tributaria.`
+                : `Este documento es una NOTA DE VENTA de control interno de ${datos.nombre_ferreteria}. No tiene validez tributaria.`
+            }
           </Text>
           <Text style={[S.pieDisclaimer, { marginTop: 4, fontSize: 6 }]}>
             Representación impresa del Comprobante Interno

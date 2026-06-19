@@ -1,6 +1,6 @@
 'use client'
 
-import { Cloud, MessageCircle, FileText, MapPin, Zap, Banknote, BookOpen, Code, Send } from 'lucide-react'
+import { Cloud, MessageCircle, FileText, MapPin, Zap, Banknote, BookOpen, Code, Send, Mail } from 'lucide-react'
 import SettingsHeader from '../components/SettingsHeader'
 import IntegrationCard from './components/IntegrationCard'
 
@@ -39,6 +39,13 @@ const INTEGRACIONES_CORE = [
     description: 'Notificaciones del bot al canal de la tienda',
     icon: Send,
     href: '/dashboard/settings-2/integraciones/telegram',
+  },
+  {
+    id: 'resend',
+    name: 'Email (Resend)',
+    description: 'Envío de cotizaciones y alertas por email',
+    icon: Mail,
+    href: '/dashboard/settings-2/integraciones/resend',
   },
 ]
 

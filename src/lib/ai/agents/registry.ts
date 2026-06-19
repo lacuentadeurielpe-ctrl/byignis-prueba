@@ -4,6 +4,7 @@
 export type IntegracionTipo =
   | 'gmail'
   | 'telegram'
+  | 'resend'
   | 'drive'
   | 'calendar'
   | 'nubefact'
@@ -92,6 +93,18 @@ export const AGENT_REGISTRY: AgentDef[] = [
         label:               'Notificar Telegram',
         desc:                'Alerta al equipo en el canal Telegram de la tienda',
         requiereIntegracion: 'telegram' as const,
+      },
+      {
+        name:                'enviar_cotizacion_email',
+        label:               'Cotización por email',
+        desc:                'Envía el PDF de la cotización al email del cliente vía Resend',
+        requiereIntegracion: 'resend' as const,
+      },
+      {
+        name:                'notificar_pedido_email',
+        label:               'Alerta nuevo pedido por email',
+        desc:                'Notifica al dueño por email cuando se crea un pedido nuevo',
+        requiereIntegracion: 'resend' as const,
       },
     ],
   },

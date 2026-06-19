@@ -13,6 +13,8 @@ interface GeneralFormData {
   logo_url?: string
   color_comprobante?: string
   tipo_establecimiento?: string
+  ruc?: string
+  mensaje_comprobante?: string
 }
 
 export default function GeneralForm() {
@@ -138,6 +140,41 @@ export default function GeneralForm() {
           </div>
         </div>
 
+        {/* Sección 1b: Datos fiscales */}
+        <div className="border-b border-zinc-200 pb-6">
+          <h3 className="text-sm font-semibold text-zinc-900 mb-4">🧾 Datos fiscales</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-2">
+                RUC
+              </label>
+              <input
+                type="text"
+                value={data.ruc || ''}
+                onChange={e => handleChange('ruc', e.target.value)}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Ej: 20123456789"
+                maxLength={11}
+              />
+              <p className="text-xs text-zinc-500 mt-1">Aparece en el encabezado del PDF</p>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-2">
+                Mensaje pie de página (comprobantes)
+              </label>
+              <textarea
+                value={data.mensaje_comprobante || ''}
+                onChange={e => handleChange('mensaje_comprobante', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                placeholder="Ej: ¡Gracias por elegirnos! Garantía 30 días. Consultas al 51987654321"
+              />
+              <p className="text-xs text-zinc-500 mt-1">Texto opcional al pie de cada PDF generado</p>
+            </div>
+          </div>
+        </div>
+
         {/* Sección 2: Marca y presentación */}
         <div className="border-b border-zinc-200 pb-6">
           <h3 className="text-sm font-semibold text-zinc-900 mb-4">🎨 Marca y presentación</h3>
@@ -154,7 +191,7 @@ export default function GeneralForm() {
                 placeholder="https://tu-dominio.com/logo.png"
               />
               <p className="text-xs text-zinc-500 mt-1">
-                Usado en PDF de facturas, emails y reportes
+                URL pública de la imagen (PNG/JPG). Sube tu logo a Supabase Storage o ImgBB y pega la URL aquí.
               </p>
             </div>
 
@@ -165,12 +202,12 @@ export default function GeneralForm() {
               <div className="flex items-center gap-3">
                 <input
                   type="color"
-                  value={data.color_comprobante || '#6366f1'}
+                  value={data.color_comprobante || '#1e40af'}
                   onChange={e => handleChange('color_comprobante', e.target.value)}
                   className="w-14 h-10 rounded cursor-pointer border border-zinc-200"
                 />
                 <span className="text-xs text-zinc-500">
-                  Usado en facturas y boletas PDF
+                  Color de cabecera en notas de venta y cotizaciones PDF
                 </span>
               </div>
             </div>

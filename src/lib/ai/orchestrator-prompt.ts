@@ -401,6 +401,10 @@ Datos acumulados: ${partes.length > 0 ? partes.join(' | ') : '(ninguno aún)'}
   if (integracionesConectadas.includes('telegram')) {
     toolsOpcionalesLines.push('- Alertar al equipo de la tienda por Telegram → `notificar_telegram` (ej: pedido grande, caso especial, queja)')
   }
+  if (integracionesConectadas.includes('resend')) {
+    toolsOpcionalesLines.push('- Enviar cotización PDF al email del cliente → `enviar_cotizacion_email` (cuando el cliente pide recibirlo por email)')
+    toolsOpcionalesLines.push('- Notificar al dueño por email al crear un pedido → `notificar_pedido_email` (úsalo automáticamente en pedidos grandes)')
+  }
 
   const toolsOpcionalesBlock = toolsOpcionalesLines.length > 0
     ? `\n## Herramientas adicionales disponibles en este negocio\n${toolsOpcionalesLines.join('\n')}`

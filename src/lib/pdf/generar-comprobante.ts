@@ -141,6 +141,16 @@ export async function generarYEnviarComprobante({
     ? await fetchLogoBase64(ferreteria.logo_url)
     : null
 
+  // Derivar formas de pago: si formas_pago está vacío, usar metodos_pago_activos
+  const METODO_LABELS: Record<string, string> = {
+    efectivo: 'Efectivo', yape: 'Yape', plin: 'Plin',
+    transferencia: 'Transferencia', mercadopago: 'Mercado Pago',
+  }
+  const metodosActivos = ((ferreteria as any).metodos_pago_activos as string[]) ?? []
+  const formasPago = ((ferreteria.formas_pago as string[]) ?? []).length > 0
+    ? (ferreteria.formas_pago as string[])
+    : metodosActivos.map((m) => METODO_LABELS[m] ?? m)
+
   const datos: DatosComprobante = {
     nombre_ferreteria:  ferreteria.nombre,
     direccion_ferreteria: ferreteria.direccion ?? null,
@@ -148,14 +158,16 @@ export async function generarYEnviarComprobante({
     logo_url:           logoBase64,
     color:              (ferreteria.color_comprobante as string | null) ?? '#1e40af',
     mensaje_pie:        ferreteria.mensaje_comprobante ?? null,
+    ruc_ferreteria:     (ferreteria as any).ruc ?? undefined,
     numero_comprobante: numeroComprobante,
     fecha_emision:      new Date().toISOString(),
     esProforma,
+    tipoDocumento:      esProforma ? 'proforma' : 'nota_venta',
     numero_pedido:      pedido.numero_pedido,
     nombre_cliente:     pedido.nombre_cliente,
     modalidad:          pedido.modalidad,
     direccion_entrega:  pedido.direccion_entrega ?? null,
-    formas_pago:        (ferreteria.formas_pago as string[]) ?? [],
+    formas_pago:        formasPago,
     items,
     total:              pedido.total,
   }
@@ -319,6 +331,15 @@ export async function generarYEnviarCotizacionPDF({
   if (items.length === 0) return { ok: false, error: 'La cotización no tiene items disponibles' }
 
   // ── 6. Construir datos del PDF ────────────────────────────────────────────────
+  const METODO_LABELS_COT: Record<string, string> = {
+    efectivo: 'Efectivo', yape: 'Yape', plin: 'Plin',
+    transferencia: 'Transferencia', mercadopago: 'Mercado Pago',
+  }
+  const metodosActivosCot = ((ferreteria as any).metodos_pago_activos as string[]) ?? []
+  const formasPagoCot = ((ferreteria.formas_pago as string[]) ?? []).length > 0
+    ? (ferreteria.formas_pago as string[])
+    : metodosActivosCot.map((m) => METODO_LABELS_COT[m] ?? m)
+
   const datos: DatosComprobante = {
     nombre_ferreteria:    ferreteria.nombre,
     direccion_ferreteria: ferreteria.direccion ?? null,
@@ -326,18 +347,19 @@ export async function generarYEnviarCotizacionPDF({
     logo_url:             logoBase64,
     color:                (ferreteria.color_comprobante as string | null) ?? '#1e40af',
     mensaje_pie:          ferreteria.mensaje_comprobante ?? null,
+    ruc_ferreteria:       (ferreteria as any).ruc ?? undefined,
     numero_comprobante:   numeroCotizacion,
     fecha_emision:        new Date().toISOString(),
     esProforma:           true,
+    tipoDocumento:        'cotizacion' as const,
     numero_pedido:        numeroCotizacion,
     nombre_cliente:       nombreCliente?.trim() || 'Cliente',
     modalidad:            'recojo',
     direccion_entrega:    null,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    formas_pago:          (ferreteria.formas_pago as string[]) ?? [],
-    items,
+    formas_pago:          formasPagoCot,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     total: (cotizacion as any).total as number,
+    items,
   }
 
   // ── 7. Renderizar PDF ─────────────────────────────────────────────────────────

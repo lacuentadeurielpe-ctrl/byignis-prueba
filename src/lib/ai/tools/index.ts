@@ -15,6 +15,7 @@ import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import { enviarMensaje, enviarDocumento, enviarImagen } from '@/lib/whatsapp/ycloud'
 import { enviarMensajeTelegram } from '@/lib/integrations/telegram'
+import { enviarEmail } from '@/lib/integrations/resend'
 import { withTimeout } from '@/lib/utils'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { geocodificarDireccion, resolverGoogleApiKey } from '@/lib/delivery/geocoding'
@@ -380,6 +381,54 @@ export const TOOL_SCHEMAS = [
           },
         },
         required: ['mensaje'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'enviar_cotizacion_email',
+      description:
+        'Envía el PDF de la cotización activa al email del cliente. ' +
+        'Úsalo cuando el cliente pida recibir la cotización por email. ' +
+        'Solo disponible si Resend está configurado en Integraciones.',
+      parameters: {
+        type: 'object',
+        properties: {
+          email_cliente: {
+            type: 'string',
+            description: 'Email del cliente al que enviar la cotización.',
+          },
+          cotizacion_id: {
+            type: 'string',
+            description: 'ID de la cotización a enviar. Si no se especifica, usa la activa de la conversación.',
+          },
+        },
+        required: ['email_cliente'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'notificar_pedido_email',
+      description:
+        'Envía un email interno al dueño de la tienda cuando se crea un pedido. ' +
+        'Úsalo automáticamente al crear un pedido si Resend está configurado. ' +
+        'Solo disponible si Resend está configurado en Integraciones.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pedido_numero: {
+            type: 'string',
+            description: 'Número del pedido a notificar.',
+          },
+          resumen: {
+            type: 'string',
+            description: 'Resumen breve del pedido: cliente, productos principales y total.',
+          },
+        },
+        required: ['pedido_numero', 'resumen'],
       },
     },
   },
@@ -1706,6 +1755,118 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     if (!resultado.ok) {
       return { ok: false, error: resultado.error ?? 'Error enviando a Telegram' }
     }
+
+    return { ok: true, data: { enviado: true } }
+  },
+
+  // ── Enviar cotización por email (Resend) ──────────────────────────────────
+  enviar_cotizacion_email: async (ctx, args) => {
+    requireTenant(ctx)
+
+    const emailCliente  = (args.email_cliente  as string | undefined)?.trim()
+    const cotizacionId  = (args.cotizacion_id  as string | undefined)?.trim()
+
+    if (!emailCliente || !/^[^@]+@[^@]+\.[^@]+$/.test(emailCliente)) {
+      return { ok: false, error: 'email_cliente inválido' }
+    }
+
+    const { data: ferr } = await ctx.supabase
+      .from('ferreterias')
+      .select('nombre, resend_api_key, resend_from_email')
+      .eq('id', ctx.ferreteriaId)
+      .single()
+
+    const apiKey    = (ferr as any)?.resend_api_key    as string | null
+    const fromEmail = (ferr as any)?.resend_from_email as string | null
+    const nombre    = (ferr as any)?.nombre ?? 'Ferretería'
+
+    if (!apiKey || !fromEmail) {
+      return { ok: false, error: 'Resend no configurado', motivo: 'sin_integracion' }
+    }
+
+    // Obtener la cotización (usa la pasada o la más reciente de la conversación)
+    let pdfUrl: string | null = null
+    let cotNumero = ''
+    if (cotizacionId) {
+      const { data: cot } = await ctx.supabase
+        .from('cotizaciones')
+        .select('numero_cotizacion')
+        .eq('id', cotizacionId)
+        .eq('ferreteria_id', ctx.ferreteriaId)
+        .single()
+      cotNumero = (cot as any)?.numero_cotizacion ?? ''
+    } else {
+      const { data: conv } = await ctx.supabase
+        .from('conversaciones')
+        .select('cotizacion_activa_id')
+        .eq('ferreteria_id', ctx.ferreteriaId)
+        .eq('numero_whatsapp', ctx.telefonoCliente)
+        .single()
+      const cidActivo = (conv as any)?.cotizacion_activa_id as string | null
+      if (!cidActivo) return { ok: false, error: 'No hay cotización activa en la conversación' }
+      // Generar PDF y obtener URL
+      const { generarYEnviarCotizacionPDF: gen } = await import('@/lib/pdf/generar-comprobante')
+      const res = await gen({
+        cotizacionId:   cidActivo,
+        ferreteriaId:   ctx.ferreteriaId,
+        telefonoCliente: ctx.telefonoCliente,
+        ycloudApiKey:    ctx.ycloudApiKey,
+      })
+      if (!res.ok) return { ok: false, error: res.error }
+      pdfUrl     = res.pdf_url ?? null
+      cotNumero  = res.numero_comprobante ?? ''
+    }
+
+    const subject = `📋 Cotización ${cotNumero} — ${nombre}`
+    const html    = `
+      <div style="font-family:sans-serif;max-width:560px;margin:auto;">
+        <h2 style="color:#1e40af">Cotización ${cotNumero}</h2>
+        <p>Hola,</p>
+        <p>Adjuntamos tu cotización de <strong>${nombre}</strong>.</p>
+        ${pdfUrl ? `<p><a href="${pdfUrl}" style="background:#1e40af;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Ver PDF de cotización</a></p>` : ''}
+        <p style="color:#666;font-size:12px">Este email fue enviado automáticamente por FerroBot.</p>
+      </div>`
+
+    const resultado = await enviarEmail({ apiKey, from: `${nombre} <${fromEmail}>`, to: emailCliente, subject, html })
+    if (!resultado.ok) return { ok: false, error: resultado.error }
+
+    return { ok: true, data: { enviado: true, email: emailCliente, cotizacion: cotNumero } }
+  },
+
+  // ── Notificar nuevo pedido por email (Resend) ─────────────────────────────
+  notificar_pedido_email: async (ctx, args) => {
+    requireTenant(ctx)
+
+    const pedidoNumero = (args.pedido_numero as string | undefined)?.trim()
+    const resumen      = (args.resumen       as string | undefined)?.trim()
+
+    if (!pedidoNumero) return { ok: false, error: 'pedido_numero es requerido' }
+
+    const { data: ferr } = await ctx.supabase
+      .from('ferreterias')
+      .select('nombre, resend_api_key, resend_from_email')
+      .eq('id', ctx.ferreteriaId)
+      .single()
+
+    const apiKey    = (ferr as any)?.resend_api_key    as string | null
+    const fromEmail = (ferr as any)?.resend_from_email as string | null
+    const nombre    = (ferr as any)?.nombre ?? 'Ferretería'
+
+    if (!apiKey || !fromEmail) {
+      return { ok: false, error: 'Resend no configurado', motivo: 'sin_integracion' }
+    }
+
+    const subject = `🛒 Nuevo pedido ${pedidoNumero} — ${nombre}`
+    const html    = `
+      <div style="font-family:sans-serif;max-width:560px;margin:auto;">
+        <h2 style="color:#059669">Nuevo pedido recibido</h2>
+        <p><strong>Pedido:</strong> ${pedidoNumero}</p>
+        <p>${resumen ?? ''}</p>
+        <p style="color:#666;font-size:12px">FerroBot — ${nombre}</p>
+      </div>`
+
+    const resultado = await enviarEmail({ apiKey, from: `${nombre} <${fromEmail}>`, to: fromEmail, subject, html })
+    if (!resultado.ok) return { ok: false, error: resultado.error }
 
     return { ok: true, data: { enviado: true } }
   },
