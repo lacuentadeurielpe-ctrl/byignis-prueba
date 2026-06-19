@@ -26,7 +26,8 @@ interface BuildOrchestratorPromptParams {
   resumenContexto: string | null
   datosFlujo?: DatosFlujoPedido | null
   perfilBot?: PerfilBot | null
-  cierreCotizacionActivo?: boolean   // F5: si true, agrega cierre natural post-cotización
+  cierreCotizacionActivo?: boolean         // F5: si true, agrega cierre natural post-cotización
+  integracionesConectadas?: string[]       // FASE 3+5: activa hints de tools opcionales
 }
 
 // ── Tags disponibles para interpolar dentro de texto editable (Settings → Bot → Prompt) ────
@@ -308,6 +309,7 @@ export function buildOrchestratorSystemPrompt({
   datosFlujo,
   perfilBot,
   cierreCotizacionActivo = true,
+  integracionesConectadas = [],
 }: BuildOrchestratorPromptParams): string {
   const horario =
     ferreteria.horario_apertura && ferreteria.horario_cierre
@@ -392,6 +394,18 @@ Datos acumulados: ${partes.length > 0 ? partes.join(' | ') : '(ninguno aún)'}
 
   const identidadSeccion = render('identidad')
 
+  // ── Bloque de herramientas opcionales activas (FASE 5) ──────────────────────
+  // Solo se inyectan cuando la integración está conectada, para no confundir al modelo
+  // con tools que no están disponibles en este tenant.
+  const toolsOpcionalesLines: string[] = []
+  if (integracionesConectadas.includes('telegram')) {
+    toolsOpcionalesLines.push('- Alertar al equipo de la tienda por Telegram → `notificar_telegram` (ej: pedido grande, caso especial, queja)')
+  }
+
+  const toolsOpcionalesBlock = toolsOpcionalesLines.length > 0
+    ? `\n## Herramientas adicionales disponibles en este negocio\n${toolsOpcionalesLines.join('\n')}`
+    : ''
+
   const cierreBlock = cierreCotizacionActivo ? `
 
 ## 13. CIERRE NATURAL POST-COTIZACIÓN
@@ -428,7 +442,7 @@ ${catalogoDigitalTexto}
 
 # REGLAS CRÍTICAS — LEER ANTES DE CADA RESPUESTA
 
-${render('reglas_alucinacion')}
+${render('reglas_alucinacion')}${toolsOpcionalesBlock}
 
 ${render('flujo_pedido')}
 

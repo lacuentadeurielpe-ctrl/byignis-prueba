@@ -326,6 +326,7 @@ export async function handleIncomingMessage({
         datosFlujo,
         perfilBot,
         cierreCotizacionActivo,     // F5
+        integracionesConectadas,    // FASE 5: hints de tools opcionales en el prompt
       })
 
       // Typing indicator antes de esperar la respuesta del AI
