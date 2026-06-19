@@ -398,12 +398,30 @@ Datos acumulados: ${partes.length > 0 ? partes.join(' | ') : '(ninguno aún)'}
   // Solo se inyectan cuando la integración está conectada, para no confundir al modelo
   // con tools que no están disponibles en este tenant.
   const toolsOpcionalesLines: string[] = []
+
   if (integracionesConectadas.includes('telegram')) {
-    toolsOpcionalesLines.push('- Alertar al equipo de la tienda por Telegram → `notificar_telegram` (ej: pedido grande, caso especial, queja)')
+    toolsOpcionalesLines.push('- Alertar al equipo por Telegram → `notificar_telegram` (pedido grande, queja, caso especial)')
+    toolsOpcionalesLines.push('- Enviar alerta de stock bajo al canal Telegram → `notificar_stock_bajo_telegram` (cuando el dueño pida reporte de stock o detectes producto crítico)')
   }
+
   if (integracionesConectadas.includes('resend')) {
     toolsOpcionalesLines.push('- Enviar cotización PDF al email del cliente → `enviar_cotizacion_email` (cuando el cliente pide recibirlo por email)')
     toolsOpcionalesLines.push('- Notificar al dueño por email al crear un pedido → `notificar_pedido_email` (úsalo automáticamente en pedidos grandes)')
+    toolsOpcionalesLines.push('- Enviar recordatorio de pago pendiente → `enviar_recordatorio_pago` (cuando el cliente tiene deuda y da su email)')
+  }
+
+  if (integracionesConectadas.includes('mercadopago')) {
+    toolsOpcionalesLines.push('- Generar link de cobro en línea → `generar_link_cobro_mp` (cuando el cliente quiere pagar con tarjeta o pago online)')
+    toolsOpcionalesLines.push('- Verificar si un pago MP fue procesado → `verificar_pago_mp` (cuando el cliente dice que ya pagó)')
+  }
+
+  if (integracionesConectadas.includes('google')) {
+    toolsOpcionalesLines.push('- Enviar email al cliente vía Gmail → `enviar_email_gmail` (cotización, confirmación o mensaje personalizado cuando el cliente da su email)')
+    toolsOpcionalesLines.push('- Crear evento de entrega en Google Calendar → `crear_evento_entrega` (cuando se acuerda hora de entrega con el cliente)')
+    toolsOpcionalesLines.push('- Agendar visita técnica en Calendar → `agendar_visita_tecnica` (cuando el cliente solicita instalación o asesoría en obra)')
+    toolsOpcionalesLines.push('- Ver agenda de hoy en Calendar → `consultar_agenda_hoy` (cuando el cliente pregunta disponibilidad o el dueño pide la agenda)')
+    toolsOpcionalesLines.push('- Guardar PDF de comprobante en Drive → `guardar_comprobante_drive` (automáticamente al generar cotizaciones/notas de venta)')
+    toolsOpcionalesLines.push('- Subir catálogo actualizado a Drive → `subir_catalogo_drive` (cuando el dueño quiere compartir el catálogo)')
   }
 
   const toolsOpcionalesBlock = toolsOpcionalesLines.length > 0

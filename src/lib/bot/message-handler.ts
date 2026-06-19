@@ -169,7 +169,22 @@ export async function handleIncomingMessage({
   if (ferreteria.nubefact_token_enc && ferreteria.nubefact_ruta)          integracionesConectadas.push('nubefact')
   if (ferreteria.telegram_bot_token  && ferreteria.telegram_chat_id)      integracionesConectadas.push('telegram')
   if ((ferreteria as any).resend_api_key && (ferreteria as any).resend_from_email) integracionesConectadas.push('resend')
-  // mercadopago: si en algún momento se agrega la columna, añadir aquí
+
+  // Integraciones que usan integraciones_conectadas (mercadopago, google)
+  try {
+    const { data: integRows } = await supabase
+      .from('integraciones_conectadas')
+      .select('tipo')
+      .eq('ferreteria_id', ferreteria.id)
+      .eq('estado', 'conectado')
+    for (const row of (integRows ?? [])) {
+      if (!integracionesConectadas.includes(row.tipo)) {
+        integracionesConectadas.push(row.tipo)
+      }
+    }
+  } catch {
+    // No crítico — si falla, simplemente no se activan esas tools
+  }
   // F5: Profit engine — preferir columnas directas de ferreterias
   const cierreCotizacionActivo =
     (ferreteria as unknown as { bot_autoclose_cotizacion?: boolean }).bot_autoclose_cotizacion

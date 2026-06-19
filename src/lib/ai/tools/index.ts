@@ -16,6 +16,10 @@ import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import { enviarMensaje, enviarDocumento, enviarImagen } from '@/lib/whatsapp/ycloud'
 import { enviarMensajeTelegram } from '@/lib/integrations/telegram'
 import { enviarEmail } from '@/lib/integrations/resend'
+import { getValidAccessToken } from '@/lib/integrations/google'
+import { enviarEmailGmail } from '@/lib/integrations/gmail'
+import { crearEventoCalendario, listarEventosHoy } from '@/lib/integrations/gcalendar'
+import { subirArchivoaDrive, obtenerOCrearCarpetaFerroBot } from '@/lib/integrations/gdrive'
 import { withTimeout } from '@/lib/utils'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { geocodificarDireccion, resolverGoogleApiKey } from '@/lib/delivery/geocoding'
@@ -430,6 +434,313 @@ export const TOOL_SCHEMAS = [
         },
         required: ['pedido_numero', 'resumen'],
       },
+    },
+  },
+
+  // ── VENTAS: descuento + link MP ───────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'aplicar_descuento',
+      description:
+        'Aplica un descuento (porcentual o monto fijo en soles) a la cotización activa. ' +
+        'Úsalo cuando el cliente pida descuento o el vendedor quiera ajustar el precio.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tipo: { type: 'string', enum: ['porcentaje', 'fijo'], description: 'Tipo de descuento.' },
+          valor: { type: 'number', description: 'Porcentaje (0-100) o monto en soles.' },
+          motivo: { type: 'string', description: 'Razón del descuento (opcional, para registro).' },
+        },
+        required: ['tipo', 'valor'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generar_link_cobro_mp',
+      description:
+        'Genera un link de pago de MercadoPago para que el cliente pague en línea. ' +
+        'Úsalo cuando el cliente quiera pagar con tarjeta o confirme el pedido y prefiera pago online. ' +
+        'Solo disponible si MercadoPago está conectado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pedido_id:    { type: 'string', description: 'ID del pedido a cobrar.' },
+          monto_soles:  { type: 'number', description: 'Monto total a cobrar en soles.' },
+          descripcion:  { type: 'string', description: 'Descripción breve (ej: "Cemento + arena").' },
+        },
+        required: ['monto_soles', 'descripcion'],
+      },
+    },
+  },
+
+  // ── CRM: deuda + email cliente ─────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'consultar_deuda_cliente',
+      description:
+        'Muestra los pedidos sin pagar del cliente actual. ' +
+        'Úsalo cuando el cliente pregunte por su saldo pendiente o para verificar crédito antes de un pedido grande.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limite: { type: 'integer', description: 'Máximo de pedidos a mostrar (default 5).', default: 5 },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'registrar_email_cliente',
+      description:
+        'Guarda o actualiza el email del cliente en su perfil CRM. ' +
+        'Úsalo cuando el cliente mencione su email explícitamente.',
+      parameters: {
+        type: 'object',
+        properties: {
+          email: { type: 'string', description: 'Dirección de email del cliente.' },
+        },
+        required: ['email'],
+      },
+    },
+  },
+
+  // ── COMUNICACIONES: Gmail + recordatorio ──────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'enviar_email_gmail',
+      description:
+        'Envía un email al cliente usando la cuenta Gmail conectada de la tienda. ' +
+        'Úsalo para cotizaciones, confirmaciones de pedido o mensajes personalizados cuando el cliente da su email. ' +
+        'Solo disponible si Google está conectado en Integraciones.',
+      parameters: {
+        type: 'object',
+        properties: {
+          email_destino: { type: 'string', description: 'Email del destinatario.' },
+          asunto:        { type: 'string', description: 'Asunto del email.' },
+          cuerpo_html:   { type: 'string', description: 'Cuerpo del email en HTML simple.' },
+        },
+        required: ['email_destino', 'asunto', 'cuerpo_html'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'enviar_recordatorio_pago',
+      description:
+        'Envía un recordatorio de pago pendiente al cliente por email. ' +
+        'Úsalo cuando el cliente tiene pedidos sin pagar y da su email. ' +
+        'Requiere Resend o Google conectado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          email_cliente: { type: 'string', description: 'Email del cliente.' },
+          pedidos:       { type: 'string', description: 'Descripción de los pedidos pendientes (números y montos).' },
+          total_soles:   { type: 'number', description: 'Monto total adeudado.' },
+        },
+        required: ['email_cliente', 'pedidos', 'total_soles'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'notificar_stock_bajo_telegram',
+      description:
+        'Envía al canal Telegram la lista de productos cuyo stock está por debajo del mínimo. ' +
+        'Úsalo cuando el dueño pida un reporte de stock o cuando el bot detecte stock crítico en una consulta. ' +
+        'Solo disponible si Telegram está configurado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          productos: {
+            type: 'string',
+            description: 'Lista de productos con stock bajo (texto con nombres y cantidades).',
+          },
+        },
+        required: ['productos'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'guardar_comprobante_drive',
+      description:
+        'Sube el PDF de un comprobante (cotización, nota de venta) a la carpeta FerroBot en Google Drive. ' +
+        'Úsalo automáticamente después de generar un comprobante si Google Drive está conectado. ' +
+        'Solo disponible si Google está conectado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pdf_url:  { type: 'string', description: 'URL pública del PDF en Supabase Storage.' },
+          nombre:   { type: 'string', description: 'Nombre del archivo sin extensión (ej: "COT-001-Juan").' },
+          tipo:     { type: 'string', enum: ['cotizacion', 'nota_venta', 'boleta', 'factura'], description: 'Tipo de documento.' },
+        },
+        required: ['pdf_url', 'nombre', 'tipo'],
+      },
+    },
+  },
+
+  // ── AGENDA: Google Calendar ───────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'crear_evento_entrega',
+      description:
+        'Crea un evento en Google Calendar para la entrega de un pedido. ' +
+        'Úsalo cuando se confirma un pedido con delivery y se acuerda hora de entrega con el cliente. ' +
+        'Solo disponible si Google está conectado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          titulo:      { type: 'string', description: 'Título del evento (ej: "Entrega pedido 001 — Juan Pérez").' },
+          fecha_hora_inicio: { type: 'string', description: 'Fecha y hora de inicio en formato ISO 8601 (ej: "2025-06-20T10:00:00-05:00").' },
+          fecha_hora_fin:    { type: 'string', description: 'Fecha y hora de fin en formato ISO 8601.' },
+          descripcion: { type: 'string', description: 'Detalle del pedido y dirección de entrega.' },
+          email_cliente: { type: 'string', description: 'Email del cliente para enviarle la invitación (opcional).' },
+        },
+        required: ['titulo', 'fecha_hora_inicio', 'fecha_hora_fin'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'agendar_visita_tecnica',
+      description:
+        'Crea una cita de visita o instalación técnica en Google Calendar. ' +
+        'Úsalo cuando el cliente solicita instalación, medición o asesoría en obra. ' +
+        'Solo disponible si Google está conectado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          titulo:      { type: 'string', description: 'Título (ej: "Visita técnica — Av. Lima 123").' },
+          fecha_hora_inicio: { type: 'string', description: 'Inicio en formato ISO 8601.' },
+          fecha_hora_fin:    { type: 'string', description: 'Fin en formato ISO 8601.' },
+          descripcion: { type: 'string', description: 'Notas: cliente, productos a instalar, dirección.' },
+          email_cliente: { type: 'string', description: 'Email del cliente (opcional).' },
+        },
+        required: ['titulo', 'fecha_hora_inicio', 'fecha_hora_fin'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'consultar_agenda_hoy',
+      description:
+        'Lista los eventos de Google Calendar del día de hoy. ' +
+        'Úsalo cuando el cliente pregunte "¿tienen agenda hoy?" o para verificar disponibilidad. ' +
+        'Solo disponible si Google está conectado.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+
+  // ── PAGOS: MP verificar + pago manual + saldo ─────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'verificar_pago_mp',
+      description:
+        'Consulta el estado de un pago en MercadoPago por ID de preferencia. ' +
+        'Úsalo cuando el cliente dice que ya pagó y quieres confirmar la transacción. ' +
+        'Solo disponible si MercadoPago está conectado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          preference_id: { type: 'string', description: 'ID de la preferencia o del pago en MercadoPago.' },
+        },
+        required: ['preference_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'registrar_pago_manual',
+      description:
+        'Registra un abono o pago recibido de forma manual (efectivo, Yape, transferencia) en un pedido. ' +
+        'Úsalo cuando el cliente confirma que pagó fuera de MercadoPago.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pedido_id:    { type: 'string', description: 'ID del pedido.' },
+          monto_soles:  { type: 'number', description: 'Monto recibido en soles.' },
+          metodo:       { type: 'string', enum: ['efectivo', 'yape', 'plin', 'transferencia', 'otro'], description: 'Método de pago.' },
+          notas:        { type: 'string', description: 'Notas adicionales (número de operación, etc.).' },
+        },
+        required: ['pedido_id', 'monto_soles', 'metodo'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'consultar_saldo_pendiente',
+      description:
+        'Calcula el saldo pendiente de un pedido, considerando el total y los abonos registrados. ' +
+        'Úsalo cuando el cliente pregunta cuánto le falta por pagar.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pedido_id: { type: 'string', description: 'ID del pedido.' },
+        },
+        required: ['pedido_id'],
+      },
+    },
+  },
+
+  // ── INVENTARIO ─────────────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'listar_stock_bajo',
+      description:
+        'Lista los productos cuyo stock es igual o menor al mínimo configurado. ' +
+        'Úsalo cuando el dueño pida reporte de stock o cuando el bot detecte stock crítico.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limite: { type: 'integer', description: 'Máximo de productos a listar (default 15).', default: 15 },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'consultar_rotacion_producto',
+      description:
+        'Muestra cuántas unidades de un producto se vendieron en los últimos N días. ' +
+        'Úsalo cuando el dueño pregunte por el movimiento de un producto.',
+      parameters: {
+        type: 'object',
+        properties: {
+          producto_nombre: { type: 'string', description: 'Nombre del producto a consultar.' },
+          dias:            { type: 'integer', description: 'Período en días (default 30).', default: 30 },
+        },
+        required: ['producto_nombre'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'subir_catalogo_drive',
+      description:
+        'Exporta el catálogo de productos como CSV y lo sube a Google Drive. ' +
+        'Úsalo cuando el dueño quiera compartir el catálogo actualizado. ' +
+        'Solo disponible si Google está conectado.',
+      parameters: { type: 'object', properties: {}, required: [] },
     },
   },
 ] as const
@@ -1869,5 +2180,697 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     if (!resultado.ok) return { ok: false, error: resultado.error }
 
     return { ok: true, data: { enviado: true } }
+  },
+
+  // ── Helper interno: obtiene tokens Google del tenant ─────────────────────
+  // (se reutiliza en todos los executors de Google)
+
+  // ── Aplicar descuento a cotización activa ─────────────────────────────────
+  aplicar_descuento: async (ctx, args) => {
+    requireTenant(ctx)
+    const tipo  = (args.tipo  as 'porcentaje' | 'fijo')
+    const valor = args.valor  as number
+    const motivo = (args.motivo as string | undefined) ?? ''
+
+    if (!['porcentaje', 'fijo'].includes(tipo)) return { ok: false, error: 'tipo inválido' }
+    if (typeof valor !== 'number' || valor <= 0) return { ok: false, error: 'valor inválido' }
+
+    // Buscar cotización activa de la conversación
+    const { data: conv } = await ctx.supabase
+      .from('conversaciones')
+      .select('cotizacion_activa_id')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('numero_whatsapp', ctx.telefonoCliente)
+      .single()
+
+    const cotId = (conv as any)?.cotizacion_activa_id
+    if (!cotId) return { ok: false, error: 'No hay cotización activa' }
+
+    const { data: cot } = await ctx.supabase
+      .from('cotizaciones')
+      .select('id, total, descuento_aplicado')
+      .eq('id', cotId)
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .single()
+
+    if (!cot) return { ok: false, error: 'Cotización no encontrada' }
+
+    const total = cot.total as number
+    const descuento = tipo === 'porcentaje'
+      ? Math.min(total, total * (valor / 100))
+      : Math.min(total, valor)
+
+    const nuevoTotal = Math.max(0, total - descuento)
+
+    await ctx.supabase
+      .from('cotizaciones')
+      .update({
+        descuento_aplicado: descuento,
+        total: nuevoTotal,
+        ...(motivo ? { notas: motivo } : {}),
+      })
+      .eq('id', cotId)
+
+    return {
+      ok: true,
+      data: {
+        descuento_aplicado: descuento.toFixed(2),
+        nuevo_total:        nuevoTotal.toFixed(2),
+        tipo,
+        valor,
+      },
+    }
+  },
+
+  // ── Generar link de cobro MercadoPago ─────────────────────────────────────
+  generar_link_cobro_mp: async (ctx, args) => {
+    requireTenant(ctx)
+    const montoSoles = args.monto_soles as number
+    const descripcion = (args.descripcion as string | undefined)?.trim() ?? 'Pedido FerroBot'
+
+    if (!montoSoles || montoSoles <= 0) return { ok: false, error: 'monto_soles inválido' }
+
+    const { data: integ } = await ctx.supabase
+      .from('integraciones_conectadas')
+      .select('metadata, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('tipo', 'mercadopago')
+      .single()
+
+    if (!integ || integ.estado !== 'conectado') {
+      return { ok: false, error: 'MercadoPago no conectado', motivo: 'sin_integracion' }
+    }
+
+    const accessToken = (integ.metadata as any)?.access_token as string | null
+    if (!accessToken) return { ok: false, error: 'Access token de MercadoPago no disponible' }
+
+    const { data: ferr } = await ctx.supabase
+      .from('ferreterias')
+      .select('nombre')
+      .eq('id', ctx.ferreteriaId)
+      .single()
+
+    const nombre = (ferr as any)?.nombre ?? 'Ferretería'
+
+    const res = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        items: [{
+          title:     descripcion,
+          quantity:  1,
+          unit_price: montoSoles,
+          currency_id: 'PEN',
+        }],
+        back_urls: {
+          success: `${process.env.NEXT_PUBLIC_APP_URL}/pago/gracias`,
+          failure: `${process.env.NEXT_PUBLIC_APP_URL}/pago/error`,
+        },
+        statement_descriptor: nombre.slice(0, 22),
+      }),
+      signal: AbortSignal.timeout(10_000),
+    })
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      return { ok: false, error: (err as any)?.message ?? `MP error ${res.status}` }
+    }
+
+    const pref = await res.json()
+    return {
+      ok: true,
+      data: {
+        preference_id: pref.id,
+        link_pago:     pref.init_point,
+        monto_soles:   montoSoles,
+      },
+    }
+  },
+
+  // ── Consultar deuda del cliente ────────────────────────────────────────────
+  consultar_deuda_cliente: async (ctx, args) => {
+    requireTenant(ctx)
+    const limite = Math.min(20, (args.limite as number | undefined) ?? 5)
+
+    const { data: pedidos } = await ctx.supabase
+      .from('pedidos')
+      .select('numero_pedido, total, estado, created_at')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('numero_whatsapp_cliente', ctx.telefonoCliente)
+      .in('estado', ['pendiente', 'confirmado', 'en_preparacion', 'listo'])
+      .order('created_at', { ascending: false })
+      .limit(limite)
+
+    const items = (pedidos ?? []) as Array<{
+      numero_pedido: string
+      total: number
+      estado: string
+      created_at: string
+    }>
+
+    const totalDeuda = items.reduce((sum, p) => sum + (p.total ?? 0), 0)
+
+    return {
+      ok: true,
+      data: {
+        pedidos_pendientes: items.map((p) => ({
+          numero: p.numero_pedido,
+          total:  `S/ ${(p.total ?? 0).toFixed(2)}`,
+          estado: p.estado,
+        })),
+        total_adeudado: `S/ ${totalDeuda.toFixed(2)}`,
+        cantidad: items.length,
+      },
+    }
+  },
+
+  // ── Registrar email del cliente ────────────────────────────────────────────
+  registrar_email_cliente: async (ctx, args) => {
+    requireTenant(ctx)
+    const email = (args.email as string | undefined)?.trim()
+    if (!email || !/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
+      return { ok: false, error: 'Email inválido' }
+    }
+
+    await ctx.supabase
+      .from('clientes')
+      .update({ email })
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('numero_whatsapp', ctx.telefonoCliente)
+
+    return { ok: true, data: { email_guardado: email } }
+  },
+
+  // ── Gmail: enviar email ────────────────────────────────────────────────────
+  enviar_email_gmail: async (ctx, args) => {
+    requireTenant(ctx)
+    const emailDestino = (args.email_destino as string | undefined)?.trim()
+    const asunto       = (args.asunto       as string | undefined)?.trim()
+    const cuerpoHtml   = (args.cuerpo_html  as string | undefined)?.trim()
+
+    if (!emailDestino || !asunto || !cuerpoHtml) {
+      return { ok: false, error: 'email_destino, asunto y cuerpo_html son requeridos' }
+    }
+
+    const { data: integ } = await ctx.supabase
+      .from('integraciones_conectadas')
+      .select('metadata, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('tipo', 'google')
+      .single()
+
+    if (!integ || integ.estado !== 'conectado') {
+      return { ok: false, error: 'Google no conectado', motivo: 'sin_integracion' }
+    }
+
+    const tokens = integ.metadata as any
+    const { accessToken } = await getValidAccessToken(tokens)
+
+    const { data: ferr } = await ctx.supabase
+      .from('ferreterias')
+      .select('nombre')
+      .eq('id', ctx.ferreteriaId)
+      .single()
+    const nombre = (ferr as any)?.nombre ?? 'Ferretería'
+
+    const res = await enviarEmailGmail({
+      accessToken,
+      from:      `${nombre} <${tokens.email}>`,
+      to:        emailDestino,
+      subject:   asunto,
+      html:      cuerpoHtml,
+    })
+
+    if (!res.ok) return { ok: false, error: res.error }
+    return { ok: true, data: { enviado: true, para: emailDestino } }
+  },
+
+  // ── Recordatorio de pago ───────────────────────────────────────────────────
+  enviar_recordatorio_pago: async (ctx, args) => {
+    requireTenant(ctx)
+    const emailCliente = (args.email_cliente as string | undefined)?.trim()
+    const pedidos      = (args.pedidos      as string | undefined)?.trim()
+    const totalSoles   = args.total_soles   as number
+
+    if (!emailCliente || !pedidos) return { ok: false, error: 'email_cliente y pedidos son requeridos' }
+
+    const { data: ferr } = await ctx.supabase
+      .from('ferreterias')
+      .select('nombre, resend_api_key, resend_from_email')
+      .eq('id', ctx.ferreteriaId)
+      .single()
+
+    const nombre    = (ferr as any)?.nombre           ?? 'Ferretería'
+    const apiKey    = (ferr as any)?.resend_api_key   as string | null
+    const fromEmail = (ferr as any)?.resend_from_email as string | null
+
+    const html = `
+      <div style="font-family:sans-serif;max-width:560px;margin:auto;">
+        <h2 style="color:#dc2626">Recordatorio de pago pendiente</h2>
+        <p>Hola, te recordamos que tienes pagos pendientes con <strong>${nombre}</strong>:</p>
+        <p style="background:#fef2f2;padding:12px;border-radius:8px;">${pedidos}</p>
+        <p><strong>Total adeudado: S/ ${(totalSoles ?? 0).toFixed(2)}</strong></p>
+        <p>Para consultas, escríbenos por WhatsApp. ¡Gracias!</p>
+        <p style="color:#666;font-size:12px">FerroBot — ${nombre}</p>
+      </div>`
+
+    if (apiKey && fromEmail) {
+      const res = await enviarEmail({ apiKey, from: `${nombre} <${fromEmail}>`, to: emailCliente, subject: `Recordatorio de pago — ${nombre}`, html })
+      if (!res.ok) return { ok: false, error: res.error }
+      return { ok: true, data: { enviado: true, via: 'resend' } }
+    }
+
+    // Fallback: Gmail si está conectado
+    const { data: integ } = await ctx.supabase
+      .from('integraciones_conectadas')
+      .select('metadata, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('tipo', 'google')
+      .single()
+
+    if (integ?.estado === 'conectado') {
+      const tokens = integ.metadata as any
+      const { accessToken } = await getValidAccessToken(tokens)
+      const res = await enviarEmailGmail({
+        accessToken,
+        from:    `${nombre} <${tokens.email}>`,
+        to:      emailCliente,
+        subject: `Recordatorio de pago — ${nombre}`,
+        html,
+      })
+      if (!res.ok) return { ok: false, error: res.error }
+      return { ok: true, data: { enviado: true, via: 'gmail' } }
+    }
+
+    return { ok: false, error: 'Ningún servicio de email configurado', motivo: 'sin_integracion' }
+  },
+
+  // ── Telegram: alerta stock bajo ────────────────────────────────────────────
+  notificar_stock_bajo_telegram: async (ctx, args) => {
+    requireTenant(ctx)
+    const productos = (args.productos as string | undefined)?.trim()
+    if (!productos) return { ok: false, error: 'productos es requerido' }
+
+    const { data: ferr } = await ctx.supabase
+      .from('ferreterias')
+      .select('nombre, telegram_bot_token, telegram_chat_id')
+      .eq('id', ctx.ferreteriaId)
+      .single()
+
+    const botToken = (ferr as any)?.telegram_bot_token as string | null
+    const chatId   = (ferr as any)?.telegram_chat_id   as string | null
+    const nombre   = (ferr as any)?.nombre ?? 'Ferretería'
+
+    if (!botToken || !chatId) return { ok: false, error: 'Telegram no configurado', motivo: 'sin_integracion' }
+
+    const texto = `⚠️ *${nombre}* — Stock bajo\n\n${productos}`
+    const res = await enviarMensajeTelegram({ botToken, chatId, texto })
+    if (!res.ok) return { ok: false, error: res.error }
+    return { ok: true, data: { enviado: true } }
+  },
+
+  // ── Drive: guardar comprobante ─────────────────────────────────────────────
+  guardar_comprobante_drive: async (ctx, args) => {
+    requireTenant(ctx)
+    const pdfUrl  = (args.pdf_url as string | undefined)?.trim()
+    const nombre  = (args.nombre  as string | undefined)?.trim()
+    const tipo    = (args.tipo    as string | undefined)?.trim() ?? 'documento'
+
+    if (!pdfUrl || !nombre) return { ok: false, error: 'pdf_url y nombre son requeridos' }
+
+    const { data: integ } = await ctx.supabase
+      .from('integraciones_conectadas')
+      .select('metadata, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('tipo', 'google')
+      .single()
+
+    if (!integ || integ.estado !== 'conectado') {
+      return { ok: false, error: 'Google Drive no conectado', motivo: 'sin_integracion' }
+    }
+
+    const tokens = integ.metadata as any
+    const { accessToken } = await getValidAccessToken(tokens)
+
+    // Descargar PDF
+    const pdfRes = await fetch(pdfUrl, { signal: AbortSignal.timeout(20_000) })
+    if (!pdfRes.ok) return { ok: false, error: 'No se pudo descargar el PDF' }
+    const pdfArrayBuffer = await pdfRes.arrayBuffer()
+
+    const folderId = await obtenerOCrearCarpetaFerroBot(accessToken)
+
+    const res = await subirArchivoaDrive({
+      accessToken,
+      nombre:   `${nombre}.pdf`,
+      mimeType: 'application/pdf',
+      contenido: pdfArrayBuffer,
+      folderId:  folderId ?? undefined,
+    })
+
+    if (!res.ok) return { ok: false, error: res.error }
+    return { ok: true, data: { file_id: res.fileId, link: res.webLink, tipo } }
+  },
+
+  // ── Calendar: crear evento de entrega ─────────────────────────────────────
+  crear_evento_entrega: async (ctx, args) => {
+    requireTenant(ctx)
+    const titulo     = (args.titulo      as string | undefined)?.trim()
+    const inicio     = (args.fecha_hora_inicio as string | undefined)?.trim()
+    const fin        = (args.fecha_hora_fin    as string | undefined)?.trim()
+    const descripcion = (args.descripcion as string | undefined)?.trim()
+    const emailCli   = (args.email_cliente as string | undefined)?.trim()
+
+    if (!titulo || !inicio || !fin) return { ok: false, error: 'titulo, fecha_hora_inicio y fecha_hora_fin son requeridos' }
+
+    const { data: integ } = await ctx.supabase
+      .from('integraciones_conectadas')
+      .select('metadata, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('tipo', 'google')
+      .single()
+
+    if (!integ || integ.estado !== 'conectado') {
+      return { ok: false, error: 'Google Calendar no conectado', motivo: 'sin_integracion' }
+    }
+
+    const tokens = integ.metadata as any
+    const { accessToken } = await getValidAccessToken(tokens)
+
+    const res = await crearEventoCalendario(accessToken, {
+      summary:     titulo,
+      description: descripcion,
+      startIso:    inicio,
+      endIso:      fin,
+      calendarId:  tokens.calendar_id ?? 'primary',
+      attendees:   emailCli ? [emailCli] : [],
+    })
+
+    if (!res.ok) return { ok: false, error: res.error }
+    return { ok: true, data: { event_id: res.eventId, link: res.link } }
+  },
+
+  // ── Calendar: agendar visita técnica ──────────────────────────────────────
+  agendar_visita_tecnica: async (ctx, args) => {
+    requireTenant(ctx)
+    const titulo     = (args.titulo      as string | undefined)?.trim()
+    const inicio     = (args.fecha_hora_inicio as string | undefined)?.trim()
+    const fin        = (args.fecha_hora_fin    as string | undefined)?.trim()
+    const descripcion = (args.descripcion as string | undefined)?.trim()
+    const emailCli   = (args.email_cliente as string | undefined)?.trim()
+
+    if (!titulo || !inicio || !fin) return { ok: false, error: 'titulo, fecha_hora_inicio y fecha_hora_fin son requeridos' }
+
+    const { data: integ } = await ctx.supabase
+      .from('integraciones_conectadas')
+      .select('metadata, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('tipo', 'google')
+      .single()
+
+    if (!integ || integ.estado !== 'conectado') {
+      return { ok: false, error: 'Google Calendar no conectado', motivo: 'sin_integracion' }
+    }
+
+    const tokens = integ.metadata as any
+    const { accessToken } = await getValidAccessToken(tokens)
+
+    const res = await crearEventoCalendario(accessToken, {
+      summary:     `🔧 ${titulo}`,
+      description: descripcion,
+      startIso:    inicio,
+      endIso:      fin,
+      calendarId:  tokens.calendar_id ?? 'primary',
+      attendees:   emailCli ? [emailCli] : [],
+    })
+
+    if (!res.ok) return { ok: false, error: res.error }
+    return { ok: true, data: { event_id: res.eventId, link: res.link } }
+  },
+
+  // ── Calendar: consultar agenda de hoy ─────────────────────────────────────
+  consultar_agenda_hoy: async (ctx) => {
+    requireTenant(ctx)
+
+    const { data: integ } = await ctx.supabase
+      .from('integraciones_conectadas')
+      .select('metadata, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('tipo', 'google')
+      .single()
+
+    if (!integ || integ.estado !== 'conectado') {
+      return { ok: false, error: 'Google Calendar no conectado', motivo: 'sin_integracion' }
+    }
+
+    const tokens = integ.metadata as any
+    const { accessToken } = await getValidAccessToken(tokens)
+
+    const res = await listarEventosHoy(accessToken, tokens.calendar_id ?? 'primary')
+    if (!res.ok) return { ok: false, error: res.error }
+
+    return {
+      ok: true,
+      data: {
+        eventos: res.eventos ?? [],
+        total:   (res.eventos ?? []).length,
+      },
+    }
+  },
+
+  // ── MercadoPago: verificar pago ────────────────────────────────────────────
+  verificar_pago_mp: async (ctx, args) => {
+    requireTenant(ctx)
+    const preferenceId = (args.preference_id as string | undefined)?.trim()
+    if (!preferenceId) return { ok: false, error: 'preference_id es requerido' }
+
+    const { data: integ } = await ctx.supabase
+      .from('integraciones_conectadas')
+      .select('metadata, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('tipo', 'mercadopago')
+      .single()
+
+    if (!integ || integ.estado !== 'conectado') {
+      return { ok: false, error: 'MercadoPago no conectado', motivo: 'sin_integracion' }
+    }
+
+    const accessToken = (integ.metadata as any)?.access_token as string | null
+    if (!accessToken) return { ok: false, error: 'Token MP no disponible' }
+
+    const res = await fetch(
+      `https://api.mercadopago.com/checkout/preferences/${preferenceId}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal:  AbortSignal.timeout(10_000),
+      },
+    )
+
+    if (!res.ok) {
+      return { ok: false, error: `MP error ${res.status}` }
+    }
+
+    const pref = await res.json()
+    return {
+      ok: true,
+      data: {
+        estado:     pref.status ?? 'desconocido',
+        preference_id: pref.id,
+        items:      (pref.items ?? []).map((i: any) => ({ nombre: i.title, monto: i.unit_price })),
+      },
+    }
+  },
+
+  // ── Pagos: registrar pago manual ───────────────────────────────────────────
+  registrar_pago_manual: async (ctx, args) => {
+    requireTenant(ctx)
+    const pedidoId  = (args.pedido_id as string | undefined)?.trim()
+    const monto     = args.monto_soles as number
+    const metodo    = (args.metodo    as string | undefined)?.trim() ?? 'efectivo'
+    const notas     = (args.notas     as string | undefined)?.trim()
+
+    if (!pedidoId) return { ok: false, error: 'pedido_id es requerido' }
+    if (!monto || monto <= 0) return { ok: false, error: 'monto_soles inválido' }
+
+    const { data: pedido } = await ctx.supabase
+      .from('pedidos')
+      .select('id, total, numero_pedido')
+      .eq('id', pedidoId)
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .single()
+
+    if (!pedido) return { ok: false, error: 'Pedido no encontrado' }
+
+    await ctx.supabase
+      .from('pagos_registrados')
+      .insert({
+        pedido_id:    pedidoId,
+        ferreteria_id: ctx.ferreteriaId,
+        monto,
+        metodo_pago:  metodo,
+        notas:        notas ?? null,
+        registrado_por: 'bot',
+      })
+
+    return {
+      ok: true,
+      data: {
+        pedido_numero: (pedido as any).numero_pedido,
+        monto_registrado: `S/ ${monto.toFixed(2)}`,
+        metodo,
+      },
+    }
+  },
+
+  // ── Pagos: consultar saldo pendiente ──────────────────────────────────────
+  consultar_saldo_pendiente: async (ctx, args) => {
+    requireTenant(ctx)
+    const pedidoId = (args.pedido_id as string | undefined)?.trim()
+    if (!pedidoId) return { ok: false, error: 'pedido_id es requerido' }
+
+    const { data: pedido } = await ctx.supabase
+      .from('pedidos')
+      .select('total, numero_pedido')
+      .eq('id', pedidoId)
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .single()
+
+    if (!pedido) return { ok: false, error: 'Pedido no encontrado' }
+
+    const { data: pagos } = await ctx.supabase
+      .from('pagos_registrados')
+      .select('monto')
+      .eq('pedido_id', pedidoId)
+
+    const totalPagado = ((pagos ?? []) as any[]).reduce((sum, p) => sum + (p.monto ?? 0), 0)
+    const totalPedido = (pedido as any).total as number
+    const saldo = Math.max(0, totalPedido - totalPagado)
+
+    return {
+      ok: true,
+      data: {
+        pedido_numero:  (pedido as any).numero_pedido,
+        total_pedido:   `S/ ${totalPedido.toFixed(2)}`,
+        total_pagado:   `S/ ${totalPagado.toFixed(2)}`,
+        saldo_pendiente:`S/ ${saldo.toFixed(2)}`,
+        pagado_completo: saldo === 0,
+      },
+    }
+  },
+
+  // ── Inventario: listar stock bajo ─────────────────────────────────────────
+  listar_stock_bajo: async (ctx, args) => {
+    requireTenant(ctx)
+    const limite = Math.min(30, (args.limite as number | undefined) ?? 15)
+
+    const { data: productos } = await ctx.supabase
+      .from('productos')
+      .select('nombre, stock, stock_minimo, unidad')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('activo', true)
+      .not('stock_minimo', 'is', null)
+      .order('stock', { ascending: true })
+      .limit(limite * 2)
+
+    const bajos = ((productos ?? []) as any[]).filter(
+      (p) => p.stock_minimo !== null && (p.stock ?? 0) <= (p.stock_minimo ?? 0)
+    ).slice(0, limite)
+
+    return {
+      ok: true,
+      data: {
+        productos_con_stock_bajo: bajos.map((p) => ({
+          nombre:  p.nombre,
+          stock:   p.stock ?? 0,
+          minimo:  p.stock_minimo,
+          unidad:  p.unidad ?? 'und',
+        })),
+        total: bajos.length,
+      },
+    }
+  },
+
+  // ── Inventario: rotación de producto ──────────────────────────────────────
+  consultar_rotacion_producto: async (ctx, args) => {
+    requireTenant(ctx)
+    const productoNombre = (args.producto_nombre as string | undefined)?.trim()
+    const dias = Math.min(365, (args.dias as number | undefined) ?? 30)
+
+    if (!productoNombre) return { ok: false, error: 'producto_nombre es requerido' }
+
+    const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data: lineas } = await ctx.supabase
+      .from('cotizacion_lineas')
+      .select('cantidad, precio_unitario, cotizaciones!inner(estado, created_at, ferreteria_id)')
+      .eq('cotizaciones.ferreteria_id', ctx.ferreteriaId)
+      .eq('cotizaciones.estado', 'convertida')
+      .gte('cotizaciones.created_at', desde)
+      .ilike('nombre_producto', `%${productoNombre}%`)
+
+    const unidadesVendidas = ((lineas ?? []) as any[]).reduce((sum, l) => sum + (l.cantidad ?? 0), 0)
+    const ingresoTotal     = ((lineas ?? []) as any[]).reduce((sum, l) => sum + ((l.cantidad ?? 0) * (l.precio_unitario ?? 0)), 0)
+
+    return {
+      ok: true,
+      data: {
+        producto:         productoNombre,
+        periodo_dias:     dias,
+        unidades_vendidas: unidadesVendidas,
+        ingreso_total:    `S/ ${ingresoTotal.toFixed(2)}`,
+        promedio_diario:  (unidadesVendidas / dias).toFixed(2),
+      },
+    }
+  },
+
+  // ── Inventario: subir catálogo a Drive ────────────────────────────────────
+  subir_catalogo_drive: async (ctx) => {
+    requireTenant(ctx)
+
+    const { data: integ } = await ctx.supabase
+      .from('integraciones_conectadas')
+      .select('metadata, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('tipo', 'google')
+      .single()
+
+    if (!integ || integ.estado !== 'conectado') {
+      return { ok: false, error: 'Google Drive no conectado', motivo: 'sin_integracion' }
+    }
+
+    const { data: productos } = await ctx.supabase
+      .from('productos')
+      .select('nombre, descripcion, precio, stock, unidad, categoria')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('activo', true)
+      .order('nombre')
+      .limit(5000)
+
+    const rows = (productos ?? []) as any[]
+    const headers = 'Nombre,Descripción,Precio (S/),Stock,Unidad,Categoría'
+    const csvLines = rows.map((p) =>
+      [p.nombre, p.descripcion ?? '', p.precio, p.stock ?? 0, p.unidad ?? '', p.categoria ?? '']
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(',')
+    )
+    const csv = [headers, ...csvLines].join('\n')
+
+    const tokens = integ.metadata as any
+    const { accessToken } = await getValidAccessToken(tokens)
+    const folderId = await obtenerOCrearCarpetaFerroBot(accessToken)
+
+    const fecha = new Date().toLocaleDateString('es-PE').replace(/\//g, '-')
+    const res = await subirArchivoaDrive({
+      accessToken,
+      nombre:   `Catalogo_${fecha}.csv`,
+      mimeType: 'text/csv',
+      contenido: new TextEncoder().encode(csv).buffer as ArrayBuffer,
+      folderId:  folderId ?? undefined,
+    })
+
+    if (!res.ok) return { ok: false, error: res.error }
+    return { ok: true, data: { link: res.webLink, productos: rows.length, fecha } }
   },
 }
