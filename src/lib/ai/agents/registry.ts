@@ -47,6 +47,7 @@ export const AGENT_REGISTRY: AgentDef[] = [
     accent: '#22c55e',
     tools: [
       { name: 'guardar_cotizacion',          label: 'Guardar cotización',      desc: 'Crea el registro de cotización en BD' },
+      { name: 'generar_cotizacion_pdf',      label: 'PDF de cotización',       desc: 'Genera y envía por WhatsApp el PDF de la cotización activa' },
       { name: 'crear_pedido',                label: 'Crear pedido',            desc: 'Confirma y crea el pedido definitivo' },
       { name: 'agregar_a_pedido_reciente',   label: 'Agregar al pedido',       desc: 'Agrega productos al pedido más reciente (ventana de gracia)' },
       { name: 'modificar_pedido',            label: 'Modificar pedido',        desc: 'Cambia cantidades o elimina productos de un pedido pendiente' },

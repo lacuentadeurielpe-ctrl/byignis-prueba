@@ -40,6 +40,7 @@ export interface ResultadoComprobante {
   numero_comprobante?: string
   pdf_url?: string
   comprobante_id?: string
+  enviado?: boolean
   error?: string
 }
 
@@ -255,6 +256,136 @@ export async function generarYEnviarComprobante({
     numero_comprobante: numeroComprobante,
     pdf_url: publicUrl,
     comprobante_id: comprobante.id,
+  }
+}
+
+// ── PDF de cotización/proforma (sin pedido aún) ───────────────────────────────
+
+export async function generarYEnviarCotizacionPDF({
+  cotizacionId,
+  ferreteriaId,
+  telefonoCliente,
+  nombreCliente,
+  ycloudApiKey,
+}: {
+  cotizacionId: string
+  ferreteriaId: string
+  telefonoCliente: string
+  nombreCliente?: string
+  ycloudApiKey?: string
+}): Promise<ResultadoComprobante> {
+  const supabase = createAdminClient()
+  const facturacionRepo = new FacturacionRepository(supabase)
+
+  // ── 1. Cargar cotización + items ─────────────────────────────────────────────
+  const { data: cotizacion, error: errCot } = await supabase
+    .from('cotizaciones')
+    .select('id, total, items_cotizacion(*)')
+    .eq('id', cotizacionId)
+    .eq('ferreteria_id', ferreteriaId)
+    .single()
+
+  if (errCot || !cotizacion) return { ok: false, error: 'Cotización no encontrada' }
+
+  // ── 2. Cargar branding de la ferretería ──────────────────────────────────────
+  let ferreteria
+  try {
+    ferreteria = await facturacionRepo.obtenerFerreteriaComprobanteInfo(ferreteriaId)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, error: `Ferretería no encontrada: ${msg}` }
+  }
+
+  // ── 3. Pre-fetchear logo como base64 ─────────────────────────────────────────
+  const logoBase64 = ferreteria.logo_url ? await fetchLogoBase64(ferreteria.logo_url) : null
+
+  // ── 4. Número estable derivado del ID de cotización ───────────────────────────
+  const cotIdShort = cotizacionId.replace(/-/g, '').slice(-8).toUpperCase()
+  const numeroCotizacion = `COT-${cotIdShort}`
+
+  // ── 5. Construir items (solo disponibles) ─────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itemsRaw = ((cotizacion as any).items_cotizacion ?? []) as Array<Record<string, unknown>>
+  const items = itemsRaw
+    .filter((i) => !i.no_disponible)
+    .map((i) => ({
+      nombre_producto: String(i.nombre_producto ?? ''),
+      unidad:          String(i.unidad ?? 'und'),
+      cantidad:        Number(i.cantidad),
+      precio_unitario: Number(i.precio_unitario),
+      subtotal:        Number(i.subtotal),
+    }))
+
+  if (items.length === 0) return { ok: false, error: 'La cotización no tiene items disponibles' }
+
+  // ── 6. Construir datos del PDF ────────────────────────────────────────────────
+  const datos: DatosComprobante = {
+    nombre_ferreteria:    ferreteria.nombre,
+    direccion_ferreteria: ferreteria.direccion ?? null,
+    telefono_ferreteria:  ferreteria.telefono_whatsapp,
+    logo_url:             logoBase64,
+    color:                (ferreteria.color_comprobante as string | null) ?? '#1e40af',
+    mensaje_pie:          ferreteria.mensaje_comprobante ?? null,
+    numero_comprobante:   numeroCotizacion,
+    fecha_emision:        new Date().toISOString(),
+    esProforma:           true,
+    numero_pedido:        numeroCotizacion,
+    nombre_cliente:       nombreCliente?.trim() || 'Cliente',
+    modalidad:            'recojo',
+    direccion_entrega:    null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    formas_pago:          (ferreteria.formas_pago as string[]) ?? [],
+    items,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    total: (cotizacion as any).total as number,
+  }
+
+  // ── 7. Renderizar PDF ─────────────────────────────────────────────────────────
+  let pdfBuffer: Buffer
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pdfBuffer = await renderToBuffer(React.createElement(ComprobantePDF, { datos }) as any)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: `Error renderizando PDF: ${msg}` }
+  }
+
+  // ── 8. Subir a Storage ───────────────────────────────────────────────────────
+  const storagePath = `${ferreteriaId}/cotizaciones/${numeroCotizacion}.pdf`
+  const { error: errUpload } = await supabase.storage
+    .from('comprobantes')
+    .upload(storagePath, pdfBuffer, { contentType: 'application/pdf', upsert: true })
+
+  if (errUpload) return { ok: false, error: `Error subiendo PDF: ${errUpload.message}` }
+
+  const { data: { publicUrl } } = supabase.storage.from('comprobantes').getPublicUrl(storagePath)
+
+  // ── 9. Enviar por WhatsApp ───────────────────────────────────────────────────
+  const from = ferreteria.telefono_whatsapp.replace(/^\+/, '')
+  const apiKeyEnvio = ycloudApiKey ?? process.env.YCLOUD_API_KEY
+  let enviado = false
+
+  if (apiKeyEnvio && apiKeyEnvio !== 'your_ycloud_api_key') {
+    try {
+      await enviarDocumento({
+        from,
+        to: telefonoCliente,
+        pdfUrl:   publicUrl,
+        filename: `${numeroCotizacion}.pdf`,
+        caption:  `📋 *${ferreteria.nombre}*\nAquí tienes tu cotización *${numeroCotizacion}*.\n_Precios válidos sujetos a disponibilidad._ 🙏`,
+        apiKey:   ycloudApiKey,
+      })
+      enviado = true
+    } catch (e) {
+      console.error('[generarYEnviarCotizacionPDF] Error enviando:', e)
+    }
+  }
+
+  return {
+    ok: true,
+    numero_comprobante: numeroCotizacion,
+    pdf_url:            publicUrl,
+    enviado,
   }
 }
 

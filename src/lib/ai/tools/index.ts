@@ -10,7 +10,7 @@ import type { Producto, ProductoDigital, ZonaDelivery, DatosFlujoPedido, Agentes
 import { AGENT_REGISTRY, CORE_TOOL_NAMES } from '@/lib/ai/agents/registry'
 import { procesarItemsSolicitados, buscarProducto, formatearCotizacion } from '@/lib/bot/catalog-search'
 import { pausarBot } from '@/lib/bot/session'
-import { generarYEnviarComprobante, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
+import { generarYEnviarComprobante, generarYEnviarCotizacionPDF, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
 import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import { enviarMensaje, enviarDocumento, enviarImagen } from '@/lib/whatsapp/ycloud'
@@ -306,6 +306,25 @@ export const TOOL_SCHEMAS = [
           ruc_cliente: {
             type: 'string',
             description: 'RUC del cliente (11 dígitos) si pidió factura y lo proporcionó.',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generar_cotizacion_pdf',
+      description:
+        'Genera y envía por WhatsApp el PDF de la cotización activa como proforma (lista de precios). ' +
+        'Úsalo cuando el cliente pide la cotización por escrito, en PDF, o quiere guardársela. ' +
+        'La cotización debe haberse guardado antes con guardar_cotizacion.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nombre_cliente: {
+            type: 'string',
+            description: 'Nombre del cliente para el PDF (opcional, si ya se conoce).',
           },
         },
       },
@@ -1456,6 +1475,43 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       return { ok: false, error: 'Error generando documento de respaldo', motivo: 'error_fallback' }
     } else {
       return { ok: false, error: resultBol.error ?? 'Error emitiendo boleta', motivo: 'error_nubefact' }
+    }
+  },
+
+  // ── Generar PDF de cotización activa ──────────────────────────────────────
+  generar_cotizacion_pdf: async (ctx, args) => {
+    requireTenant(ctx)
+
+    const cotizacionId = (ctx.datosFlujo?.cotizacion_id as string | undefined)
+    if (!cotizacionId) {
+      return {
+        ok: false,
+        error: 'No hay cotización activa. Primero usa buscar_producto y guardar_cotizacion.',
+        motivo: 'sin_cotizacion',
+      }
+    }
+
+    const nombreCliente = (args.nombre_cliente as string | undefined)?.trim() || undefined
+
+    const resultado = await generarYEnviarCotizacionPDF({
+      cotizacionId,
+      ferreteriaId:    ctx.ferreteriaId,
+      telefonoCliente: ctx.telefonoCliente,
+      nombreCliente,
+      ycloudApiKey:    ctx.ycloudApiKey,
+    })
+
+    if (!resultado.ok) {
+      return { ok: false, error: resultado.error ?? 'Error generando PDF de cotización' }
+    }
+
+    return {
+      ok: true,
+      data: {
+        numero_cotizacion: resultado.numero_comprobante,
+        pdf_url:           resultado.pdf_url,
+        enviado:           resultado.enviado ?? false,
+      },
     }
   },
 
