@@ -146,6 +146,9 @@ export interface Ferreteria {
   nubefact_token_enc: string | null   // cifrado en BD, nunca exponer al cliente
   nubefact_ruta:      string | null   // URL de la cuenta Nubefact (no secreta)
   nubefact_modo: 'prueba' | 'produccion'
+  // ── Telegram (FASE 3) ───────────────────────────────────────────
+  telegram_bot_token: string | null   // token del bot de Telegram
+  telegram_chat_id:   string | null   // chat/grupo donde se notifica
   // ── Bot (settings-2) ────────────────────────────────────────────
   bot_nombre: string | null
   bot_instrucciones: string | null

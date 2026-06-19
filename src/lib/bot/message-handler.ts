@@ -163,6 +163,12 @@ export async function handleIncomingMessage({
 
   // FASE 0: Herramientas desactivadas individualmente
   const herramientasDesactivadas: string[] = ferreteria.bot_herramientas_desactivadas ?? []
+
+  // FASE 3: Integraciones conectadas — controla qué tools con requiereIntegracion están activas
+  const integracionesConectadas: string[] = []
+  if (ferreteria.nubefact_token_enc && ferreteria.nubefact_ruta)          integracionesConectadas.push('nubefact')
+  if (ferreteria.telegram_bot_token  && ferreteria.telegram_chat_id)      integracionesConectadas.push('telegram')
+  // mercadopago: si en algún momento se agrega la columna, añadir aquí
   // F5: Profit engine — preferir columnas directas de ferreterias
   const cierreCotizacionActivo =
     (ferreteria as unknown as { bot_autoclose_cotizacion?: boolean }).bot_autoclose_cotizacion
@@ -350,6 +356,7 @@ export async function handleIncomingMessage({
           ycloudApiKey,
           agentesActivos,                        // F4: tools habilitadas por tenant
           herramientasDesactivadas,              // FASE 0: tools apagadas individualmente
+          integracionesConectadas,               // FASE 3: qué integraciones están configuradas
           umbralUpsellSoles,                     // F5: mínimo para activar upsell
         }
       )
