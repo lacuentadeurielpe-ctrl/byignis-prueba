@@ -81,6 +81,20 @@ export const AGENT_REGISTRY: AgentDef[] = [
       { name: 'guardar_dato_cliente', label: 'Guardar dato',      desc: 'Actualiza el perfil cuando el cliente lo menciona explícitamente' },
     ],
   },
+  {
+    id: 'comunicaciones',
+    label: 'Comunicaciones',
+    desc: 'Notificaciones a canales externos configurados',
+    accent: '#06b6d4',
+    tools: [
+      {
+        name:                'notificar_telegram',
+        label:               'Notificar Telegram',
+        desc:                'Alerta al equipo en el canal Telegram de la tienda',
+        requiereIntegracion: 'telegram' as const,
+      },
+    ],
+  },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

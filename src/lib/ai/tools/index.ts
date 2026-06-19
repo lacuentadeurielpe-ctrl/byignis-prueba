@@ -14,6 +14,7 @@ import { generarYEnviarComprobante, generarYEnviarCotizacionPDF, eliminarComprob
 import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import { enviarMensaje, enviarDocumento, enviarImagen } from '@/lib/whatsapp/ycloud'
+import { enviarMensajeTelegram } from '@/lib/integrations/telegram'
 import { withTimeout } from '@/lib/utils'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { geocodificarDireccion, resolverGoogleApiKey } from '@/lib/delivery/geocoding'
@@ -358,6 +359,27 @@ export const TOOL_SCHEMAS = [
           },
         },
         required: ['items'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'notificar_telegram',
+      description:
+        'Envía un mensaje al canal Telegram de la tienda. ' +
+        'Úsalo para alertar al equipo sobre pedidos grandes, solicitudes especiales, ' +
+        'o cuando el cliente requiere atención que el bot no puede resolver. ' +
+        'Solo disponible si Telegram está configurado en Integraciones.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mensaje: {
+            type: 'string',
+            description: 'Texto de la notificación. Sé conciso — máximo 3 líneas.',
+          },
+        },
+        required: ['mensaje'],
       },
     },
   },
@@ -1654,5 +1676,37 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
         })),
       },
     }
+  },
+
+  // ── Notificación a canal Telegram ────────────────────────────────────────
+  notificar_telegram: async (ctx, args) => {
+    requireTenant(ctx)
+
+    const mensaje = (args.mensaje as string | undefined)?.trim()
+    if (!mensaje) return { ok: false, error: 'mensaje es requerido' }
+
+    // Obtener credenciales Telegram del tenant
+    const { data: ferr } = await ctx.supabase
+      .from('ferreterias')
+      .select('nombre, telegram_bot_token, telegram_chat_id')
+      .eq('id', ctx.ferreteriaId)
+      .single()
+
+    const botToken = (ferr as unknown as { telegram_bot_token?: string | null })?.telegram_bot_token
+    const chatId   = (ferr as unknown as { telegram_chat_id?:   string | null })?.telegram_chat_id
+    const nombre   = (ferr as unknown as { nombre?: string })?.nombre ?? 'Ferretería'
+
+    if (!botToken || !chatId) {
+      return { ok: false, error: 'Telegram no configurado', motivo: 'sin_integracion' }
+    }
+
+    const texto = `📢 *${nombre}* — FerroBot\n\n${mensaje}`
+    const resultado = await enviarMensajeTelegram({ botToken, chatId, texto })
+
+    if (!resultado.ok) {
+      return { ok: false, error: resultado.error ?? 'Error enviando a Telegram' }
+    }
+
+    return { ok: true, data: { enviado: true } }
   },
 }
