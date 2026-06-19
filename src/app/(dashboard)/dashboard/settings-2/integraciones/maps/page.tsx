@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { MapPin, AlertCircle, CheckCircle } from 'lucide-react'
 import SettingsHeader from '../../components/SettingsHeader'
 import FormSection from '../../components/FormSection'
+import ToolsEnabledSection from '../components/ToolsEnabledSection'
 
 interface MapsData {
   estado?: 'conectado' | 'desconectado' | 'error'
@@ -193,6 +194,9 @@ export default function MapsPage() {
             </div>
           </div>
         </FormSection>
+
+        {/* Herramientas que activa */}
+        <ToolsEnabledSection integracionId="maps" isConnected={isConnected} />
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
           <p className="text-sm text-blue-900 font-medium">¿Cómo funciona?</p>

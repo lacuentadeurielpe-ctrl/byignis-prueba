@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle, AlertCircle, Copy, Check, Eye, EyeOff, Phone } from 'lucide-react'
 import SettingsHeader from '../../components/SettingsHeader'
+import ToolsEnabledSection from '../components/ToolsEnabledSection'
 
 interface YCloudStatus {
   estado?: string
@@ -201,6 +202,8 @@ export default function YCloudPage() {
       />
 
       <div className="p-6 max-w-2xl space-y-6">
+        {/* Herramientas que activa */}
+        <ToolsEnabledSection integracionId="ycloud" isConnected={connected} />
 
         {/* Estado */}
         <div className={`flex items-start gap-3 p-4 rounded-2xl border ${connected ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>

@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Globe2, CheckCircle, XCircle, Loader2, Trash2, Mail, Calendar, HardDrive } from 'lucide-react'
+import { Globe2, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react'
 import SettingsHeader from '../../components/SettingsHeader'
+import ToolsEnabledSection from '../components/ToolsEnabledSection'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 
@@ -85,25 +86,8 @@ function GooglePageContent() {
         </a>
       )}
 
-      {/* Qué habilita */}
-      <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
-        <p className="text-sm font-semibold text-indigo-900">Con Google conectado el bot puede:</p>
-        <div className="space-y-2">
-          {[
-            { icon: Mail,     label: 'Gmail',           desc: 'Enviar cotizaciones, confirmaciones y recordatorios de pago al email del cliente' },
-            { icon: Calendar, label: 'Google Calendar', desc: 'Crear eventos de entrega y citas de visita técnica automáticamente' },
-            { icon: HardDrive,label: 'Google Drive',    desc: 'Guardar PDFs de cotizaciones y comprobantes en una carpeta FerroBot' },
-          ].map(({ icon: Icon, label, desc }) => (
-            <div key={label} className="flex items-start gap-2">
-              <Icon className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
-              <div>
-                <span className="text-xs font-semibold text-indigo-800">{label}: </span>
-                <span className="text-xs text-indigo-700">{desc}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Herramientas que activa */}
+      <ToolsEnabledSection integracionId="google" isConnected={isConnected} />
 
       {/* Nota de permisos */}
       <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">

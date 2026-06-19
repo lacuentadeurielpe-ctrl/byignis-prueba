@@ -1,9 +1,10 @@
 ﻿'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, AlertCircle, CheckCircle } from 'lucide-react'
+import { FileText, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import SettingsHeader from '../../components/SettingsHeader'
 import FormSection from '../../components/FormSection'
+import ToolsEnabledSection from '../components/ToolsEnabledSection'
 
 interface NubefactData {
   estado?: 'conectado' | 'desconectado' | 'pruebas' | 'error'
@@ -20,6 +21,7 @@ export default function NubefactPage() {
   const [token, setToken] = useState('')
   const [modo, setModo] = useState<'prueba' | 'produccion'>('prueba')
   const [isSaving, setIsSaving] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
   const [showToken, setShowToken] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -75,6 +77,17 @@ export default function NubefactPage() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleTest = async () => {
+    setIsTesting(true); setError(''); setSuccess('')
+    try {
+      const res = await fetch('/api/settings-2/integraciones/nubefact/test', { method: 'POST' })
+      const json = await res.json()
+      if (res.ok) setSuccess(json.message ?? 'Token válido')
+      else setError(json.error ?? 'Error al verificar token')
+    } catch { setError('Error de conexión') }
+    finally { setIsTesting(false) }
   }
 
   const handleDisconnect = async () => {
@@ -202,13 +215,23 @@ export default function NubefactPage() {
 
             <div className="flex gap-3 pt-4">
               {isConnected || isTestMode ? (
-                <button
-                  onClick={handleDisconnect}
-                  disabled={isSaving}
-                  className="px-4 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded border border-rose-200 disabled:opacity-50"
-                >
-                  {isSaving ? 'Desconectando...' : 'Desconectar'}
-                </button>
+                <>
+                  <button
+                    onClick={handleTest}
+                    disabled={isTesting}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded disabled:opacity-50"
+                  >
+                    {isTesting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {isTesting ? 'Verificando...' : 'Probar token'}
+                  </button>
+                  <button
+                    onClick={handleDisconnect}
+                    disabled={isSaving}
+                    className="px-4 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded border border-rose-200 disabled:opacity-50"
+                  >
+                    {isSaving ? 'Desconectando...' : 'Desconectar'}
+                  </button>
+                </>
               ) : (
                 <button
                   onClick={handleConnect}
@@ -222,9 +245,12 @@ export default function NubefactPage() {
           </div>
         </FormSection>
 
+        {/* Herramientas que activa */}
+        <ToolsEnabledSection integracionId="nubefact" isConnected={isConnected || isTestMode} />
+
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-900">
-            ℹ️ <strong>Importante:</strong> Cambia a Producción solo cuando hayas probado toda la funcionalidad correctamente.
+            ℹ️ <strong>Importante:</strong> Empieza en modo Pruebas para verificar el flujo. Cambia a Producción solo cuando estés listo para emitir comprobantes reales ante SUNAT.
           </p>
         </div>
       </div>

@@ -2,9 +2,10 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Banknote, AlertCircle, CheckCircle, Key } from 'lucide-react'
+import { Banknote, AlertCircle, CheckCircle, Key, Loader2 } from 'lucide-react'
 import SettingsHeader from '../../components/SettingsHeader'
 import FormSection from '../../components/FormSection'
+import ToolsEnabledSection from '../components/ToolsEnabledSection'
 
 interface MPData {
   estado?: 'conectado' | 'desconectado' | 'error'
@@ -20,9 +21,11 @@ function MercadoPagoContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
   const [accessToken, setAccessToken] = useState('')
   const [publicKey, setPublicKey] = useState('')
   const [showManual, setShowManual] = useState(false)
+  const [testMsg, setTestMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   useEffect(() => {
     const urlError = searchParams.get('error')
@@ -79,6 +82,15 @@ function MercadoPagoContent() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleTest = async () => {
+    setIsTesting(true); setTestMsg(null)
+    try {
+      const res = await fetch('/api/settings-2/integraciones/mercadopago/test', { method: 'POST' })
+      const json = await res.json()
+      setTestMsg(res.ok ? { type: 'ok', text: json.message ?? 'Credenciales válidas' } : { type: 'err', text: json.error ?? 'Error al verificar' })
+    } finally { setIsTesting(false) }
   }
 
   const handleDisconnect = async () => {
@@ -148,15 +160,31 @@ function MercadoPagoContent() {
               </div>
             )}
 
+            {testMsg && (
+              <div className={`p-3 rounded-lg text-sm ${testMsg.type === 'ok' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
+                {testMsg.text}
+              </div>
+            )}
+
             <div className="flex gap-3">
               {isConnected ? (
-                <button
-                  onClick={handleDisconnect}
-                  disabled={isSaving}
-                  className="px-4 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded border border-rose-200 disabled:opacity-50"
-                >
-                  {isSaving ? 'Desconectando...' : 'Desconectar'}
-                </button>
+                <>
+                  <button
+                    onClick={handleTest}
+                    disabled={isTesting}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded disabled:opacity-50"
+                  >
+                    {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {isTesting ? 'Verificando...' : 'Probar conexión'}
+                  </button>
+                  <button
+                    onClick={handleDisconnect}
+                    disabled={isSaving}
+                    className="px-4 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 rounded border border-rose-200 disabled:opacity-50"
+                  >
+                    {isSaving ? 'Desconectando...' : 'Desconectar'}
+                  </button>
+                </>
               ) : (
                 <button
                   onClick={() => setShowManual(v => !v)}
@@ -215,9 +243,12 @@ function MercadoPagoContent() {
           </FormSection>
         )}
 
+        {/* Herramientas que activa */}
+        <ToolsEnabledSection integracionId="mercadopago" isConnected={isConnected} />
+
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-900">
-            ℹ️ <strong>Nota:</strong> La integración con Mercado Pago permite registrar pagos digitales en pedidos. El access token se almacena de forma segura en tu base de datos.
+            ℹ️ Obtén tu Access Token en <strong>mercadopago.com → Tu negocio → Credenciales → Producción</strong>. El token se almacena cifrado en tu base de datos.
           </p>
         </div>
       </div>

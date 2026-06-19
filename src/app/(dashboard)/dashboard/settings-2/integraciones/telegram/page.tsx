@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Send, AlertCircle, CheckCircle } from 'lucide-react'
 import SettingsHeader from '../../components/SettingsHeader'
 import FormSection from '../../components/FormSection'
+import ToolsEnabledSection from '../components/ToolsEnabledSection'
 
 interface TelegramData {
   conectado: boolean
@@ -187,6 +188,9 @@ export default function TelegramPage() {
             </div>
           </div>
         </FormSection>
+
+        {/* Herramientas que activa */}
+        <ToolsEnabledSection integracionId="telegram" isConnected={isConnected} />
 
         {/* Instrucciones */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">

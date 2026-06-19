@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Mail, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react'
 import SettingsHeader from '../../components/SettingsHeader'
+import ToolsEnabledSection from '../components/ToolsEnabledSection'
 
 interface ResendData {
   api_key_masked: string | null
@@ -154,15 +155,13 @@ export default function ResendPage() {
           </div>
         )}
 
-        {/* Instrucciones */}
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
-          <p className="text-sm font-semibold text-blue-900">¿Qué habilita Resend?</p>
-          <ul className="text-xs text-blue-800 space-y-1 ml-4 list-disc">
-            <li>El bot puede enviar cotizaciones PDF al email del cliente</li>
-            <li>Notificaciones internas al dueño cuando llega un nuevo pedido</li>
-          </ul>
-          <p className="text-xs text-blue-700 mt-2">
-            Resend ofrece 3,000 emails/mes gratis. El dominio remitente debe estar verificado en tu cuenta de Resend.
+        {/* Herramientas que activa */}
+        <ToolsEnabledSection integracionId="resend" isConnected={data?.connected ?? false} />
+
+        {/* Nota */}
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-xs text-blue-800">
+            Resend ofrece 3,000 emails/mes gratis. El dominio remitente debe estar verificado en tu cuenta de Resend antes de guardar.
           </p>
         </div>
       </div>
