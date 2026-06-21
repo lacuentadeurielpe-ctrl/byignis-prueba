@@ -245,6 +245,7 @@ function Modal({ open, onClose, producto, onSaved }: {
   const [form, setForm] = useState<FormData>(emptyForm())
   const [tab, setTab] = useState<'datos' | 'entrega'>('datos')
   const [saving, setSaving] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -400,13 +401,89 @@ function Modal({ open, onClose, producto, onSaved }: {
                 </div>
               </div>
 
-              {/* Descripción */}
+              {/* Descripción + Generar con PDF */}
               <div>
-                <label className="block text-xs font-medium text-zinc-700 mb-1">Descripción</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-zinc-700">Descripción</label>
+                  <span className="text-[10px] text-violet-600 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    El bot usa este campo como contexto de ventas
+                  </span>
+                </div>
                 <textarea value={form.descripcion} onChange={e => set('descripcion', e.target.value)}
-                  rows={3} placeholder="Describe el producto con detalle. La IA leerá esto para generar el contexto del bot."
+                  rows={4} placeholder="Describe el producto con detalle, o usa el botón de abajo para generarlo desde un PDF."
                   className="w-full px-3 py-2 text-sm border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
                 />
+                {/* PDF → Generar descripción con IA */}
+                <div className="mt-2 p-3 bg-violet-50 border border-violet-200 rounded-lg space-y-2">
+                  <p className="text-[10px] font-medium text-violet-700 flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    Generar descripción completa desde un PDF
+                  </p>
+                  {form.pdf_contexto_url ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-1 p-1.5 bg-white border border-violet-200 rounded text-[10px] text-violet-700">
+                        <FileText className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">PDF cargado</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => set('pdf_contexto_url', '')}
+                        className="p-1 hover:bg-violet-100 rounded transition"
+                      >
+                        <X className="w-3.5 h-3.5 text-violet-400" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={generating}
+                        onClick={async () => {
+                          setGenerating(true)
+                          setError('')
+                          try {
+                            const res = await fetch('/api/catalog/digital/ai-contexto', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                pdf_url: form.pdf_contexto_url,
+                                nombre: form.nombre,
+                                categoria: form.categoria,
+                                subcategoria: form.subcategoria,
+                                precio: Number(form.precio) || 0,
+                                precio_original: form.precio_original ? Number(form.precio_original) : null,
+                                unidad: form.unidad,
+                                vigencia: form.vigencia,
+                                tags: form.tags,
+                                tipos_entrega: form.tipos_entrega,
+                              }),
+                            })
+                            if (res.ok) {
+                              const data = await res.json()
+                              set('descripcion', data.texto)
+                            } else {
+                              const e = await res.json()
+                              setError(e.error ?? 'Error al generar')
+                            }
+                          } catch {
+                            setError('Error de conexión al generar')
+                          } finally {
+                            setGenerating(false)
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white rounded-lg text-[10px] font-semibold hover:bg-violet-700 disabled:opacity-50 transition whitespace-nowrap"
+                      >
+                        {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                        {generating ? 'Generando...' : 'Generar descripción'}
+                      </button>
+                    </div>
+                  ) : (
+                    <FileUploader
+                      value={form.pdf_contexto_url}
+                      onChange={v => set('pdf_contexto_url', v)}
+                      accept=".pdf"
+                      hint="Solo PDF · hasta 50 MB"
+                    />
+                  )}
+                </div>
               </div>
 
               {/* Precio + Precio original + Unidad */}
@@ -562,36 +639,13 @@ function Modal({ open, onClose, producto, onSaved }: {
                 </p>
               </div>
 
-              {/* PDF para contextualización IA */}
-              <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg space-y-2">
-                <p className="text-xs font-medium text-violet-700 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  PDF de referencia para IA (opcional)
-                </p>
-                <p className="text-xs text-violet-600 leading-relaxed">
-                  Sube el PDF del producto o material de referencia. La IA lo leerá completo para generar un contexto de ventas detallado con resumen, público objetivo, beneficios, ángulos de venta y respuestas a objeciones.
-                </p>
-                {form.pdf_contexto_url ? (
-                  <div className="flex items-center gap-2 p-2 bg-white border border-violet-200 rounded-lg">
-                    <FileText className="w-4 h-4 text-violet-500 flex-shrink-0" />
-                    <span className="text-xs text-violet-700 flex-1 truncate">PDF cargado</span>
-                    <button
-                      type="button"
-                      onClick={() => set('pdf_contexto_url', '')}
-                      className="p-0.5 hover:bg-violet-100 rounded transition"
-                    >
-                      <X className="w-3.5 h-3.5 text-violet-500" />
-                    </button>
-                  </div>
-                ) : (
-                  <FileUploader
-                    value={form.pdf_contexto_url}
-                    onChange={v => set('pdf_contexto_url', v)}
-                    accept=".pdf"
-                    hint="Solo PDF · hasta 50 MB"
-                  />
-                )}
-              </div>
+              {/* Nota: PDF se gestiona en tab Datos */}
+              {form.pdf_contexto_url && (
+                <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg flex items-center gap-2 text-xs text-violet-700">
+                  <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                  PDF de referencia cargado. Puedes generar la descripción desde la pestaña <strong>1 · Datos</strong>.
+                </div>
+              )}
             </>
           )}
         </div>
