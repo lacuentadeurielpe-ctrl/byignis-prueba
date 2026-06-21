@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { extractPdfText } from '@/lib/pdf/extract'
 
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com'
-const PDF_MAX_CHARS = 12_000
 
 export async function POST(req: Request) {
   const session = await getSessionInfo()
@@ -13,28 +13,13 @@ export async function POST(req: Request) {
 
   if (!pdf_url) return NextResponse.json({ error: 'Se requiere pdf_url' }, { status: 400 })
 
-  const pdfText = await extraerTextoPDF(pdf_url)
-  if (!pdfText) return NextResponse.json({ error: 'No se pudo leer el PDF. Verifica que sea un PDF válido.' }, { status: 422 })
+  const pdfText = await extractPdfText(pdf_url)
+  if (!pdfText) return NextResponse.json({ error: 'No se pudo leer el PDF. Asegúrate de que sea un PDF con texto (no una imagen escaneada).' }, { status: 422 })
 
   const texto = await generarDescripcion({ nombre, categoria, subcategoria, precio, unidad, precio_original, vigencia, tags, tipos_entrega }, pdfText)
   return NextResponse.json({ texto })
 }
 
-async function extraerTextoPDF(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
-    if (!res.ok) return null
-    const buffer = Buffer.from(await res.arrayBuffer())
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse')
-    const data = await pdfParse(buffer)
-    const text = data.text?.trim() ?? ''
-    if (!text) return null
-    return text.length > PDF_MAX_CHARS ? text.slice(0, PDF_MAX_CHARS) + '...' : text
-  } catch {
-    return null
-  }
-}
 
 async function generarDescripcion(meta: Record<string, unknown>, pdfText: string): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY

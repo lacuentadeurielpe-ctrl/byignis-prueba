@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['mindee', 'pdf-parse'],
+  serverExternalPackages: ['mindee', 'pdf-parse', 'pdfjs-dist'],
   async redirects() {
     return [
       {
