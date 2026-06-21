@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com'
+const PDF_MAX_CHARS = 12_000
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionInfo()
@@ -20,7 +21,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   if (fetchError || !producto) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
 
-  const contextualizacion = await generarContexto(producto as Record<string, unknown>)
+  const p = producto as Record<string, unknown>
+  let pdfText: string | null = null
+
+  if (p.pdf_contexto_url) {
+    pdfText = await extraerTextoPDF(p.pdf_contexto_url as string)
+  }
+
+  const contextualizacion = await generarContexto(p, pdfText)
 
   const { data: updated, error: updateError } = await supabase
     .from('productos_digitales')
@@ -34,11 +42,28 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   return NextResponse.json(updated)
 }
 
-async function generarContexto(p: Record<string, unknown>): Promise<string> {
+async function extraerTextoPDF(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+    if (!res.ok) return null
+    const buffer = Buffer.from(await res.arrayBuffer())
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse')
+    const data = await pdfParse(buffer)
+    const text = data.text?.trim() ?? ''
+    return text.length > PDF_MAX_CHARS ? text.slice(0, PDF_MAX_CHARS) + '...' : text
+  } catch {
+    return null
+  }
+}
+
+async function generarContexto(p: Record<string, unknown>, pdfText: string | null): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY
   if (!apiKey) return buildFallback(p)
 
-  const prompt = buildPrompt(p)
+  const prompt = pdfText ? buildPromptConPDF(p, pdfText) : buildPromptSinPDF(p)
+  const maxTokens = pdfText ? 1200 : 300
+
   try {
     const res = await fetch(`${DEEPSEEK_BASE_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -49,10 +74,10 @@ async function generarContexto(p: Record<string, unknown>): Promise<string> {
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 220,
-        temperature: 0.3,
+        max_tokens: maxTokens,
+        temperature: 0.4,
       }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(60_000),
     })
     if (!res.ok) return buildFallback(p)
     const json = await res.json()
@@ -63,25 +88,66 @@ async function generarContexto(p: Record<string, unknown>): Promise<string> {
   }
 }
 
-function buildPrompt(p: Record<string, unknown>): string {
+function buildPromptConPDF(p: Record<string, unknown>, pdfText: string): string {
   const tipos = tiposLabel(p.tipos_entrega)
   const descuento = p.precio_original && Number(p.precio_original) > Number(p.precio)
-    ? ` (precio original S/ ${p.precio_original}, ${Math.round((1 - Number(p.precio) / Number(p.precio_original)) * 100)}% descuento)`
+    ? ` (antes S/ ${p.precio_original}, ${Math.round((1 - Number(p.precio) / Number(p.precio_original)) * 100)}% descuento)`
     : ''
 
-  return `Eres un asistente de ventas para una tienda peruana. Crea un resumen de contexto conciso (máximo 3 oraciones) para el siguiente producto digital, usando ÚNICAMENTE los datos proporcionados sin inventar información. El texto será leído por un bot de WhatsApp para responder preguntas de clientes sobre este producto.
+  return `Eres un experto en ventas digitales para el mercado peruano. Basándote en el contenido del PDF y los datos del producto, genera un contexto de ventas COMPLETO que un bot de WhatsApp usará para responder preguntas de clientes potenciales.
 
-Datos del producto:
+DATOS DEL PRODUCTO:
 - Nombre: ${p.nombre}
 - Categoría: ${p.categoria}${p.subcategoria ? ` / ${p.subcategoria}` : ''}
 - Descripción: ${p.descripcion || 'No especificada'}
 - Precio: S/ ${p.precio} por ${p.unidad}${descuento}
 - Vigencia: ${p.vigencia || 'No especificada'}
-- Stock disponible: ${p.stock != null ? p.stock : 'Ilimitado'}
-- Formas de entrega: ${tipos}
-- Etiquetas: ${Array.isArray(p.tags) && (p.tags as string[]).length ? (p.tags as string[]).join(', ') : 'Ninguna'}
+- Stock: ${p.stock != null ? p.stock : 'Ilimitado'}
+- Entrega: ${tipos}
+- Tags: ${Array.isArray(p.tags) && (p.tags as string[]).length ? (p.tags as string[]).join(', ') : 'Ninguno'}
 
-Responde SOLO con el párrafo de contexto en español peruano, sin títulos ni viñetas.`
+CONTENIDO DEL PDF (extracto):
+${pdfText}
+
+---
+
+Genera el contexto de ventas en español peruano con estas secciones (sin inventar información que no esté en el PDF o los datos):
+
+**RESUMEN:** 2-3 oraciones que expliquen qué es el producto y para qué sirve.
+
+**PÚBLICO OBJETIVO:** A quién va dirigido (perfil, nivel, necesidades).
+
+**BENEFICIOS CLAVE:** 3-5 beneficios concretos que obtendrá el comprador.
+
+**ÁNGULOS DE VENTA:** 2-3 formas de presentar el producto según distintas motivaciones del cliente (urgencia, valor, solución a problema).
+
+**PRECIO Y VALOR:** Justificación del precio, comparación con alternativas si aplica.
+
+**OBJECIONES FRECUENTES:** 3 objeciones comunes con sus respuestas.
+
+**CIERRE:** Frase de cierre sugerida para el bot.
+
+Usa un tono cercano, confiable y en español peruano. No uses información que no esté en los datos o el PDF.`
+}
+
+function buildPromptSinPDF(p: Record<string, unknown>): string {
+  const tipos = tiposLabel(p.tipos_entrega)
+  const descuento = p.precio_original && Number(p.precio_original) > Number(p.precio)
+    ? ` (antes S/ ${p.precio_original}, ${Math.round((1 - Number(p.precio) / Number(p.precio_original)) * 100)}% descuento)`
+    : ''
+
+  return `Eres un asistente de ventas para una tienda peruana. Crea un resumen de contexto (máximo 4 oraciones) para el siguiente producto digital. El texto será leído por un bot de WhatsApp para responder preguntas de clientes. Usa ÚNICAMENTE los datos proporcionados.
+
+- Nombre: ${p.nombre}
+- Categoría: ${p.categoria}${p.subcategoria ? ` / ${p.subcategoria}` : ''}
+- Descripción: ${p.descripcion || 'No especificada'}
+- Precio: S/ ${p.precio} por ${p.unidad}${descuento}
+- Vigencia: ${p.vigencia || 'No especificada'}
+- Stock: ${p.stock != null ? p.stock : 'Ilimitado'}
+- Entrega: ${tipos}
+- Tags: ${Array.isArray(p.tags) && (p.tags as string[]).length ? (p.tags as string[]).join(', ') : 'Ninguno'}
+
+Responde SOLO con el párrafo en español peruano, sin títulos ni viñetas.`
 }
 
 function tiposLabel(tipos: unknown): string {

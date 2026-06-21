@@ -7,6 +7,7 @@ const ALLOWED_FIELDS = [
   'precio', 'precio_original', 'unidad', 'stock', 'vigencia', 'tags',
   'destacado', 'activo',
   'tipos_entrega', 'archivo_url', 'contenido_entrega', 'mensaje_entrega',
+  'pdf_contexto_url',
 ]
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

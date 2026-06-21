@@ -53,6 +53,7 @@ function emptyForm() {
     archivo_url: '',
     contenido_entrega: '',
     mensaje_entrega: '',
+    pdf_contexto_url: '',
   }
 }
 type FormData = ReturnType<typeof emptyForm>
@@ -97,7 +98,17 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
 
 // ── FileUploader ──────────────────────────────────────────────────────────────
 
-function FileUploader({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+function FileUploader({
+  value,
+  onChange,
+  accept = '.pdf,.zip,.exe,.mp4,.docx,.xlsx,.png,.jpg,.jpeg,.rar,.7z',
+  hint = 'PDF · ZIP · EXE · MP4 · DOCX · hasta 50 MB',
+}: {
+  value: string
+  onChange: (url: string) => void
+  accept?: string
+  hint?: string
+}) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [err, setErr] = useState('')
@@ -148,12 +159,12 @@ function FileUploader({ value, onChange }: { value: string; onChange: (url: stri
         <p className="text-xs text-zinc-500 text-center">
           {uploading ? 'Subiendo...' : <><span className="text-violet-600 font-medium">Haz clic</span> o arrastra el archivo aquí</>}
         </p>
-        <p className="text-[10px] text-zinc-400">PDF · ZIP · EXE · MP4 · DOCX · hasta 50 MB</p>
+        <p className="text-[10px] text-zinc-400">{hint}</p>
       </div>
       {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
       <input
         ref={inputRef} type="file"
-        accept=".pdf,.zip,.exe,.mp4,.docx,.xlsx,.png,.jpg,.jpeg,.rar,.7z"
+        accept={accept}
         className="hidden"
         onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
       />
@@ -179,12 +190,19 @@ function CtxBox({ producto, onUpdated }: {
     }
   }
 
+  const hasPdf = Boolean(producto.pdf_contexto_url)
+
   return (
     <div className="border border-zinc-200 rounded-lg overflow-hidden text-xs">
       <div className="flex items-center justify-between px-2.5 py-1.5 bg-zinc-50 border-b border-zinc-100">
         <span className="flex items-center gap-1.5 font-medium text-zinc-500">
           <Sparkles className="w-3 h-3 text-violet-500" />
           Contexto para el bot
+          {hasPdf && (
+            <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded text-[9px] font-medium">
+              <FileText className="w-2.5 h-2.5" /> PDF
+            </span>
+          )}
         </span>
         {producto.contextualizacion && (
           <button onClick={generate} disabled={generating}
@@ -201,11 +219,13 @@ function CtxBox({ producto, onUpdated }: {
           <p className="text-zinc-500 italic leading-relaxed line-clamp-3">{producto.contextualizacion}</p>
         ) : (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-zinc-400">Sin contextualizar aún</span>
+            <span className="text-zinc-400">
+              {hasPdf ? 'PDF listo — genera el contexto' : 'Sin contextualizar aún'}
+            </span>
             <button onClick={generate} disabled={generating}
               className="flex items-center gap-1.5 px-3 py-1 bg-violet-600 text-white rounded-lg text-[10px] font-semibold hover:bg-violet-700 disabled:opacity-50 transition whitespace-nowrap">
               {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-              {generating ? 'Generando...' : 'Crear contextualización'}
+              {generating ? 'Generando...' : 'Generar contexto IA'}
             </button>
           </div>
         )}
@@ -249,6 +269,7 @@ function Modal({ open, onClose, producto, onSaved }: {
         archivo_url:     producto.archivo_url ?? '',
         contenido_entrega: producto.contenido_entrega ?? '',
         mensaje_entrega: producto.mensaje_entrega ?? '',
+        pdf_contexto_url: producto.pdf_contexto_url ?? '',
       })
     } else {
       setForm(emptyForm())
@@ -289,6 +310,7 @@ function Modal({ open, onClose, producto, onSaved }: {
           archivo_url: form.archivo_url || null,
           contenido_entrega: form.contenido_entrega.trim() || null,
           mensaje_entrega: form.mensaje_entrega.trim() || null,
+          pdf_contexto_url: form.pdf_contexto_url || null,
         }),
       })
       if (!res.ok) { const e = await res.json(); setError(e.error ?? 'Error al guardar'); return }
@@ -540,16 +562,35 @@ function Modal({ open, onClose, producto, onSaved }: {
                 </p>
               </div>
 
-              {/* Info contextualización */}
-              <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg">
-                <p className="text-xs font-medium text-violet-700 mb-1 flex items-center gap-1.5">
+              {/* PDF para contextualización IA */}
+              <div className="p-3 bg-violet-50 border border-violet-200 rounded-lg space-y-2">
+                <p className="text-xs font-medium text-violet-700 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5" />
-                  Contextualización IA
+                  PDF de referencia para IA (opcional)
                 </p>
                 <p className="text-xs text-violet-600 leading-relaxed">
-                  Cuando guardes el producto, aparecerá el botón <strong>«Crear contextualización»</strong> en la tarjeta.
-                  La IA leerá todos los campos y generará un resumen conciso que el bot usará para responder consultas del cliente.
+                  Sube el PDF del producto o material de referencia. La IA lo leerá completo para generar un contexto de ventas detallado con resumen, público objetivo, beneficios, ángulos de venta y respuestas a objeciones.
                 </p>
+                {form.pdf_contexto_url ? (
+                  <div className="flex items-center gap-2 p-2 bg-white border border-violet-200 rounded-lg">
+                    <FileText className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                    <span className="text-xs text-violet-700 flex-1 truncate">PDF cargado</span>
+                    <button
+                      type="button"
+                      onClick={() => set('pdf_contexto_url', '')}
+                      className="p-0.5 hover:bg-violet-100 rounded transition"
+                    >
+                      <X className="w-3.5 h-3.5 text-violet-500" />
+                    </button>
+                  </div>
+                ) : (
+                  <FileUploader
+                    value={form.pdf_contexto_url}
+                    onChange={v => set('pdf_contexto_url', v)}
+                    accept=".pdf"
+                    hint="Solo PDF · hasta 50 MB"
+                  />
+                )}
               </div>
             </>
           )}

@@ -25,6 +25,7 @@ export interface ProductoDigital {
   mensaje_entrega: string | null
   contextualizacion: string | null
   contextualizacion_at: string | null
+  pdf_contexto_url: string | null
   destacado: boolean
   activo: boolean
   created_at: string
