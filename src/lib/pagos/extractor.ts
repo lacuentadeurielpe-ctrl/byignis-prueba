@@ -91,16 +91,23 @@ const USER_PROMPT = `Extrae los datos de este comprobante. Responde con exactame
 /**
  * Extrae datos estructurados de una imagen de comprobante de pago.
  * Retorna null si OpenAI no está disponible o si la imagen no es un comprobante.
+ * @param contextoTienda - Instrucciones adicionales del dueño (editables en Bot → Prompts)
+ *                         + datos de pago de la tienda (número Yape, cuenta bancaria, etc.)
  */
 export async function extraerComprobante(
   buffer: Buffer,
   mimeType: string,
+  contextoTienda?: string,
 ): Promise<DatosComprobante | null> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) return null
 
   const base64 = buffer.toString('base64')
   const imageUrl = `data:${mimeType};base64,${base64}`
+
+  const systemPromptFinal = contextoTienda
+    ? `${SYSTEM_PROMPT}\n\nCONTEXTO DE ESTA TIENDA:\n${contextoTienda}`
+    : SYSTEM_PROMPT
 
   try {
     const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
@@ -114,7 +121,7 @@ export async function extraerComprobante(
         max_tokens: 500,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPromptFinal },
           {
             role: 'user',
             content: [

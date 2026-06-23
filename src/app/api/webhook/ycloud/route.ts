@@ -26,6 +26,7 @@ import { desencriptar } from '@/lib/encryption'
 import { pausarBotPorDueno } from '@/lib/bot/session'
 import { acumularOProcesar } from '@/lib/bot/debounce'
 import { extraerComprobante } from '@/lib/pagos/extractor'
+import { getVerificacionPagosText } from '@/lib/ai/orchestrator-prompt'
 import { procesarPago } from '@/lib/pagos/matcher'
 import { normalizarTelefono } from '@/lib/utils'
 
@@ -298,7 +299,21 @@ export async function POST(request: Request) {
               console.log(`[Webhook] Comprobante de pago detectado — ejecutando extractor F5`)
 
               // Re-analizar con el extractor especializado (más detallado que analizarImagen)
-              const datosComprobante = await extraerComprobante(media.buffer, mimeParaVision)
+              // Cargar prompt de verificación (editable por el dueño) + datos de pago de la tienda
+              const { data: botCfg } = await supabase
+                .from('configuracion_bot')
+                .select('prompt_overrides')
+                .eq('ferreteria_id', ferreteria.id)
+                .maybeSingle()
+              const overrides = (botCfg?.prompt_overrides ?? {}) as Record<string, string>
+              const datosYape   = (ferreteria as Record<string, unknown>).datos_yape   as { numero?: string; nombre?: string } | null
+              const datosPlin   = (ferreteria as Record<string, unknown>).datos_plin   as { numero?: string } | null
+              const datosTransf = (ferreteria as Record<string, unknown>).datos_transferencia as { banco?: string; cuenta?: string; titular?: string } | null
+              let contextoTienda = getVerificacionPagosText(overrides)
+              if (datosYape?.numero)  contextoTienda += `\n\nDatos de pago configurados:\n- Yape: ${datosYape.numero}${datosYape.nombre ? ` (${datosYape.nombre})` : ''}`
+              if (datosPlin?.numero)  contextoTienda += `\n- Plin: ${datosPlin.numero}`
+              if (datosTransf?.banco) contextoTienda += `\n- Transferencia (${datosTransf.banco}): cuenta …${datosTransf.cuenta?.slice(-4) ?? 'N/A'}, titular: ${datosTransf.titular ?? 'N/A'}`
+              const datosComprobante = await extraerComprobante(media.buffer, mimeParaVision, contextoTienda)
 
               // Buscar cliente en la ferretería actual — FERRETERÍA AISLADA
               const telefonoClienteNorm = normalizarTelefono(telefonoCliente)

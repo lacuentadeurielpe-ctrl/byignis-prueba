@@ -139,14 +139,15 @@ export const TOOL_SCHEMAS = [
       name: 'crear_pedido',
       description:
         'Crea el pedido definitivo en la base de datos. ' +
-        'Llámala SOLO cuando ya tienes: nombre del cliente, modalidad (delivery/recojo), ' +
-        'y dirección si es delivery. Esto crea el pedido, descuenta stock y genera el comprobante.',
+        'Para productos FÍSICOS: necesitas nombre, modalidad (delivery/recojo) y dirección si es delivery. ' +
+        'Para productos DIGITALES: usa modalidad="digital" — NO pidas dirección ni zona. Solo el nombre (puede ser corto). ' +
+        'Esto crea el pedido, descuenta stock y genera el comprobante.',
       parameters: {
         type: 'object',
         properties: {
-          nombre_cliente:    { type: 'string', description: 'Nombre completo del cliente para el pedido.' },
-          modalidad:         { type: 'string', enum: ['delivery', 'recojo'], description: 'Modalidad de entrega.' },
-          direccion_entrega: { type: 'string', description: 'Dirección de entrega (obligatorio si modalidad=delivery).' },
+          nombre_cliente:    { type: 'string', description: 'Nombre del cliente. Para digital puede ser nombre corto o alias.' },
+          modalidad:         { type: 'string', enum: ['delivery', 'recojo', 'digital'], description: 'Modalidad: delivery o recojo para físicos; digital para productos digitales.' },
+          direccion_entrega: { type: 'string', description: 'Dirección de entrega (solo obligatorio si modalidad=delivery).' },
           zona_nombre:       { type: 'string', description: 'Nombre de la zona de delivery si aplica.' },
         },
         required: ['nombre_cliente', 'modalidad'],
@@ -1014,12 +1015,15 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     requireTenant(ctx)
 
     const nombreCliente    = (args.nombre_cliente as string | undefined)?.trim()
-    const modalidad        = args.modalidad as 'delivery' | 'recojo' | undefined
+    const modalidadRaw     = args.modalidad as 'delivery' | 'recojo' | 'digital' | undefined
+    const esDigital        = modalidadRaw === 'digital'
+    // Para la BD usamos 'recojo' cuando es digital (no hay delivery físico)
+    const modalidad        = esDigital ? 'recojo' : modalidadRaw
     const direccionEntrega = (args.direccion_entrega as string | undefined)?.trim() || null
     const zonaNombre       = (args.zona_nombre as string | undefined)?.trim() || null
 
     if (!nombreCliente) return { ok: false, error: 'nombre_cliente es requerido', motivo: 'falta_nombre' }
-    if (!modalidad)     return { ok: false, error: 'modalidad es requerida',       motivo: 'falta_modalidad' }
+    if (!modalidadRaw)  return { ok: false, error: 'modalidad es requerida',       motivo: 'falta_modalidad' }
     if (modalidad === 'delivery' && !direccionEntrega) {
       return { ok: false, error: 'dirección de entrega requerida para delivery', motivo: 'falta_direccion' }
     }
@@ -1144,7 +1148,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       const perfilNuevo: Record<string, unknown> = {
         ...perfilBase,
         compras_frecuentes: comprasUnicas,
-        modalidad_preferida: modalidad,
+        modalidad_preferida: esDigital ? 'digital' : modalidad,
       }
       if (modalidad === 'delivery' && zonaNombre) perfilNuevo.zona_habitual = zonaNombre
 

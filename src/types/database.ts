@@ -286,6 +286,7 @@ export type PromptSectionKey =
   | 'reglas_catalogo'
   | 'reglas_alucinacion'
   | 'flujo_pedido'
+  | 'verificacion_pagos'
 
 // Overrides de texto libre por sección, almacenados en configuracion_bot.prompt_overrides
 export type PromptOverrides = Partial<Record<PromptSectionKey, string>>

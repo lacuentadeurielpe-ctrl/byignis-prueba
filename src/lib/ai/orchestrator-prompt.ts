@@ -122,6 +122,14 @@ Tu rol: ayudar al cliente con cotizaciones, pedidos, estado de pedidos, dudas so
 
 ### Cuando el cliente confirma que quiere el pedido ("sí", "dale", "confirmo"):
 - Si ya hay cotización activa (ver FLUJO ACTIVO arriba) → pasa al siguiente paso
+
+**Para productos DIGITALES (descarga, link, clave, manual):**
+- NO preguntes dirección de entrega ni modalidad (delivery/recojo)
+- Solo pide nombre si no lo tienes — puede ser nombre corto o alias
+- Llama \`crear_pedido\` con \`modalidad: "digital"\` inmediatamente
+- Después del pedido, entrega el acceso directamente por WhatsApp o indica cómo recibirlo
+
+**Para productos FÍSICOS:**
 - Pide un dato a la vez:
   - Si no tienes nombre → pregunta nombre
   - Si no tienes modalidad → pregunta si es delivery o recojo
@@ -226,12 +234,38 @@ Sé como un cajero hábil: rápido, exacto, sin contexto que no pidió.
 - Ayuda a estimar cantidades si el cliente lo pide
 Máximo 4-6 líneas. Sé útil, no verboso.`,
   },
+  {
+    key: 'verificacion_pagos',
+    label: 'Verificación de comprobantes de pago',
+    avanzado: false,
+    // Esta sección NO se incluye en el prompt del orquestador.
+    // Se usa en el extractor de imágenes (Vision) cuando el cliente envía un comprobante.
+    // El dueño puede personalizar qué verificar: nombre Yape, banco, notas especiales.
+    default: () => `Verifica que el comprobante de pago corresponda a esta tienda.
+
+IMPORTANTE — lo que puedes y no puedes verificar:
+- YAPE: Yape NO muestra el número del destinatario en la captura. Solo verifica que sea un pago en soles (PEN), el monto sea positivo y la captura sea auténtica (no editada). El código de seguridad de 3 dígitos y los últimos 3 del celular del pagador son útiles para dedup.
+- PLIN: verifica que el número de celular del destinatario coincida con el número configurado.
+- TRANSFERENCIA BANCARIA: verifica que los últimos 4 dígitos de la cuenta destino coincidan con la cuenta configurada.
+
+Si el monto no coincide exactamente con ningún pedido pendiente, escala al encargado (no rechaces automáticamente — puede ser un pago parcial o anticipo).
+Si la imagen es ilegible o muy borrosa, pide al cliente que reenvíe la foto más nítida o escriba el número de operación.`,
+  },
 ]
 
 export function getPromptSectionDef(key: PromptSectionKey): PromptSectionDef {
   const def = PROMPT_SECTIONS.find((s) => s.key === key)
   if (!def) throw new Error(`Sección de prompt desconocida: ${key}`)
   return def
+}
+
+/**
+ * Devuelve el texto de la sección "verificacion_pagos" respetando overrides del dueño.
+ * Se usa en el extractor de comprobantes (Vision) — no va al prompt del orquestador.
+ */
+export function getVerificacionPagosText(overrides: Partial<Record<string, string>>): string {
+  const def = PROMPT_SECTIONS.find((s) => s.key === 'verificacion_pagos')!
+  return overrides['verificacion_pagos'] ?? def.default({} as InterpolateVars)
 }
 
 // Catálogo compacto: muestra nombre, precio, stock.
