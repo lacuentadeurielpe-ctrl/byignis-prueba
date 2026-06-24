@@ -1,5 +1,4 @@
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
@@ -12,15 +11,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/login?error=link_invalido', request.url))
   }
 
-  const cookieStore = await cookies()
+  // Crear la respuesta de redirect ANTES — las cookies se setean en ella, no en cookieStore
+  const redirectUrl = new URL(next, request.url)
+  const response = NextResponse.redirect(redirectUrl)
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll: () => cookieStore.getAll(),
+        getAll: () => request.cookies.getAll(),
         setAll: (toSet) => {
-          toSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
+          toSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
         },
       },
     },
@@ -33,5 +37,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/login?error=link_expirado', request.url))
   }
 
-  return NextResponse.redirect(new URL(next, request.url))
+  return response
 }

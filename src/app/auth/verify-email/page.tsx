@@ -1,24 +1,56 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import { useRouter } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Mail, CheckCircle, Loader2, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 
 function VerifyEmailContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const email = searchParams.get('email') ?? ''
 
   const [resending, setResending] = useState(false)
   const [resent, setResent] = useState(false)
   const [countdown, setCountdown] = useState(0)
+  const [confirmed, setConfirmed] = useState(false)
 
+  // Countdown para reenvío
   useEffect(() => {
     if (countdown <= 0) return
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
     return () => clearTimeout(t)
   }, [countdown])
+
+  // Detectar confirmación automática (mismo navegador o polling cross-device)
+  useEffect(() => {
+    const supabase = createClient()
+
+    // 1. onAuthStateChange: detecta si el mismo navegador confirma en otra pestaña
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        setConfirmed(true)
+        setTimeout(() => router.push('/onboarding'), 1500)
+      }
+    })
+
+    // 2. Polling cada 4s: detecta confirmación desde otro dispositivo (celular)
+    const poll = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        clearInterval(poll)
+        setConfirmed(true)
+        setTimeout(() => router.push('/onboarding'), 1500)
+      }
+    }, 4000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearInterval(poll)
+    }
+  }, [router])
 
   async function handleResend() {
     if (!email || resending || countdown > 0) return
@@ -30,9 +62,22 @@ function VerifyEmailContent() {
     setCountdown(60)
   }
 
+  if (confirmed) {
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 text-center">
+        <div className="mx-auto w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6">
+          <CheckCircle className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-xl font-semibold text-zinc-900 mb-2">¡Correo confirmado!</h2>
+        <p className="text-sm text-zinc-500">Redirigiendo a tu panel...</p>
+        <Loader2 className="w-5 h-5 animate-spin text-zinc-400 mx-auto mt-4" />
+      </div>
+    )
+  }
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 text-center">
-      {/* Ícono animado */}
+      {/* Ícono */}
       <div className="mx-auto w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mb-6">
         <Mail className="w-8 h-8 text-white" />
       </div>
@@ -60,8 +105,13 @@ function VerifyEmailContent() {
         </div>
         <div className="flex items-start gap-3">
           <CheckCircle className="w-4 h-4 text-zinc-400 mt-0.5 shrink-0" />
-          <p className="text-xs text-zinc-500">Serás redirigido a configurar tu negocio</p>
+          <p className="text-xs text-zinc-500">Esta página se actualizará automáticamente</p>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 justify-center text-xs text-zinc-400 mb-5">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Esperando confirmación...
       </div>
 
       {resent ? (
@@ -95,12 +145,19 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={
-      <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <span className="text-xl font-bold text-zinc-900">Uintegrus</span>
+        </div>
+        <Suspense fallback={
+          <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+          </div>
+        }>
+          <VerifyEmailContent />
+        </Suspense>
       </div>
-    }>
-      <VerifyEmailContent />
-    </Suspense>
+    </div>
   )
 }
