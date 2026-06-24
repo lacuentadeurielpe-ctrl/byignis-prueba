@@ -293,11 +293,16 @@ export type PromptOverrides = Partial<Record<PromptSectionKey, string>>
 
 // Agentes configurables por tenant — F4
 // Semántica opt-out: campo ausente o true = activo, false = desactivado
+// Debe estar sincronizado con AGENT_REGISTRY en src/lib/ai/agents/registry.ts
 export interface AgentesActivos {
-  ventas?:       boolean  // guardar_cotizacion, crear_pedido, agregar_a_pedido_reciente, modificar_pedido
-  comprobantes?: boolean  // solicitar_comprobante
-  upsell?:       boolean  // sugerir_complementario
-  crm?:          boolean  // historial_cliente, guardar_dato_cliente
+  ventas?:          boolean  // guardar_cotizacion, crear_pedido, agregar_a_pedido_reciente, modificar_pedido
+  comprobantes?:    boolean  // solicitar_comprobante
+  upsell?:          boolean  // sugerir_complementario
+  crm?:             boolean  // historial_cliente, guardar_dato_cliente
+  comunicaciones?:  boolean  // notificar_telegram, enviar_cotizacion_email, etc.
+  agenda?:          boolean  // crear_evento_entrega, agendar_visita_tecnica, consultar_agenda_hoy
+  pagos?:           boolean  // verificar_pago_mp, registrar_pago_manual, consultar_saldo_pendiente
+  inventario?:      boolean  // listar_stock_bajo, consultar_rotacion_producto, subir_catalogo_drive
 }
 
 export interface ConfiguracionBot {

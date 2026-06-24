@@ -154,10 +154,14 @@ export async function handleIncomingMessage({
   const botAgentesArr = ferreteria.bot_agentes_activos
   const agentesActivos: AgentesActivos | undefined = botAgentesArr != null
     ? {
-        ventas:       botAgentesArr.includes('ventas')       ? undefined : false,
-        comprobantes: botAgentesArr.includes('comprobantes') ? undefined : false,
-        upsell:       botAgentesArr.includes('upsell')       ? undefined : false,
-        crm:          botAgentesArr.includes('crm')          ? undefined : false,
+        ventas:         botAgentesArr.includes('ventas')         ? undefined : false,
+        comprobantes:   botAgentesArr.includes('comprobantes')   ? undefined : false,
+        upsell:         botAgentesArr.includes('upsell')         ? undefined : false,
+        crm:            botAgentesArr.includes('crm')            ? undefined : false,
+        comunicaciones: botAgentesArr.includes('comunicaciones') ? undefined : false,
+        agenda:         botAgentesArr.includes('agenda')         ? undefined : false,
+        pagos:          botAgentesArr.includes('pagos')          ? undefined : false,
+        inventario:     botAgentesArr.includes('inventario')     ? undefined : false,
       }
     : (config as unknown as { agentes_activos?: AgentesActivos } | null)?.agentes_activos
 
