@@ -35,27 +35,36 @@ export default function RegisterPage() {
 
     try {
       const supabase = createClient()
-      const { error } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
-        options: {
-          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/onboarding`,
-        },
-      })
 
-      if (error) {
-        if (error.message.includes('already registered')) {
+      // Race: si Supabase tarda más de 1.5s enviando el email, redirigimos igual.
+      // El usuario ya fue creado — el email llegará. Los errores rápidos (ej: email
+      // duplicado) responden en < 500ms y se capturan normalmente.
+      const result = await Promise.race([
+        supabase.auth.signUp({
+          email: form.email,
+          password: form.password,
+          options: {
+            emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/onboarding`,
+          },
+        }),
+        new Promise<{ data: null; error: null }>((resolve) =>
+          setTimeout(() => resolve({ data: null, error: null }), 1500)
+        ),
+      ])
+
+      if (result.error) {
+        if (result.error.message.includes('already registered')) {
           setError('Este correo ya tiene una cuenta. Inicia sesión.')
         } else {
           setError('Ocurrió un error al crear la cuenta. Inténtalo de nuevo.')
         }
+        setLoading(false)
         return
       }
 
       router.push(`/auth/verify-email?email=${encodeURIComponent(form.email)}`)
     } catch {
       setError('Error de conexión. Inténtalo de nuevo.')
-    } finally {
       setLoading(false)
     }
   }
