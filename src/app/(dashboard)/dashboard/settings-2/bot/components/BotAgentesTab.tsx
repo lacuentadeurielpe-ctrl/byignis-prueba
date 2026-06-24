@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronRight, AlertTriangle, ExternalLink, Wrench, StickyNote, Check, Loader2, Pencil } from 'lucide-react'
+import { ChevronDown, ChevronRight, AlertTriangle, ExternalLink, Wrench, StickyNote, Check, Loader2, Pencil, Bell, BellOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ── Tipos locales (espejo de registry.ts para no importar módulo server) ────────
@@ -22,13 +22,20 @@ interface AgentDef {
   tools: ToolDef[]
 }
 
+interface ConfigRecordatorios {
+  activo:         boolean
+  dias_gracia:    number
+  mensaje_custom: string
+}
+
 interface ApiData {
-  agentes:                   string[]
-  herramientas_desactivadas: string[]
-  instrucciones_agentes:     Record<string, string>
-  instrucciones_tools:       Record<string, string>
-  registry:                  AgentDef[]
-  core_tools:                ToolDef[]
+  agentes:                    string[]
+  herramientas_desactivadas:  string[]
+  instrucciones_agentes:      Record<string, string>
+  instrucciones_tools:        Record<string, string>
+  config_recordatorios_deuda: ConfigRecordatorios
+  registry:                   AgentDef[]
+  core_tools:                 ToolDef[]
 }
 
 // Placeholders de ejemplo por agente — orientan al dueño
@@ -309,6 +316,135 @@ function ToolNota({ toolName, agentOn, initialValue, onSaved }: ToolNotaProps) {
   )
 }
 
+// ── Panel de recordatorios de deuda (solo bajo agente Pagos) ─────────────────
+
+interface RecordatoriosDeudaConfigProps {
+  initial:  ConfigRecordatorios
+  agentOn:  boolean
+}
+
+function RecordatoriosDeudaConfig({ initial, agentOn }: RecordatoriosDeudaConfigProps) {
+  const [cfg,    setCfg]    = useState<ConfigRecordatorios>(initial)
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+
+  const isDirty = JSON.stringify(cfg) !== JSON.stringify(initial)
+
+  async function guardar() {
+    setStatus('saving')
+    try {
+      const res = await fetch('/api/settings-2/bot/agentes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config_recordatorios_deuda: cfg }),
+      })
+      if (res.ok) {
+        setStatus('saved')
+        setTimeout(() => setStatus('idle'), 2500)
+      } else setStatus('idle')
+    } catch { setStatus('idle') }
+  }
+
+  return (
+    <div className={cn('border-t border-orange-100 bg-orange-50/40', !agentOn && 'opacity-50 pointer-events-none')}>
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3">
+        {cfg.activo
+          ? <Bell    className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+          : <BellOff className="w-3.5 h-3.5 text-zinc-400 shrink-0" />}
+        <p className="text-[12px] font-semibold text-zinc-700 flex-1">Recordatorios automáticos de crédito</p>
+        {/* Toggle ON/OFF */}
+        <button
+          onClick={() => setCfg((p) => ({ ...p, activo: !p.activo }))}
+          className={cn(
+            'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none',
+            cfg.activo ? 'bg-orange-500' : 'bg-zinc-300'
+          )}
+          role="switch"
+          aria-checked={cfg.activo}
+          title={cfg.activo ? 'Desactivar recordatorios' : 'Activar recordatorios'}
+        >
+          <span className={cn(
+            'inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+            cfg.activo ? 'translate-x-4' : 'translate-x-0'
+          )} />
+        </button>
+      </div>
+
+      {/* Body — solo visible cuando está activo */}
+      {cfg.activo && (
+        <div className="px-4 pb-4 space-y-3">
+          <p className="text-[11px] text-orange-700/70 leading-relaxed">
+            El bot enviará un WhatsApp automático a las <strong>9:00 am</strong> a cada cliente con crédito vencido.
+            Solo se envía 1 recordatorio por día por crédito.
+          </p>
+
+          {/* Días de gracia */}
+          <div className="flex items-center gap-3">
+            <label className="text-[11.5px] font-medium text-zinc-600 w-48 shrink-0">
+              Días de gracia después del vencimiento
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={30}
+              value={cfg.dias_gracia}
+              onChange={(e) => setCfg((p) => ({ ...p, dias_gracia: Math.max(0, Math.min(30, Number(e.target.value))) }))}
+              className="w-16 px-2 py-1 text-[12px] border border-zinc-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+            />
+            <span className="text-[11px] text-zinc-400">días (0 = el mismo día del vencimiento)</span>
+          </div>
+
+          {/* Mensaje custom */}
+          <div className="space-y-1">
+            <label className="text-[11.5px] font-medium text-zinc-600 block">
+              Mensaje adicional al final del recordatorio{' '}
+              <span className="text-zinc-400 font-normal">(opcional)</span>
+            </label>
+            <div className="relative">
+              <textarea
+                value={cfg.mensaje_custom}
+                onChange={(e) => setCfg((p) => ({ ...p, mensaje_custom: e.target.value.slice(0, 500) }))}
+                placeholder='Ej: "Cualquier consulta llámanos al 987 654 321." — Si está vacío se usa texto genérico.'
+                rows={2}
+                className="w-full px-3 py-2 text-[11.5px] border border-zinc-200 rounded-lg resize-none bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-zinc-300"
+              />
+              <span className={cn(
+                'absolute bottom-2 right-2 text-[9.5px] font-mono pointer-events-none',
+                cfg.mensaje_custom.length > 450 ? 'text-amber-500' : 'text-zinc-300'
+              )}>
+                {cfg.mensaje_custom.length}/500
+              </span>
+            </div>
+          </div>
+
+          {/* Botón guardar */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={guardar}
+              disabled={!isDirty || status === 'saving'}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-semibold transition-all',
+                status === 'saved'
+                  ? 'bg-emerald-500 text-white'
+                  : isDirty
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                    : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+              )}
+            >
+              {status === 'saving' && <Loader2 className="w-3 h-3 animate-spin" />}
+              {status === 'saved'  && <Check   className="w-3 h-3" />}
+              {status === 'saved' ? 'Configuración guardada' : 'Guardar'}
+            </button>
+            {isDirty && status !== 'saved' && (
+              <span className="text-[10.5px] text-orange-500">Cambios sin guardar</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function BotAgentesTab() {
@@ -317,6 +453,7 @@ export default function BotAgentesTab() {
   const [herramientasDesactivadas, setHerramientasDesactivadas] = useState<string[]>([])
   const [instrucciones,            setInstrucciones]            = useState<Record<string, string>>({})
   const [instruccionesTools,       setInstruccionesTools]       = useState<Record<string, string>>({})
+  const [configRecordatorios,      setConfigRecordatorios]      = useState<ConfigRecordatorios>({ activo: false, dias_gracia: 1, mensaje_custom: '' })
   const [expanded,                 setExpanded]                 = useState<string | null>(null)
   const [expandedToolNota,         setExpandedToolNota]         = useState<string | null>(null)
   const [isSaving,                 setIsSaving]                 = useState(false)
@@ -331,6 +468,7 @@ export default function BotAgentesTab() {
         setHerramientasDesactivadas(d.herramientas_desactivadas ?? [])
         setInstrucciones(d.instrucciones_agentes ?? {})
         setInstruccionesTools(d.instrucciones_tools ?? {})
+        setConfigRecordatorios(d.config_recordatorios_deuda ?? { activo: false, dias_gracia: 1, mensaje_custom: '' })
       })
   }, [])
 
@@ -603,6 +741,14 @@ export default function BotAgentesTab() {
                       )
                     })}
                   </div>
+
+                  {/* ── Panel de recordatorios (solo agente pagos) ────────── */}
+                  {agent.id === 'pagos' && (
+                    <RecordatoriosDeudaConfig
+                      initial={configRecordatorios}
+                      agentOn={agentOn}
+                    />
+                  )}
 
                   {/* ── Instrucciones especiales del agente ──────────────── */}
                   <AgentInstruccion

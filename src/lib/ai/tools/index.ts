@@ -699,6 +699,50 @@ export const TOOL_SCHEMAS = [
     },
   },
 
+  // ── PAGOS: crédito formal ──────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'consultar_credito_formal',
+      description:
+        'Consulta las líneas de crédito formal del cliente actual (tabla creditos). ' +
+        'Distinto de consultar_deuda_cliente que muestra pedidos sin pagar: ' +
+        'este muestra créditos aprobados con monto, fecha de vencimiento y saldo real. ' +
+        'Úsalo cuando el cliente pregunta por su crédito, su saldo de crédito o cuánto debe de crédito.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tipo: {
+            type: 'string',
+            enum: ['activo', 'vencido', 'todos'],
+            description: 'Filtrar por estado del crédito. Por defecto muestra activos y vencidos.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'registrar_abono_credito',
+      description:
+        'Registra un pago parcial o total contra una línea de crédito formal. ' +
+        'Úsalo cuando el cliente quiere abonar a su crédito. ' +
+        'Obtén el credito_id con consultar_credito_formal primero si no lo tienes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          credito_id:  { type: 'string',  description: 'UUID del crédito (obtenido con consultar_credito_formal).' },
+          monto:       { type: 'number',  description: 'Monto del abono en soles (debe ser > 0).' },
+          metodo_pago: { type: 'string',  enum: ['efectivo', 'yape', 'plin', 'transferencia', 'otro'], description: 'Forma de pago del abono.' },
+          notas:       { type: 'string',  description: 'Notas adicionales (número de operación, etc.).' },
+        },
+        required: ['credito_id', 'monto'],
+      },
+    },
+  },
+
   // ── INVENTARIO ─────────────────────────────────────────────────────────────
   {
     type: 'function',
@@ -2773,6 +2817,117 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
         total_pagado:   `S/ ${totalPagado.toFixed(2)}`,
         saldo_pendiente:`S/ ${saldo.toFixed(2)}`,
         pagado_completo: saldo === 0,
+      },
+    }
+  },
+
+  // ── Crédito formal: consultar ────────────────────────────────────────────
+  consultar_credito_formal: async (ctx, args) => {
+    requireTenant(ctx)
+    const tipo = (args.tipo as string | undefined) ?? 'todos'
+
+    // Buscar cliente por teléfono
+    const { data: cliente } = await ctx.supabase
+      .from('clientes')
+      .select('id, nombre')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('telefono', ctx.telefonoCliente)
+      .maybeSingle()
+
+    if (!cliente) {
+      return { ok: true, data: { creditos: [], mensaje: 'No se encontró perfil de cliente registrado' } }
+    }
+
+    let query = ctx.supabase
+      .from('creditos')
+      .select('id, monto_total, monto_pagado, fecha_limite, estado, notas')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('cliente_id', (cliente as any).id)
+
+    if (tipo === 'activo' || tipo === 'vencido') {
+      query = query.eq('estado', tipo)
+    } else {
+      query = query.in('estado', ['activo', 'vencido'])
+    }
+
+    const { data: creditos } = await query.order('fecha_limite', { ascending: true })
+
+    const items = ((creditos ?? []) as any[]).map((c) => ({
+      id:               c.id,
+      monto_total:      `S/ ${Number(c.monto_total).toFixed(2)}`,
+      monto_pagado:     `S/ ${Number(c.monto_pagado).toFixed(2)}`,
+      saldo_pendiente:  `S/ ${Math.max(0, Number(c.monto_total) - Number(c.monto_pagado)).toFixed(2)}`,
+      fecha_vencimiento: c.fecha_limite,
+      estado:           c.estado,
+      notas:            c.notas ?? undefined,
+    }))
+
+    const totalPendiente = ((creditos ?? []) as any[]).reduce(
+      (sum, c) => sum + Math.max(0, Number(c.monto_total) - Number(c.monto_pagado)), 0
+    )
+
+    return {
+      ok: true,
+      data: {
+        cliente:                 (cliente as any).nombre,
+        creditos:                items,
+        total_credito_pendiente: `S/ ${totalPendiente.toFixed(2)}`,
+        cantidad:                items.length,
+      },
+    }
+  },
+
+  // ── Crédito formal: registrar abono ──────────────────────────────────────
+  registrar_abono_credito: async (ctx, args) => {
+    requireTenant(ctx)
+    const creditoId = (args.credito_id as string | undefined)?.trim()
+    const monto     = args.monto as number | undefined
+    const metodoPago = (args.metodo_pago as string | undefined) ?? null
+    const notas      = (args.notas as string | undefined) ?? null
+
+    if (!creditoId || !monto || monto <= 0) {
+      return { ok: false, error: 'credito_id y monto (> 0) son requeridos' }
+    }
+
+    // Verificar que el crédito pertenece a este tenant
+    const { data: credito } = await ctx.supabase
+      .from('creditos')
+      .select('id, monto_total, monto_pagado, estado')
+      .eq('ferreteria_id', ctx.ferreteriaId)
+      .eq('id', creditoId)
+      .maybeSingle()
+
+    if (!credito) return { ok: false, error: 'Crédito no encontrado para esta tienda' }
+    if ((credito as any).estado === 'pagado') {
+      return { ok: false, error: 'Este crédito ya fue cancelado completamente' }
+    }
+
+    const nuevoMontoPagado = Number((credito as any).monto_pagado) + monto
+    const cancelado        = nuevoMontoPagado >= Number((credito as any).monto_total)
+
+    // Insertar abono
+    await ctx.supabase.from('abonos_credito').insert({
+      credito_id:   creditoId,
+      monto,
+      metodo_pago:  metodoPago,
+      notas,
+    })
+
+    // Actualizar crédito
+    await ctx.supabase.from('creditos').update({
+      monto_pagado: nuevoMontoPagado,
+      ...(cancelado ? { estado: 'pagado' } : {}),
+    }).eq('id', creditoId)
+
+    const saldoRestante = Math.max(0, Number((credito as any).monto_total) - nuevoMontoPagado)
+
+    return {
+      ok: true,
+      data: {
+        abono_registrado: `S/ ${monto.toFixed(2)}`,
+        saldo_restante:   `S/ ${saldoRestante.toFixed(2)}`,
+        estado:           cancelado ? 'pagado' : (credito as any).estado,
+        credito_cancelado: cancelado,
       },
     }
   },

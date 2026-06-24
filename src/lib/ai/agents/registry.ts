@@ -186,8 +186,11 @@ export const AGENT_REGISTRY: AgentDef[] = [
         desc:                'Consulta el estado de un pago de MercadoPago por ID de preferencia o pago',
         requiereIntegracion: 'mercadopago' as const,
       },
-      { name: 'registrar_pago_manual',       label: 'Registrar pago manual',   desc: 'Registra un pago recibido (efectivo, Yape, transferencia) en el pedido sin pasar por MercadoPago' },
+      { name: 'registrar_pago_manual',       label: 'Registrar pago manual',      desc: 'Registra un pago recibido (efectivo, Yape, transferencia) en el pedido sin pasar por MercadoPago' },
       { name: 'consultar_saldo_pendiente',   label: 'Saldo pendiente del pedido', desc: 'Calcula cuánto falta por pagar de un pedido, considerando abonos registrados' },
+      // Crédito formal (tabla creditos — distinto de deuda de pedidos)
+      { name: 'consultar_credito_formal',    label: 'Crédito formal',             desc: 'Consulta líneas de crédito activas o vencidas del cliente (créditos formales aprobados)' },
+      { name: 'registrar_abono_credito',     label: 'Registrar abono de crédito', desc: 'Registra un pago parcial o total de una línea de crédito formal del cliente' },
     ],
   },
 

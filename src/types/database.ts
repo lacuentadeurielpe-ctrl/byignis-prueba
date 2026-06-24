@@ -323,6 +323,12 @@ export interface ConfiguracionBot {
   instrucciones_agentes: Record<string, string>  // { "ventas": "...", "pagos": "..." } — inyectadas cuando el agente está ON
   // Fase 2 — Personalización por tool (migración 078)
   instrucciones_tools: Record<string, string>    // { "crear_pedido": "Para pedidos > S/1000 confirmar..." } — notas de comportamiento
+  // Fase 3 — Recordatorios automáticos de crédito vencido (migración 079)
+  config_recordatorios_deuda: {
+    activo:         boolean   // habilita el cron diario
+    dias_gracia:    number    // días de gracia después de fecha_limite para empezar a recordar
+    mensaje_custom: string    // texto adicional al final del mensaje (vacío = default)
+  }
 }
 
 export type TipoCliente = 'persona' | 'empresa' | 'anonimo'
@@ -467,6 +473,7 @@ export interface Credito {
   notas: string | null
   created_at: string
   updated_at: string
+  ultimo_recordatorio_enviado_at: string | null  // migración 079: anti-spam del cron
   // joins
   clientes?: Cliente
   pedidos?: Pedido

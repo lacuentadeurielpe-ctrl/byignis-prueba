@@ -20,7 +20,7 @@ export async function GET() {
         .single(),
       supabase
         .from('configuracion_bot')
-        .select('instrucciones_agentes, instrucciones_tools')
+        .select('instrucciones_agentes, instrucciones_tools, config_recordatorios_deuda')
         .eq('ferreteria_id', session.ferreteriaId)
         .maybeSingle(),
     ])
@@ -31,11 +31,13 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      agentes:                   ferreteria?.bot_agentes_activos ?? [],
-      herramientas_desactivadas: ferreteria?.bot_herramientas_desactivadas ?? [],
-      instrucciones_agentes:     (config?.instrucciones_agentes ?? {}) as Record<string, string>,
-      registry:                  AGENT_REGISTRY,
-      core_tools:                CORE_TOOLS,
+      agentes:                    ferreteria?.bot_agentes_activos ?? [],
+      herramientas_desactivadas:  ferreteria?.bot_herramientas_desactivadas ?? [],
+      instrucciones_agentes:      (config?.instrucciones_agentes ?? {}) as Record<string, string>,
+      instrucciones_tools:        (config?.instrucciones_tools ?? {}) as Record<string, string>,
+      config_recordatorios_deuda: config?.config_recordatorios_deuda ?? { activo: false, dias_gracia: 1, mensaje_custom: '' },
+      registry:                   AGENT_REGISTRY,
+      core_tools:                 CORE_TOOLS,
     })
   } catch (err) {
     console.error('Error in GET /api/settings-2/bot/agentes:', err)
@@ -132,6 +134,37 @@ export async function PATCH(request: Request) {
       }
 
       return NextResponse.json({ ok: true, instrucciones_tools: toolsNuevas })
+    }
+
+    // ── Guardar config de recordatorios de deuda ─────────────────────────────
+    // Body: { config_recordatorios_deuda: { activo, dias_gracia, mensaje_custom } }
+    if ('config_recordatorios_deuda' in body) {
+      const cfg = body.config_recordatorios_deuda as {
+        activo?: boolean
+        dias_gracia?: number
+        mensaje_custom?: string
+      }
+
+      const dias = Math.max(0, Math.min(30, Number(cfg.dias_gracia ?? 1)))
+      const configLimpia = {
+        activo:         !!cfg.activo,
+        dias_gracia:    dias,
+        mensaje_custom: (cfg.mensaje_custom ?? '').slice(0, 500),
+      }
+
+      const { error } = await supabase
+        .from('configuracion_bot')
+        .upsert(
+          { ferreteria_id: session.ferreteriaId, config_recordatorios_deuda: configLimpia },
+          { onConflict: 'ferreteria_id' }
+        )
+
+      if (error) {
+        console.error('Error guardando config_recordatorios_deuda:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json({ ok: true, config_recordatorios_deuda: configLimpia })
     }
 
     // ── Guardar toggles de agentes y herramientas (comportamiento original) ──
