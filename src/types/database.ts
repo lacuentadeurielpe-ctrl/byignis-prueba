@@ -321,8 +321,8 @@ export interface ConfiguracionBot {
   prompt_overrides: PromptOverrides  // texto editable por sección del prompt del orquestador — default {}
   // Fase 1 — Personalización por agente (migración 077)
   instrucciones_agentes: Record<string, string>  // { "ventas": "...", "pagos": "..." } — inyectadas cuando el agente está ON
-  // Fase 2 — Personalización por tool (migración 078 — pendiente)
-  // instrucciones_tools: Record<string, string>
+  // Fase 2 — Personalización por tool (migración 078)
+  instrucciones_tools: Record<string, string>    // { "crear_pedido": "Para pedidos > S/1000 confirmar..." } — notas de comportamiento
 }
 
 export type TipoCliente = 'persona' | 'empresa' | 'anonimo'

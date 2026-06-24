@@ -32,6 +32,8 @@ interface BuildOrchestratorPromptParams {
   // Fase 1 — instrucciones por agente (migración 077)
   agentesActivos?: string[]                // IDs de los agentes activos (de ferreterias.bot_agentes_activos)
   instruccionesAgentes?: Record<string, string>  // { "ventas": "texto", "pagos": "texto" }
+  // Fase 2 — notas de comportamiento por tool (migración 078)
+  instruccionesTools?: Record<string, string>    // { "crear_pedido": "Para pedidos > S/1000..." }
 }
 
 // ── Tags disponibles para interpolar dentro de texto editable (Settings → Bot → Prompt) ────
@@ -350,6 +352,7 @@ export function buildOrchestratorSystemPrompt({
   integracionesConectadas = [],
   agentesActivos,
   instruccionesAgentes = {},
+  instruccionesTools = {},
 }: BuildOrchestratorPromptParams): string {
   const horario =
     ferreteria.horario_apertura && ferreteria.horario_cierre
@@ -484,6 +487,17 @@ Datos acumulados: ${partes.length > 0 ? partes.join(' | ') : '(ninguno aún)'}
     ? `\n\n# INSTRUCCIONES ESPECIALES CONFIGURADAS POR EL NEGOCIO\n${instruccionesAgentesLines.join('\n\n')}`
     : ''
 
+  // ── Notas de comportamiento por tool (Fase 2) ────────────────────────────────
+  // Se inyectan como lista plana. No se filtran por agente activo aquí —
+  // el modelo solo puede llamar tools activas, así que notas de tools inactivas son inocuas.
+  const notasToolsLines: string[] = []
+  for (const [toolName, nota] of Object.entries(instruccionesTools)) {
+    if (nota?.trim()) notasToolsLines.push(`- ${toolName}: ${nota.trim()}`)
+  }
+  const notasToolsBlock = notasToolsLines.length > 0
+    ? `\n\n## Notas de comportamiento por herramienta\n${notasToolsLines.join('\n')}`
+    : ''
+
   const cierreBlock = cierreCotizacionActivo ? `
 
 ## 13. CIERRE NATURAL POST-COTIZACIÓN
@@ -527,7 +541,7 @@ ${render('flujo_pedido')}
 ${render('upsell')}${cierreBlock}
 
 ${render('reglas_catalogo')}
-${instruccionesAgentesBlock}
+${instruccionesAgentesBlock}${notasToolsBlock}
 
 Responde siempre en español peruano, claro y directo.`
 }

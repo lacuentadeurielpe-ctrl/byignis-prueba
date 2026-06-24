@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronRight, AlertTriangle, ExternalLink, Wrench, StickyNote, Check, Loader2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, AlertTriangle, ExternalLink, Wrench, StickyNote, Check, Loader2, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ── Tipos locales (espejo de registry.ts para no importar módulo server) ────────
@@ -26,6 +26,7 @@ interface ApiData {
   agentes:                   string[]
   herramientas_desactivadas: string[]
   instrucciones_agentes:     Record<string, string>
+  instrucciones_tools:       Record<string, string>
   registry:                  AgentDef[]
   core_tools:                ToolDef[]
 }
@@ -200,6 +201,114 @@ function AgentInstruccion({ agentId, agentLabel, agentOn, initialValue, onSaved 
   )
 }
 
+// ── Nota de comportamiento por tool ──────────────────────────────────────────
+
+interface ToolNotaProps {
+  toolName:     string
+  agentOn:      boolean
+  initialValue: string
+  onSaved:      (name: string, texto: string) => void
+}
+
+function ToolNota({ toolName, agentOn, initialValue, onSaved }: ToolNotaProps) {
+  const [texto,  setTexto]  = useState(initialValue)
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const MAX = 1000
+
+  // Sincronizar si el initialValue cambia (eg. después de guardar en el padre)
+  useEffect(() => { setTexto(initialValue) }, [initialValue])
+
+  const isDirty  = texto !== initialValue
+  const hasValue = texto.trim().length > 0
+
+  async function guardar() {
+    setStatus('saving')
+    try {
+      const res = await fetch('/api/settings-2/bot/agentes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruccion_tool: { name: toolName, texto } }),
+      })
+      if (res.ok) {
+        setStatus('saved')
+        onSaved(toolName, texto.trim())
+        setTimeout(() => setStatus('idle'), 2000)
+      } else setStatus('idle')
+    } catch { setStatus('idle') }
+  }
+
+  async function limpiar() {
+    await fetch('/api/settings-2/bot/agentes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instruccion_tool: { name: toolName, texto: '' } }),
+    })
+    setTexto('')
+    onSaved(toolName, '')
+  }
+
+  useEffect(() => { textareaRef.current?.focus() }, [])
+
+  return (
+    <div className={cn('pl-12 pr-4 pb-3 pt-1 bg-amber-50/50 border-t border-amber-100', !agentOn && 'opacity-50 pointer-events-none')}>
+      <p className="text-[10.5px] text-amber-700/70 mb-1.5 font-medium">
+        Nota de uso — el bot la leerá antes de usar esta herramienta
+      </p>
+      <div className="relative">
+        <textarea
+          ref={textareaRef}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value.slice(0, MAX))}
+          placeholder="Ej: Solo usar cuando el cliente lo pida explícitamente. Incluir siempre el monto total..."
+          rows={2}
+          className={cn(
+            'w-full px-3 py-2 text-[11.5px] border rounded-lg resize-none transition-all',
+            'focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent',
+            'placeholder:text-zinc-300 text-zinc-800',
+            isDirty ? 'border-amber-300 bg-white' : 'border-zinc-200 bg-white/80'
+          )}
+        />
+        <span className={cn(
+          'absolute bottom-2 right-2 text-[9.5px] font-mono pointer-events-none',
+          texto.length > MAX * 0.9 ? 'text-amber-500' : 'text-zinc-300'
+        )}>
+          {texto.length}/{MAX}
+        </span>
+      </div>
+      <div className="flex items-center gap-2 mt-1.5">
+        <button
+          onClick={guardar}
+          disabled={!isDirty || status === 'saving'}
+          className={cn(
+            'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all',
+            status === 'saved'
+              ? 'bg-emerald-500 text-white'
+              : isDirty
+                ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                : 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+          )}
+        >
+          {status === 'saving' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+          {status === 'saved'  && <Check  className="w-2.5 h-2.5" />}
+          {status === 'saved' ? 'Guardada' : 'Guardar nota'}
+        </button>
+        {hasValue && (
+          <button
+            onClick={limpiar}
+            className="text-[11px] text-zinc-400 hover:text-rose-500 px-2 py-1 rounded-lg hover:bg-rose-50 transition-all"
+          >
+            Borrar
+          </button>
+        )}
+        {isDirty && status !== 'saved' && (
+          <span className="text-[10px] text-amber-500 ml-auto">Sin guardar</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function BotAgentesTab() {
@@ -207,7 +316,9 @@ export default function BotAgentesTab() {
   const [agentes,                  setAgentes]                  = useState<string[]>([])
   const [herramientasDesactivadas, setHerramientasDesactivadas] = useState<string[]>([])
   const [instrucciones,            setInstrucciones]            = useState<Record<string, string>>({})
+  const [instruccionesTools,       setInstruccionesTools]       = useState<Record<string, string>>({})
   const [expanded,                 setExpanded]                 = useState<string | null>(null)
+  const [expandedToolNota,         setExpandedToolNota]         = useState<string | null>(null)
   const [isSaving,                 setIsSaving]                 = useState(false)
   const [savedOk,                  setSavedOk]                  = useState(false)
 
@@ -219,6 +330,7 @@ export default function BotAgentesTab() {
         setAgentes(d.agentes?.length ? d.agentes : (d.registry ?? []).map((a) => a.id))
         setHerramientasDesactivadas(d.herramientas_desactivadas ?? [])
         setInstrucciones(d.instrucciones_agentes ?? {})
+        setInstruccionesTools(d.instrucciones_tools ?? {})
       })
   }, [])
 
@@ -239,6 +351,15 @@ export default function BotAgentesTab() {
       const next = { ...prev }
       if (texto.trim() === '') delete next[agentId]
       else next[agentId] = texto.trim()
+      return next
+    })
+  }
+
+  function handleToolNotaSaved(toolName: string, texto: string) {
+    setInstruccionesTools((prev) => {
+      const next = { ...prev }
+      if (texto.trim() === '') delete next[toolName]
+      else next[toolName] = texto.trim()
       return next
     })
   }
@@ -266,6 +387,7 @@ export default function BotAgentesTab() {
   }
 
   const totalConInstruccion = Object.keys(instrucciones).length
+  const totalToolsConNota   = Object.keys(instruccionesTools).length
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -274,11 +396,21 @@ export default function BotAgentesTab() {
           Activa o desactiva agentes completos, ajusta sus herramientas individualmente, y escribe
           instrucciones específicas en lenguaje natural para cada agente.
         </p>
-        {totalConInstruccion > 0 && (
-          <p className="text-[11px] text-violet-600 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-violet-500 inline-block" />
-            {totalConInstruccion} agente{totalConInstruccion > 1 ? 's' : ''} con instrucciones personalizadas activas
-          </p>
+        {(totalConInstruccion > 0 || totalToolsConNota > 0) && (
+          <div className="flex flex-wrap gap-2">
+            {totalConInstruccion > 0 && (
+              <p className="text-[11px] text-violet-600 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-500 inline-block" />
+                {totalConInstruccion} agente{totalConInstruccion > 1 ? 's' : ''} con instrucciones personalizadas
+              </p>
+            )}
+            {totalToolsConNota > 0 && (
+              <p className="text-[11px] text-amber-600 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                {totalToolsConNota} herramienta{totalToolsConNota > 1 ? 's' : ''} con notas de comportamiento
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -391,50 +523,81 @@ export default function BotAgentesTab() {
                       const toolOff    = herramientasDesactivadas.includes(tool.name)
                       const toolActive = agentOn && !toolOff
                       const hasIntegr  = !!tool.requiereIntegracion
+                      const toolNotaOpen = expandedToolNota === tool.name
+                      const hasNota      = !!instruccionesTools[tool.name]
 
                       return (
-                        <div
-                          key={tool.name}
-                          className={cn(
+                        <div key={tool.name}>
+                          {/* Fila principal de la tool */}
+                          <div className={cn(
                             'flex items-center gap-3 pl-12 pr-4 py-2.5',
                             agentOff && 'opacity-40'
-                          )}
-                        >
-                          {/* Toggle herramienta */}
-                          <button
-                            onClick={() => !agentOff && toggleTool(tool.name)}
-                            disabled={agentOff}
-                            className={cn(
-                              'relative inline-flex h-4 w-7 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none',
-                              toolActive ? 'bg-indigo-500' : 'bg-zinc-300',
-                              agentOff ? 'cursor-not-allowed' : 'cursor-pointer'
-                            )}
-                            role="switch"
-                            aria-checked={toolActive}
-                            title={agentOff ? 'Activa el agente primero' : toolOff ? 'Herramienta desactivada' : 'Herramienta activa'}
-                          >
-                            <span className={cn(
-                              'inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform',
-                              toolActive ? 'translate-x-3' : 'translate-x-0'
-                            )} />
-                          </button>
+                          )}>
+                            {/* Toggle herramienta */}
+                            <button
+                              onClick={() => !agentOff && toggleTool(tool.name)}
+                              disabled={agentOff}
+                              className={cn(
+                                'relative inline-flex h-4 w-7 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none',
+                                toolActive ? 'bg-indigo-500' : 'bg-zinc-300',
+                                agentOff ? 'cursor-not-allowed' : 'cursor-pointer'
+                              )}
+                              role="switch"
+                              aria-checked={toolActive}
+                              title={agentOff ? 'Activa el agente primero' : toolOff ? 'Herramienta desactivada' : 'Herramienta activa'}
+                            >
+                              <span className={cn(
+                                'inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform',
+                                toolActive ? 'translate-x-3' : 'translate-x-0'
+                              )} />
+                            </button>
 
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-zinc-800">{tool.label}</p>
-                            <p className="text-[11px] text-zinc-400 truncate">{tool.desc}</p>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-zinc-800">{tool.label}</p>
+                              <p className="text-[11px] text-zinc-400 truncate">{tool.desc}</p>
+                            </div>
+
+                            {/* Badge integración requerida */}
+                            {hasIntegr && (
+                              <a
+                                href={`/dashboard/settings-2/integraciones/${tool.requiereIntegracion}`}
+                                className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 transition shrink-0"
+                                title={`Requiere integración: ${tool.requiereIntegracion}`}
+                              >
+                                <AlertTriangle className="w-2.5 h-2.5" />
+                                {tool.requiereIntegracion}
+                                <ExternalLink className="w-2 h-2" />
+                              </a>
+                            )}
+
+                            {/* Botón de nota de tool */}
+                            <button
+                              onClick={() => setExpandedToolNota(toolNotaOpen ? null : tool.name)}
+                              title={hasNota ? 'Ver/editar nota de comportamiento' : 'Agregar nota de comportamiento'}
+                              className={cn(
+                                'flex items-center gap-1 shrink-0 p-1 rounded-md transition-all',
+                                toolNotaOpen
+                                  ? 'bg-amber-100 text-amber-600'
+                                  : hasNota
+                                    ? 'text-amber-500 hover:bg-amber-50'
+                                    : 'text-zinc-300 hover:text-amber-400 hover:bg-amber-50'
+                              )}
+                            >
+                              <Pencil className="w-3 h-3" />
+                              {hasNota && !toolNotaOpen && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                              )}
+                            </button>
                           </div>
 
-                          {/* Badge integración requerida */}
-                          {hasIntegr && (
-                            <a
-                              href={`/dashboard/settings-2/integraciones/${tool.requiereIntegracion}`}
-                              className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 transition shrink-0"
-                              title={`Requiere integración: ${tool.requiereIntegracion}`}
-                            >
-                              <AlertTriangle className="w-2.5 h-2.5" />
-                              {tool.requiereIntegracion}
-                              <ExternalLink className="w-2 h-2" />
-                            </a>
+                          {/* Nota expandible */}
+                          {toolNotaOpen && (
+                            <ToolNota
+                              toolName={tool.name}
+                              agentOn={agentOn}
+                              initialValue={instruccionesTools[tool.name] ?? ''}
+                              onSaved={handleToolNotaSaved}
+                            />
                           )}
                         </div>
                       )

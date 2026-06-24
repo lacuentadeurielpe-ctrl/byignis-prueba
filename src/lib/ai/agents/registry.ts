@@ -57,6 +57,8 @@ export const AGENT_REGISTRY: AgentDef[] = [
       { name: 'agregar_a_pedido_reciente',   label: 'Agregar al pedido',       desc: 'Agrega productos al pedido más reciente (ventana de gracia)' },
       { name: 'modificar_pedido',            label: 'Modificar pedido',        desc: 'Cambia cantidades o elimina productos de un pedido pendiente' },
       { name: 'generar_link_cobro_mp',       label: 'Link de pago MercadoPago', desc: 'Genera un link de cobro de MercadoPago para el pedido o cotización', requiereIntegracion: 'mercadopago' as const },
+      // Compartida con CRM — mismo handler, disponible en ventas para verificar deuda antes de confirmar
+      { name: 'consultar_deuda_cliente',     label: 'Verificar deuda del cliente', desc: 'Comprueba si el cliente tiene saldo pendiente antes de confirmar un pedido grande' },
     ],
   },
 

@@ -350,6 +350,8 @@ export async function handleIncomingMessage({
         // Fase 1 — instrucciones por agente (migración 077)
         agentesActivos:       botAgentesArr ?? undefined,
         instruccionesAgentes: (config?.instrucciones_agentes ?? {}) as Record<string, string>,
+        // Fase 2 — notas de comportamiento por tool (migración 078)
+        instruccionesTools:   (config?.instrucciones_tools ?? {}) as Record<string, string>,
       })
 
       // Typing indicator antes de esperar la respuesta del AI

@@ -767,17 +767,30 @@ export function getActiveToolSchemas(
 ): ToolSchema[] {
   const desactivadas  = new Set(herramientasDesactivadas ?? [])
   const integraciones = new Set(integracionesConectadas ?? [])
-  const disabled      = new Set<string>()
 
+  // Build owner map: una tool puede aparecer en varios agentes (ej: consultar_deuda_cliente en ventas+crm)
+  type OwnerEntry = { agentKey: keyof AgentesActivos; requiereIntegracion?: string }
+  const toolOwners = new Map<string, OwnerEntry[]>()
   for (const agent of AGENT_REGISTRY) {
-    const agentKey = agent.id as keyof AgentesActivos
-    const agentOff = agentes?.[agentKey] === false
-
     for (const tool of agent.tools) {
-      if (agentOff)                                                              { disabled.add(tool.name); continue }
-      if (desactivadas.has(tool.name))                                           { disabled.add(tool.name); continue }
-      if (tool.requiereIntegracion && !integraciones.has(tool.requiereIntegracion)) { disabled.add(tool.name); continue }
+      const owners = toolOwners.get(tool.name) ?? []
+      owners.push({ agentKey: agent.id as keyof AgentesActivos, requiereIntegracion: tool.requiereIntegracion })
+      toolOwners.set(tool.name, owners)
     }
+  }
+
+  const disabled = new Set<string>()
+  for (const [toolName, owners] of toolOwners) {
+    // Toggle explícito del usuario → siempre desactivada (prioridad máxima)
+    if (desactivadas.has(toolName)) { disabled.add(toolName); continue }
+
+    // Una tool se desactiva sólo si TODOS sus agentes propietarios la desactivan
+    const anyEnabled = owners.some(({ agentKey, requiereIntegracion }) => {
+      const agentOff   = agentes?.[agentKey] === false
+      const integrFalta = !!requiereIntegracion && !integraciones.has(requiereIntegracion)
+      return !agentOff && !integrFalta
+    })
+    if (!anyEnabled) disabled.add(toolName)
   }
 
   return (TOOL_SCHEMAS as unknown as ToolSchema[]).filter(

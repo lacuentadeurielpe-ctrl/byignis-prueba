@@ -20,7 +20,7 @@ export async function GET() {
         .single(),
       supabase
         .from('configuracion_bot')
-        .select('instrucciones_agentes')
+        .select('instrucciones_agentes, instrucciones_tools')
         .eq('ferreteria_id', session.ferreteriaId)
         .maybeSingle(),
     ])
@@ -64,7 +64,6 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: 'Texto inválido (máximo 3000 caracteres)' }, { status: 400 })
       }
 
-      // Leer instrucciones actuales para hacer merge
       const { data: actual } = await supabase
         .from('configuracion_bot')
         .select('instrucciones_agentes')
@@ -72,8 +71,6 @@ export async function PATCH(request: Request) {
         .maybeSingle()
 
       const instruccionesActuales: Record<string, string> = (actual?.instrucciones_agentes ?? {}) as Record<string, string>
-
-      // Texto vacío = borrar la instrucción del agente
       const instruccionesNuevas = { ...instruccionesActuales }
       if (texto.trim() === '') {
         delete instruccionesNuevas[id]
@@ -94,6 +91,47 @@ export async function PATCH(request: Request) {
       }
 
       return NextResponse.json({ ok: true, instrucciones_agentes: instruccionesNuevas })
+    }
+
+    // ── Guardar nota de una herramienta específica ────────────────────────────
+    // Body: { instruccion_tool: { name: string, texto: string } }
+    if ('instruccion_tool' in body) {
+      const { name, texto } = body.instruccion_tool as { name: string; texto: string }
+
+      if (!name || typeof name !== 'string') {
+        return NextResponse.json({ error: 'nombre de tool inválido' }, { status: 400 })
+      }
+      if (typeof texto !== 'string' || texto.length > 1000) {
+        return NextResponse.json({ error: 'Texto inválido (máximo 1000 caracteres)' }, { status: 400 })
+      }
+
+      const { data: actual } = await supabase
+        .from('configuracion_bot')
+        .select('instrucciones_tools')
+        .eq('ferreteria_id', session.ferreteriaId)
+        .maybeSingle()
+
+      const toolsActuales: Record<string, string> = (actual?.instrucciones_tools ?? {}) as Record<string, string>
+      const toolsNuevas = { ...toolsActuales }
+      if (texto.trim() === '') {
+        delete toolsNuevas[name]
+      } else {
+        toolsNuevas[name] = texto.trim()
+      }
+
+      const { error } = await supabase
+        .from('configuracion_bot')
+        .upsert(
+          { ferreteria_id: session.ferreteriaId, instrucciones_tools: toolsNuevas },
+          { onConflict: 'ferreteria_id' }
+        )
+
+      if (error) {
+        console.error('Error guardando nota de tool:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json({ ok: true, instrucciones_tools: toolsNuevas })
     }
 
     // ── Guardar toggles de agentes y herramientas (comportamiento original) ──
