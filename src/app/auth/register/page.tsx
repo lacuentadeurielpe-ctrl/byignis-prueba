@@ -50,8 +50,7 @@ export default function RegisterPage() {
       return
     }
 
-    router.push('/onboarding')
-    router.refresh()
+    router.push(`/auth/verify-email?email=${encodeURIComponent(form.email)}`)
   }
 
   return (

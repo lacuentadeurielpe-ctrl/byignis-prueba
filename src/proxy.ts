@@ -8,6 +8,8 @@ const RUTAS_PUBLICAS = [
   '/auth/register',
   '/auth/reset-password',
   '/auth/update-password',
+  '/auth/verify-email',
+  '/auth/confirm',
   '/api/webhook', // El webhook de YCloud es público (verificado con HMAC)
   '/api/delivery',          // API del repartidor — autenticación por token en URL
   '/api/mercadopago/callback', // Callback OAuth de MP — redirige al usuario tras autorizar
