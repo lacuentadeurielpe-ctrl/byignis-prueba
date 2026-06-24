@@ -56,7 +56,7 @@ export default function RegisterPage() {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8">
       <h2 className="text-xl font-semibold text-zinc-900 mb-1">Crear cuenta</h2>
-      <p className="text-sm text-zinc-500 mb-6">Registra tu ferretería en Uintegrus</p>
+      <p className="text-sm text-zinc-500 mb-6">Registra tu negocio en Uintegrus</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

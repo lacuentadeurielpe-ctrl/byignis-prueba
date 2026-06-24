@@ -60,7 +60,7 @@ function VerifyEmailContent() {
         </div>
         <div className="flex items-start gap-3">
           <CheckCircle className="w-4 h-4 text-zinc-400 mt-0.5 shrink-0" />
-          <p className="text-xs text-zinc-500">Serás redirigido a configurar tu ferretería</p>
+          <p className="text-xs text-zinc-500">Serás redirigido a configurar tu negocio</p>
         </div>
       </div>
 
