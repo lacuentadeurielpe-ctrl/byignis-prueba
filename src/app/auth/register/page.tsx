@@ -33,24 +33,31 @@ export default function RegisterPage() {
 
     setLoading(true)
 
-    // Cliente creado dentro del handler para evitar instanciación durante prerender
-    const supabase = createClient()
-    const { error } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-    })
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/onboarding`,
+        },
+      })
 
-    if (error) {
-      if (error.message.includes('already registered')) {
-        setError('Este correo ya tiene una cuenta. Inicia sesión.')
-      } else {
-        setError('Ocurrió un error al crear la cuenta. Inténtalo de nuevo.')
+      if (error) {
+        if (error.message.includes('already registered')) {
+          setError('Este correo ya tiene una cuenta. Inicia sesión.')
+        } else {
+          setError('Ocurrió un error al crear la cuenta. Inténtalo de nuevo.')
+        }
+        return
       }
-      setLoading(false)
-      return
-    }
 
-    router.push(`/auth/verify-email?email=${encodeURIComponent(form.email)}`)
+      router.push(`/auth/verify-email?email=${encodeURIComponent(form.email)}`)
+    } catch {
+      setError('Error de conexión. Inténtalo de nuevo.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

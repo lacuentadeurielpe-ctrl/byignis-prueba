@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type')
-  const next = searchParams.get('next') ?? '/onboarding'
+  const next = searchParams.get('next') ?? searchParams.get('redirect_to') ?? '/onboarding'
 
   if (!token_hash || !type) {
     return NextResponse.redirect(new URL('/auth/login?error=link_invalido', request.url))
