@@ -11,7 +11,7 @@ const geist = Geist({
 
 export const metadata: Metadata = {
   title: 'Uintegrus — Panel de gestión',
-  description: 'Sistema de cotización y atención al cliente por WhatsApp para ferreterías',
+  description: 'Sistema de atención al cliente con IA para negocios en WhatsApp',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

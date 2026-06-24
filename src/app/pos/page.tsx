@@ -35,7 +35,7 @@ export default async function POSPage() {
   return (
     <ClientPOS
       productos={productos || []}
-      nombreFerreteria={ferreteria?.nombre ?? 'Ferretería'}
+      nombreFerreteria={ferreteria?.nombre ?? 'Negocio'}
       ferreteriaId={session.ferreteriaId}
       nubefactActivo={nubefactActivo}
     />

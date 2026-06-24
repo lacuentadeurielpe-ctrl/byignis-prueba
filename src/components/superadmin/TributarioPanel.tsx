@@ -239,7 +239,7 @@ function TabComprobantes() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-800 text-gray-300 text-left text-xs uppercase tracking-wide">
-                    <th className="px-4 py-3 font-medium">Ferretería</th>
+                    <th className="px-4 py-3 font-medium">Negocio</th>
                     <th className="px-4 py-3 font-medium">Fecha</th>
                     <th className="px-4 py-3 font-medium">Tipo</th>
                     <th className="px-4 py-3 font-medium">Serie-Nro</th>
@@ -404,7 +404,7 @@ function TabLibros() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-800 text-gray-300 text-left text-xs uppercase tracking-wide">
-                  <th className="px-4 py-3 font-medium">Ferretería</th>
+                  <th className="px-4 py-3 font-medium">Negocio</th>
                   <th className="px-4 py-3 font-medium">RUC</th>
                   <th className="px-4 py-3 font-medium">Nubefact</th>
                   <th className="px-4 py-3 font-medium text-right">Registros</th>
@@ -416,7 +416,7 @@ function TabLibros() {
                 {libros.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="text-center py-10 text-gray-500">
-                      No hay ferreterías registradas
+                      No hay negocios registrados
                     </td>
                   </tr>
                 ) : (

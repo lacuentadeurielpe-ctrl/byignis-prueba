@@ -193,7 +193,7 @@ export default function OnboardingPage() {
   async function handleSubmit() {
     setError(null)
 
-    if (!form.nombre.trim()) { setError('El nombre de la ferretería es obligatorio.'); return }
+    if (!form.nombre.trim()) { setError('El nombre del negocio es obligatorio.'); return }
     if (!form.telefono_whatsapp.trim()) { setError('El número de WhatsApp es obligatorio.'); return }
     if (form.dias_atencion.length === 0) { setError('Selecciona al menos un día de atención.'); return }
 
@@ -266,7 +266,7 @@ export default function OnboardingPage() {
       <div className="w-full max-w-2xl">
         {/* Encabezado */}
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Configura tu ferretería</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Configura tu negocio</h1>
           <p className="text-sm text-gray-500 mt-1">
             Completa los datos para empezar a usar el bot de WhatsApp
           </p>
@@ -460,13 +460,13 @@ export default function OnboardingPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre de la ferretería <span className="text-red-500">*</span>
+                    Nombre del negocio <span className="text-red-500">*</span>
                   </label>
                   <input
                     name="nombre"
                     value={form.nombre}
                     onChange={handleChange}
-                    placeholder="Ej: Ferretería Don Mario"
+                    placeholder="Ej: Don Mario Suministros"
                     className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400 transition"
                   />
                 </div>
@@ -641,7 +641,7 @@ export default function OnboardingPage() {
                   value={form.mensaje_bienvenida}
                   onChange={handleChange}
                   rows={3}
-                  placeholder="Ej: ¡Hola! Soy el asistente de Ferretería Don Mario. ¿En qué le puedo ayudar hoy?"
+                  placeholder="Ej: ¡Hola! Soy el asistente de Don Mario Suministros. ¿En qué le puedo ayudar hoy?"
                   className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400 transition resize-none"
                 />
               </div>

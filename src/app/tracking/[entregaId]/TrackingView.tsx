@@ -110,7 +110,7 @@ export default function TrackingView({
         entregado ? 'bg-green-500' : 'bg-orange-500',
       )}>
         <div className="max-w-sm mx-auto">
-          <p className="text-sm font-medium opacity-80 mb-0.5">{data.ferreteria.nombre ?? 'Ferretería'}</p>
+          <p className="text-sm font-medium opacity-80 mb-0.5">{data.ferreteria.nombre ?? 'Negocio'}</p>
           <h1 className="text-xl font-bold mb-1">
             {entregado ? '¡Pedido entregado! ✅' : 'Tu pedido está en camino 🚚'}
           </h1>

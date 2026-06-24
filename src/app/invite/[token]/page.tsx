@@ -56,7 +56,7 @@ export default async function InvitePage({ params }: Props) {
               Únete al equipo de
             </p>
             <p className="text-lg font-semibold text-orange-600 mb-6">
-              {ferreteriaNombre ?? 'la ferretería'}
+              {ferreteriaNombre ?? 'el negocio'}
             </p>
 
             <p className="text-xs text-gray-400 mb-6">

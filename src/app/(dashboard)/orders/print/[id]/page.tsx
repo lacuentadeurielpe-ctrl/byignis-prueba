@@ -79,7 +79,7 @@ export default async function PrintTicketPage({
       <div id="ticket-content" className="text-xs leading-tight">
         {/* Encabezado */}
         <div className="text-center mb-4">
-          <h1 className="text-lg font-bold uppercase mb-1">{ferreteria?.nombre || 'Ferretería'}</h1>
+          <h1 className="text-lg font-bold uppercase mb-1">{ferreteria?.nombre || 'Negocio'}</h1>
           {ferreteria?.ruc && <p>RUC: {ferreteria.ruc}</p>}
           {ferreteria?.direccion && <p className="truncate">{ferreteria.direccion}</p>}
           {ferreteria?.telefono_whatsapp && <p>WhatsApp: {ferreteria.telefono_whatsapp}</p>}
