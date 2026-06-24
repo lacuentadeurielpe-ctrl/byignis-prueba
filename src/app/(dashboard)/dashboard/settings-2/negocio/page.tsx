@@ -11,7 +11,7 @@ export default function NegocioPage() {
     <div>
       <SettingsHeader
         title="Negocio"
-        description="Configura los datos principales de tu ferretería"
+        description="Configura los datos principales de tu negocio"
         breadcrumbs={[{ label: 'Configuración' }, { label: 'Negocio' }]}
       />
 

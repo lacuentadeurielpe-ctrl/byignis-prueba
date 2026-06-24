@@ -98,7 +98,7 @@ export default function LocalesForm() {
     <>
       <FormSection
         title="📍 Locales"
-        description="Gestiona todos los locales de tu ferretería"
+        description="Gestiona todos los locales de tu negocio"
         icon={<MapPin className="w-5 h-5" />}
         onSave={() => {}}
         isDirty={false}

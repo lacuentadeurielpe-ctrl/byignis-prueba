@@ -106,7 +106,7 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
               {local ? 'Editar local' : 'Crear nuevo local'}
             </h2>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {local ? 'Actualiza la información' : 'Agrega un nuevo local a tu ferretería'}
+              {local ? 'Actualiza la información' : 'Agrega un nuevo local a tu negocio'}
             </p>
           </div>
           <button

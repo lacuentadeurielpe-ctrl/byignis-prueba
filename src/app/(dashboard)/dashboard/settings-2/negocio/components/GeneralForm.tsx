@@ -53,7 +53,7 @@ export default function GeneralForm() {
   return (
     <FormSection
       title="Información General"
-      description="Datos principales de tu ferretería"
+      description="Datos principales de tu negocio"
       icon={<Building2 className="w-5 h-5" />}
       onSave={handleSave}
       onCancel={() => setIsDirty(false)}
@@ -73,14 +73,14 @@ export default function GeneralForm() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-2">
-                Nombre de ferretería *
+                Nombre del negocio *
               </label>
               <input
                 type="text"
                 value={data.nombre || ''}
                 onChange={e => handleChange('nombre', e.target.value)}
                 className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Ej: Ferretería El Maestro"
+                placeholder="Ej: Don Mario Suministros"
               />
             </div>
 
@@ -93,7 +93,7 @@ export default function GeneralForm() {
                 onChange={e => handleChange('tipo_establecimiento', e.target.value)}
                 className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="ferreteria">Ferretería</option>
+                <option value="ferreteria">Negocio / Tienda</option>
                 <option value="mayorista">Mayorista</option>
                 <option value="minorista">Minorista</option>
                 <option value="distribuidor">Distribuidor</option>
@@ -134,7 +134,7 @@ export default function GeneralForm() {
                 value={data.email || ''}
                 onChange={e => handleChange('email', e.target.value)}
                 className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="contacto@ferreteria.com"
+                placeholder="contacto@minegocio.com"
               />
             </div>
           </div>

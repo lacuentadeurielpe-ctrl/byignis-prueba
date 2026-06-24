@@ -156,7 +156,7 @@ export default function Settings2Hub() {
     <div>
       <SettingsHeader
         title="Configuración"
-        description="Panel de control centralizado para tu ferretería"
+        description="Panel de control centralizado para tu negocio"
       />
 
       <div className="p-8 max-w-7xl mx-auto space-y-8">
