@@ -319,6 +319,10 @@ export interface ConfiguracionBot {
   cierre_cotizacion_activo: boolean  // F5: cierre natural post-cotización — default true
   umbral_upsell_soles: number        // F5: monto mínimo S/ para activar upsell — default 0
   prompt_overrides: PromptOverrides  // texto editable por sección del prompt del orquestador — default {}
+  // Fase 1 — Personalización por agente (migración 077)
+  instrucciones_agentes: Record<string, string>  // { "ventas": "...", "pagos": "..." } — inyectadas cuando el agente está ON
+  // Fase 2 — Personalización por tool (migración 078 — pendiente)
+  // instrucciones_tools: Record<string, string>
 }
 
 export type TipoCliente = 'persona' | 'empresa' | 'anonimo'

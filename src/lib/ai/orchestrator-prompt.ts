@@ -13,6 +13,7 @@
 // generado es exactamente el de siempre — el refactor solo organiza el template, no lo cambia.
 
 import type { Ferreteria, Producto, ProductoDigital, ZonaDelivery, ConfiguracionBot, DatosFlujoPedido, PerfilBot, PromptSectionKey } from '@/types/database'
+import { AGENT_REGISTRY } from '@/lib/ai/agents/registry'
 import { formatHora } from '@/lib/utils'
 
 interface BuildOrchestratorPromptParams {
@@ -28,6 +29,9 @@ interface BuildOrchestratorPromptParams {
   perfilBot?: PerfilBot | null
   cierreCotizacionActivo?: boolean         // F5: si true, agrega cierre natural post-cotización
   integracionesConectadas?: string[]       // FASE 3+5: activa hints de tools opcionales
+  // Fase 1 — instrucciones por agente (migración 077)
+  agentesActivos?: string[]                // IDs de los agentes activos (de ferreterias.bot_agentes_activos)
+  instruccionesAgentes?: Record<string, string>  // { "ventas": "texto", "pagos": "texto" }
 }
 
 // ── Tags disponibles para interpolar dentro de texto editable (Settings → Bot → Prompt) ────
@@ -344,6 +348,8 @@ export function buildOrchestratorSystemPrompt({
   perfilBot,
   cierreCotizacionActivo = true,
   integracionesConectadas = [],
+  agentesActivos,
+  instruccionesAgentes = {},
 }: BuildOrchestratorPromptParams): string {
   const horario =
     ferreteria.horario_apertura && ferreteria.horario_cierre
@@ -462,6 +468,22 @@ Datos acumulados: ${partes.length > 0 ? partes.join(' | ') : '(ninguno aún)'}
     ? `\n## Herramientas adicionales disponibles en este negocio\n${toolsOpcionalesLines.join('\n')}`
     : ''
 
+  // ── Instrucciones por agente (Fase 1) ────────────────────────────────────────
+  // Se inyectan solo para agentes activos que tengan instrucción configurada.
+  // El dueño las escribe en lenguaje natural en Settings → Bot → Agentes.
+  const instruccionesAgentesLines: string[] = []
+  if (agentesActivos && agentesActivos.length > 0 && Object.keys(instruccionesAgentes).length > 0) {
+    for (const agente of AGENT_REGISTRY) {
+      const instruccion = instruccionesAgentes[agente.id]
+      if (!instruccion?.trim()) continue
+      if (!agentesActivos.includes(agente.id)) continue
+      instruccionesAgentesLines.push(`## Instrucciones especiales — ${agente.label}\n${instruccion.trim()}`)
+    }
+  }
+  const instruccionesAgentesBlock = instruccionesAgentesLines.length > 0
+    ? `\n\n# INSTRUCCIONES ESPECIALES CONFIGURADAS POR EL NEGOCIO\n${instruccionesAgentesLines.join('\n\n')}`
+    : ''
+
   const cierreBlock = cierreCotizacionActivo ? `
 
 ## 13. CIERRE NATURAL POST-COTIZACIÓN
@@ -505,6 +527,7 @@ ${render('flujo_pedido')}
 ${render('upsell')}${cierreBlock}
 
 ${render('reglas_catalogo')}
+${instruccionesAgentesBlock}
 
 Responde siempre en español peruano, claro y directo.`
 }

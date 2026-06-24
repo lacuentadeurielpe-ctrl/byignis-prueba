@@ -12,22 +12,30 @@ export async function GET() {
   const supabase = await createClient()
 
   try {
-    const { data, error } = await supabase
-      .from('ferreterias')
-      .select('bot_agentes_activos, bot_herramientas_desactivadas')
-      .eq('id', session.ferreteriaId)
-      .single()
+    const [{ data: ferreteria, error: errF }, { data: config, error: errC }] = await Promise.all([
+      supabase
+        .from('ferreterias')
+        .select('bot_agentes_activos, bot_herramientas_desactivadas')
+        .eq('id', session.ferreteriaId)
+        .single(),
+      supabase
+        .from('configuracion_bot')
+        .select('instrucciones_agentes')
+        .eq('ferreteria_id', session.ferreteriaId)
+        .maybeSingle(),
+    ])
 
-    if (error) {
-      console.error('Error fetching agentes:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (errF) {
+      console.error('Error fetching agentes:', errF)
+      return NextResponse.json({ error: errF.message }, { status: 500 })
     }
 
     return NextResponse.json({
-      agentes:                 data?.bot_agentes_activos ?? [],
-      herramientas_desactivadas: data?.bot_herramientas_desactivadas ?? [],
-      registry:                AGENT_REGISTRY,
-      core_tools:              CORE_TOOLS,
+      agentes:                   ferreteria?.bot_agentes_activos ?? [],
+      herramientas_desactivadas: ferreteria?.bot_herramientas_desactivadas ?? [],
+      instrucciones_agentes:     (config?.instrucciones_agentes ?? {}) as Record<string, string>,
+      registry:                  AGENT_REGISTRY,
+      core_tools:                CORE_TOOLS,
     })
   } catch (err) {
     console.error('Error in GET /api/settings-2/bot/agentes:', err)
@@ -43,9 +51,54 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json()
-    const updates: Record<string, unknown> = {}
 
-    if ('agentes' in body)                   updates.bot_agentes_activos = body.agentes ?? []
+    // ── Guardar instrucción de un agente específico ──────────────────────────
+    // Body: { instruccion_agente: { id: string, texto: string } }
+    if ('instruccion_agente' in body) {
+      const { id, texto } = body.instruccion_agente as { id: string; texto: string }
+
+      if (!id || typeof id !== 'string') {
+        return NextResponse.json({ error: 'id de agente inválido' }, { status: 400 })
+      }
+      if (typeof texto !== 'string' || texto.length > 3000) {
+        return NextResponse.json({ error: 'Texto inválido (máximo 3000 caracteres)' }, { status: 400 })
+      }
+
+      // Leer instrucciones actuales para hacer merge
+      const { data: actual } = await supabase
+        .from('configuracion_bot')
+        .select('instrucciones_agentes')
+        .eq('ferreteria_id', session.ferreteriaId)
+        .maybeSingle()
+
+      const instruccionesActuales: Record<string, string> = (actual?.instrucciones_agentes ?? {}) as Record<string, string>
+
+      // Texto vacío = borrar la instrucción del agente
+      const instruccionesNuevas = { ...instruccionesActuales }
+      if (texto.trim() === '') {
+        delete instruccionesNuevas[id]
+      } else {
+        instruccionesNuevas[id] = texto.trim()
+      }
+
+      const { error } = await supabase
+        .from('configuracion_bot')
+        .upsert(
+          { ferreteria_id: session.ferreteriaId, instrucciones_agentes: instruccionesNuevas },
+          { onConflict: 'ferreteria_id' }
+        )
+
+      if (error) {
+        console.error('Error guardando instrucción de agente:', error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json({ ok: true, instrucciones_agentes: instruccionesNuevas })
+    }
+
+    // ── Guardar toggles de agentes y herramientas (comportamiento original) ──
+    const updates: Record<string, unknown> = {}
+    if ('agentes' in body)                   updates.bot_agentes_activos          = body.agentes ?? []
     if ('herramientas_desactivadas' in body) updates.bot_herramientas_desactivadas = body.herramientas_desactivadas ?? []
 
     if (Object.keys(updates).length === 0) {
@@ -65,7 +118,7 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({
-      agentes:                 data?.bot_agentes_activos ?? [],
+      agentes:                   data?.bot_agentes_activos ?? [],
       herramientas_desactivadas: data?.bot_herramientas_desactivadas ?? [],
     })
   } catch (err) {

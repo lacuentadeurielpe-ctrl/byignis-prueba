@@ -347,6 +347,9 @@ export async function handleIncomingMessage({
         perfilBot,
         cierreCotizacionActivo,     // F5
         integracionesConectadas,    // FASE 5: hints de tools opcionales en el prompt
+        // Fase 1 — instrucciones por agente (migración 077)
+        agentesActivos:       botAgentesArr ?? undefined,
+        instruccionesAgentes: (config?.instrucciones_agentes ?? {}) as Record<string, string>,
       })
 
       // Typing indicator antes de esperar la respuesta del AI
