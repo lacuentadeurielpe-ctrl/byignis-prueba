@@ -5,6 +5,7 @@ import GeneralForm from './components/GeneralForm'
 import HorariosForm from './components/HorariosForm'
 import PagosMetodosForm from './components/PagosMetodosForm'
 import LocalesForm from './components/LocalesForm'
+import WelcomeBanner from './components/WelcomeBanner'
 
 export default function NegocioPage() {
   return (
@@ -16,6 +17,7 @@ export default function NegocioPage() {
       />
 
       <div className="p-6 max-w-4xl space-y-6">
+        <WelcomeBanner />
         <GeneralForm />
         <LocalesForm />
         <HorariosForm />
