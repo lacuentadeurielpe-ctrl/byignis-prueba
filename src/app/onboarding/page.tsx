@@ -56,6 +56,22 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Si el usuario ya tiene ferretería, redirigir al dashboard
+  useEffect(() => {
+    const checkFerreteria = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const saasRepo = new SaasRepository(supabase)
+      const ferreteria = await saasRepo.obtenerFerreteriaPorDuenio(user.id)
+      if (ferreteria) {
+        router.replace('/dashboard')
+      }
+    }
+    checkFerreteria()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Paso 0 — tipo RUC
   const [tipoRuc, setTipoRuc] = useState<TipoRuc>('sin_ruc')
   const [ruc, setRuc] = useState('')
