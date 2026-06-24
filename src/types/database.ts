@@ -329,6 +329,11 @@ export interface ConfiguracionBot {
     dias_gracia:    number    // días de gracia después de fecha_limite para empezar a recordar
     mensaje_custom: string    // texto adicional al final del mensaje (vacío = default)
   }
+  // Fase 4 — Preferencias del Asistente IA nativo (migración 080)
+  asistente_preferencias: {
+    memorias: string[]        // preferencias del dueño, max 10, 200 chars c/u
+    auditoria: { tool: string; args: Record<string, unknown>; at: string }[]  // últimas 50 acciones
+  }
 }
 
 export type TipoCliente = 'persona' | 'empresa' | 'anonimo'
