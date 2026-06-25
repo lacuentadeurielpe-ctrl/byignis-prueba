@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const [{ data: planes }, { data: suscripciones }, { data: movs }] = await Promise.all([
     admin
       .from('planes')
-      .select('id, nombre, creditos_mes, precio_mensual, precio_exceso, activo, created_at')
+      .select('id, nombre, creditos_mes, precio_mensual, precio_exceso, activo, es_publico, creditos_ilimitados, created_at')
       .order('precio_mensual', { ascending: true }),
     admin
       .from('suscripciones')
@@ -56,8 +56,8 @@ export async function GET(request: Request) {
     }
     return {
       ...plan,
-      suscripciones_activas: conteoPlan[plan.id] ?? 0,
-      costo_ia_promedio_usd: costoPromedioUsd,
+      suscripciones_activas:  conteoPlan[plan.id] ?? 0,
+      costo_ia_promedio_usd:  costoPromedioUsd,
     }
   })
 

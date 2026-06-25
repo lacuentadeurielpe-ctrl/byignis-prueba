@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Pencil, Check, X, Plus, Users } from 'lucide-react'
+import { Pencil, Check, X, Plus, Users, Crown, Lock } from 'lucide-react'
 
 interface Plan {
   id:                     string
@@ -10,6 +10,8 @@ interface Plan {
   precio_mensual:         number
   precio_exceso:          number
   activo:                 boolean
+  es_publico:             boolean
+  creditos_ilimitados:    boolean
   suscripciones_activas:  number
   costo_ia_promedio_usd:  number
 }
@@ -162,9 +164,9 @@ export default function PreciosTenantTab() {
         </div>
       )}
 
-      {/* Planes */}
+      {/* Planes públicos */}
       <div className="space-y-3">
-        {planes.map((plan) => {
+        {planes.filter(p => p.es_publico).map((plan) => {
           const isEditing = editId === plan.id
           const margen    = margenMensual(plan)
           const precioUsd = Number(plan.precio_mensual) / TIPO_CAMBIO_REF
@@ -276,14 +278,43 @@ export default function PreciosTenantTab() {
           )
         })}
 
-        {planes.length === 0 && (
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl px-6 py-10 text-center text-gray-500">
-            <p className="text-sm">Sin planes configurados.</p>
-          </div>
-        )}
       </div>
 
-      <p className="mt-3 text-xs text-gray-600">
+      {/* Planes internos (solo superadmin) */}
+      {planes.some(p => !p.es_publico) && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Lock className="w-3.5 h-3.5 text-yellow-500" />
+            <p className="text-xs font-medium text-yellow-500 uppercase tracking-wide">Planes internos — solo visible aquí</p>
+          </div>
+          <div className="space-y-3">
+            {planes.filter(p => !p.es_publico).map((plan) => (
+              <div key={plan.id} className="bg-yellow-950/20 border border-yellow-800/40 rounded-2xl px-5 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Crown className="w-4 h-4 text-yellow-400" />
+                    <div>
+                      <span className="font-semibold text-yellow-300">{plan.nombre}</span>
+                      <span className="ml-2 text-xs bg-yellow-900/40 text-yellow-500 px-2 py-0.5 rounded-full">
+                        {plan.creditos_ilimitados ? 'IA ilimitada' : `${plan.creditos_mes.toLocaleString()} cr/mes`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <div className="flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      {plan.suscripciones_activas} asignados
+                    </div>
+                    <span className="text-yellow-700">Solo asignable desde superadmin</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="mt-4 text-xs text-gray-600">
         * Tipo de cambio referencial usado para convertir S/ → USD: {TIPO_CAMBIO_REF}.
         El costo IA se calcula sobre los movimientos reales de los últimos 30 días.
       </p>
