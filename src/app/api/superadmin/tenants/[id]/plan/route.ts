@@ -16,14 +16,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { data: plan } = await admin.from('planes').select('id, nombre, creditos_mes').eq('id', plan_id).single()
   if (!plan) return NextResponse.json({ error: 'Plan no encontrado' }, { status: 404 })
 
-  const [r1, r2] = await Promise.all([
-    admin.from('ferreterias').update({ plan_id }).eq('id', ferreteriaId),
-    admin.from('suscripciones').update({ plan_id, creditos_mes: plan.creditos_mes }).eq('ferreteria_id', ferreteriaId),
-  ])
+  const r1 = await admin.from('ferreterias').update({ plan_id }).eq('id', ferreteriaId)
+  if (r1.error) return NextResponse.json({ error: r1.error.message }, { status: 500 })
 
-  if (r1.error || r2.error) {
-    return NextResponse.json({ error: r1.error?.message ?? r2.error?.message }, { status: 500 })
-  }
+  // UPSERT: crea la fila si no existe; si existe, solo actualiza plan_id y creditos_del_mes
+  // sin tocar creditos_disponibles (no resetear saldo del tenant)
+  const { data: susSistente } = await admin
+    .from('suscripciones')
+    .select('ferreteria_id')
+    .eq('ferreteria_id', ferreteriaId)
+    .maybeSingle()
+
+  const r2 = susSistente
+    ? await admin
+        .from('suscripciones')
+        .update({ plan_id, creditos_del_mes: plan.creditos_mes })
+        .eq('ferreteria_id', ferreteriaId)
+    : await admin
+        .from('suscripciones')
+        .insert({ ferreteria_id: ferreteriaId, plan_id, creditos_del_mes: plan.creditos_mes, creditos_disponibles: plan.creditos_mes })
+
+  if (r2.error) return NextResponse.json({ error: r2.error.message }, { status: 500 })
 
   await admin.from('superadmin_audit_log').insert({
     superadmin_id: session.superadminId,

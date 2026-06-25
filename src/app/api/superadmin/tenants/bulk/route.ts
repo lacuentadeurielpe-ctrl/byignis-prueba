@@ -70,11 +70,24 @@ export async function POST(request: Request) {
           .from('ferreterias')
           .update({ plan_id })
           .eq('id', ferreteriaId)
-        const { error: errS } = await admin
+
+        // UPSERT: crea si no existe; actualiza sin resetear creditos_disponibles
+        const { data: susEx } = await admin
           .from('suscripciones')
-          .update({ plan_id, creditos_mes: plan.creditos_mes })
+          .select('ferreteria_id')
           .eq('ferreteria_id', ferreteriaId)
-        if (errF || errS) errores.push(ferreteriaId)
+          .maybeSingle()
+
+        const r2 = susEx
+          ? await admin
+              .from('suscripciones')
+              .update({ plan_id, creditos_del_mes: plan.creditos_mes })
+              .eq('ferreteria_id', ferreteriaId)
+          : await admin
+              .from('suscripciones')
+              .insert({ ferreteria_id: ferreteriaId, plan_id, creditos_del_mes: plan.creditos_mes, creditos_disponibles: plan.creditos_mes })
+
+        if (errF || r2.error) errores.push(ferreteriaId)
       })
     )
   } else if (accion === 'suspender' || accion === 'activar') {
