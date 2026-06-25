@@ -7,7 +7,6 @@ import { FinanzasRepository } from './repositories/finanzas'
 import { DeliveryRepository } from './repositories/logistica'
 import { ProveedorRepository } from './repositories/proveedores'
 import { SaasRepository } from './repositories/saas'
-import { SuscripcionRepository } from './repositories/suscripciones'
 import { VentasRepository } from './repositories/ventas'
 import { ComprasRepository } from './repositories/compras'
 
@@ -21,7 +20,6 @@ export class RepositoryManager {
   public logistica: DeliveryRepository
   public proveedores: ProveedorRepository
   public saas: SaasRepository
-  public suscripciones: SuscripcionRepository
   public ventas: VentasRepository
   public compras: ComprasRepository
 
@@ -34,7 +32,6 @@ export class RepositoryManager {
     this.logistica = new DeliveryRepository(supabase)
     this.proveedores = new ProveedorRepository(supabase)
     this.saas = new SaasRepository(supabase)
-    this.suscripciones = new SuscripcionRepository(supabase)
     this.ventas = new VentasRepository(supabase)
     this.compras = new ComprasRepository(supabase)
   }

@@ -25,12 +25,8 @@ export default function SuperadminLoginPage() {
       return
     }
 
-    // Verificar que es superadmin
-    const res = await fetch('/api/superadmin/stats', {
-      headers: {
-        'x-superadmin-secret': process.env.NEXT_PUBLIC_SUPERADMIN_SECRET ?? '',
-      },
-    })
+    // Verificar que es superadmin — solo cookie de sesión, sin header de secret
+    const res = await fetch('/api/superadmin/stats')
 
     if (!res.ok) {
       await supabase.auth.signOut()
