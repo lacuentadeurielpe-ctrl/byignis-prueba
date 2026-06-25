@@ -440,7 +440,7 @@ export async function ejecutarOrquestador(
   )
   if (activeSchemas.length === 0) {
     // Sin tools disponibles — respuesta directa sin orquestador
-    return { respuesta: 'Por el momento no tengo herramientas activas para ayudarte. Contacta al encargado.', toolsUsadas: [], iteraciones: 0, motor: 'claude' }
+    return { respuesta: 'Por el momento no tengo herramientas activas para ayudarte. Contacta al encargado.', toolsUsadas: [], iteraciones: 0, motor: 'claude', tokensEntrada: 0, tokensSalida: 0, modeloUsado: CLAUDE_MODEL }
   }
 
   // Intentar Claude cuando la API key está disponible
