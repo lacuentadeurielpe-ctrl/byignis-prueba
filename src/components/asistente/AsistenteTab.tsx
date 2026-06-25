@@ -1,14 +1,12 @@
 'use client'
 
 import ChatPanel from './ChatPanel'
-import GlobalViewPanel from './GlobalViewPanel'
+import SessionSummaryPanel from './SessionSummaryPanel'
 import { useAsistente } from './useAsistente'
 
 export default function AsistenteTab() {
   const {
     messages,
-    configSnapshot,
-    recentPatches,
     isLoading,
     sendMessage,
     clearSession,
@@ -28,12 +26,9 @@ export default function AsistenteTab() {
         />
       </div>
 
-      {/* Global View — 42% */}
+      {/* Resumen de sesión — 42% */}
       <div className="flex-[2] min-w-0 border border-zinc-200 rounded-xl overflow-hidden bg-white shadow-sm">
-        <GlobalViewPanel
-          snapshot={configSnapshot}
-          recentPatches={recentPatches}
-        />
+        <SessionSummaryPanel messages={messages} />
       </div>
     </div>
   )
