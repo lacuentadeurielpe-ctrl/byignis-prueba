@@ -17,7 +17,7 @@ export default function SuperadminLoginPage() {
     setError(null)
 
     const supabase = createClient()
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const { error: authError, data: signInData } = await supabase.auth.signInWithPassword({ email, password })
 
     if (authError) {
       setError('Credenciales incorrectas')
@@ -25,12 +25,23 @@ export default function SuperadminLoginPage() {
       return
     }
 
-    // Verificar que es superadmin — solo cookie de sesión, sin header de secret
-    const res = await fetch('/api/superadmin/stats')
+    const accessToken = signInData?.session?.access_token
+    if (!accessToken) {
+      setError('No se pudo obtener la sesión')
+      setLoading(false)
+      return
+    }
+
+    // Verificar que es superadmin — pasamos el token explícitamente para evitar
+    // dependencia de que las cookies lleguen al route handler en el mismo request
+    const res = await fetch('/api/superadmin/auth-check', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
 
     if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
       await supabase.auth.signOut()
-      setError('Esta cuenta no tiene acceso al panel de superadmin')
+      setError(body.error ?? 'Esta cuenta no tiene acceso al panel de superadmin')
       setLoading(false)
       return
     }
