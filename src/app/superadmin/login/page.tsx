@@ -17,6 +17,8 @@ export default function SuperadminLoginPage() {
     setError(null)
 
     const supabase = createClient()
+    // Limpiar cualquier sesión activa antes de iniciar como superadmin
+    await supabase.auth.signOut()
     const { error: authError, data: signInData } = await supabase.auth.signInWithPassword({ email, password })
 
     if (authError) {
