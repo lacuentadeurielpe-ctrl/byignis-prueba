@@ -57,21 +57,23 @@ export async function getSuperadminSession(): Promise<SuperadminSession | null> 
 /**
  * Verifica la autenticación de superadmin en rutas de API.
  * Valida:
- * 1. Header x-superadmin-secret
- * 2. Sesión Supabase + registro en superadmins
+ * 1. Sesión Supabase + registro en superadmins (cookie, browser)
+ * 2. Header x-superadmin-secret (acceso programático externo, opcional)
  *
  * @returns SuperadminSession o null
  */
 export async function verificarSuperadminAPI(
   request: Request
 ): Promise<SuperadminSession | null> {
-  // Verificar secret header (segunda capa de protección)
   const secret = process.env.SUPERADMIN_SECRET
-  if (secret) {
-    const headerSecret = request.headers.get('x-superadmin-secret')
-    if (headerSecret !== secret) return null
+  const headerSecret = request.headers.get('x-superadmin-secret')
+
+  // Si el header está presente, debe ser correcto (acceso externo/programático)
+  if (headerSecret !== null) {
+    if (!secret || headerSecret !== secret) return null
   }
 
+  // Cookie-based auth (browser): siempre verificado
   return getSuperadminSession()
 }
 

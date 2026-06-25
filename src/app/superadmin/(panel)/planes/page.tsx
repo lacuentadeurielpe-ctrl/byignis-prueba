@@ -9,7 +9,7 @@ async function getPlanes() {
   const admin = createAdminClient()
   const { data } = await admin
     .from('planes')
-    .select('id, nombre, creditos_mes, precio_mensual, precio_exceso, activo, created_at')
+    .select('id, nombre, creditos_mes, precio_mensual, precio_exceso, activo, es_publico, creditos_ilimitados, created_at')
     .order('precio_mensual', { ascending: true })
   return data ?? []
 }
@@ -30,8 +30,6 @@ export default async function PlanesPage() {
   for (const s of usos) {
     if (s.plan_id) conteoPlanes[s.plan_id] = (conteoPlanes[s.plan_id] ?? 0) + 1
   }
-
-  const secret = process.env.NEXT_PUBLIC_SUPERADMIN_SECRET ?? ''
 
   return (
     <div>
@@ -55,7 +53,7 @@ export default async function PlanesPage() {
         </div>
       )}
 
-      <PlanesManager planes={planes} secret={secret} />
+      <PlanesManager planes={planes} conteo={conteoPlanes} />
 
       {/* Tabla de créditos por tipo de tarea (referencia) */}
       <div className="mt-8 bg-gray-900 border border-gray-800 rounded-2xl p-5">

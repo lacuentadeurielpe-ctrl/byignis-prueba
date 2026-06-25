@@ -156,7 +156,7 @@ export async function verificarYDescontarCreditos(
   // Verificar que la ferretería tiene suscripción activa (no suspendida)
   const { data: ferreteria } = await admin
     .from('ferreterias')
-    .select('estado_tenant')
+    .select('estado_tenant, plan_id, planes(creditos_ilimitados)')
     .eq('id', ferreteriaId)
     .single()
 
@@ -164,15 +164,31 @@ export async function verificarYDescontarCreditos(
     return { ok: false, motivo: 'tenant_suspendido' }
   }
 
+  // Plan con créditos ilimitados (Vitalicio) — no descontar pero sí registrar uso
+  const planConIlimitados = (ferreteria?.planes as any)?.creditos_ilimitados === true
+  if (planConIlimitados) {
+    return { ok: true }
+  }
+
   // Si no existe fila en suscripciones → trial ilimitado, no descontar
   const { data: susExiste } = await admin
     .from('suscripciones')
-    .select('creditos_disponibles, creditos_del_mes')
+    .select('creditos_disponibles, creditos_del_mes, plan_id')
     .eq('ferreteria_id', ferreteriaId)
     .maybeSingle()
 
   if (!susExiste) {
     return { ok: true }  // trial: sin registro = créditos ilimitados
+  }
+
+  // También verificar por el plan de la suscripción (por si plan_id en ferreterias no está sincronizado)
+  if (susExiste.plan_id) {
+    const { data: planSus } = await admin
+      .from('planes')
+      .select('creditos_ilimitados')
+      .eq('id', susExiste.plan_id)
+      .single()
+    if (planSus?.creditos_ilimitados) return { ok: true }
   }
 
   // Descontar atómicamente usando la función SQL

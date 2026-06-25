@@ -25,16 +25,23 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
   const body = await request.json()
-  const { nombre, creditos_mes, precio_mensual, precio_exceso } = body
+  const { nombre, creditos_mes, precio_mensual, precio_exceso, es_publico, creditos_ilimitados } = body
 
-  if (!nombre || !creditos_mes || precio_mensual === undefined) {
-    return NextResponse.json({ error: 'nombre, creditos_mes y precio_mensual son requeridos' }, { status: 400 })
+  if (!nombre || precio_mensual === undefined) {
+    return NextResponse.json({ error: 'nombre y precio_mensual son requeridos' }, { status: 400 })
   }
 
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('planes')
-    .insert({ nombre, creditos_mes: Number(creditos_mes), precio_mensual: Number(precio_mensual), precio_exceso: Number(precio_exceso ?? 0) })
+    .insert({
+      nombre,
+      creditos_mes:        Number(creditos_mes ?? 0),
+      precio_mensual:      Number(precio_mensual),
+      precio_exceso:       Number(precio_exceso ?? 0),
+      es_publico:          es_publico !== false,
+      creditos_ilimitados: creditos_ilimitados === true,
+    })
     .select()
     .single()
 

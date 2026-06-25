@@ -11,10 +11,7 @@ export default function ResolverIncidencia({ incidenciaId }: { incidenciaId: str
     setLoading(true)
     const res = await fetch('/api/superadmin/incidencias', {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-superadmin-secret': process.env.NEXT_PUBLIC_SUPERADMIN_SECRET ?? '',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: [incidenciaId] }),
     })
     if (res.ok) router.refresh()

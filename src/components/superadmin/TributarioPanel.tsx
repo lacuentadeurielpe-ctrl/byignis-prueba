@@ -46,8 +46,6 @@ interface LibroRow {
   } | null
 }
 
-const SECRET = process.env.NEXT_PUBLIC_SUPERADMIN_SECRET ?? ''
-
 function formatPEN(n: number) {
   return new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(n)
 }
@@ -131,9 +129,7 @@ function TabComprobantes() {
   async function cargar(p = 1) {
     setLoading(true)
     try {
-      const res = await fetch(`/api/superadmin/tributario/comprobantes?${buildParams(p)}`, {
-        headers: { 'x-superadmin-secret': SECRET },
-      })
+      const res = await fetch(`/api/superadmin/tributario/comprobantes?${buildParams(p)}`)
       if (res.ok) {
         const json = await res.json()
         setComprobantes(json.data ?? [])
@@ -152,8 +148,6 @@ function TabComprobantes() {
     if (filterTipo)    params.set('tipo', filterTipo)
     if (filterEstado)  params.set('estado', filterEstado)
     if (filterPeriodo) params.set('periodo', filterPeriodo)
-    params.set('x-superadmin-secret', SECRET)
-
     // Open in new tab — browser will download the file
     const url = `/api/superadmin/tributario/exportar?${params.toString()}`
     window.open(url, '_blank')
@@ -330,9 +324,7 @@ function TabLibros() {
     setLoading(true)
     const periodo = `${selectedYear}${String(selectedMonth).padStart(2, '0')}`
     try {
-      const res = await fetch(`/api/superadmin/tributario/libros?periodo=${periodo}`, {
-        headers: { 'x-superadmin-secret': SECRET },
-      })
+      const res = await fetch(`/api/superadmin/tributario/libros?periodo=${periodo}`)
       if (res.ok) {
         const json = await res.json()
         setLibros(json)

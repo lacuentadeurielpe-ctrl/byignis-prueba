@@ -498,6 +498,30 @@ export async function POST(request: Request) {
 
   console.log(`[Webhook] Mensaje de ${telefonoCliente}: "${textoMensaje.slice(0, 60)}"`)
 
+  // ── 6b. Modo mantenimiento — pausar todos los bots globalmente ────────────
+  {
+    const { data: modoCfg } = await supabase
+      .from('config_plataforma')
+      .select('valor')
+      .eq('clave', 'modo_mantenimiento')
+      .single()
+
+    if (modoCfg?.valor === true) {
+      const { data: msgCfg } = await supabase
+        .from('config_plataforma')
+        .select('valor')
+        .eq('clave', 'mensaje_mantenimiento')
+        .single()
+
+      const mensajeMant = typeof msgCfg?.valor === 'string'
+        ? msgCfg.valor
+        : 'Estamos realizando mantenimiento. El asistente estará disponible en breve.'
+
+      await enviarMensaje({ from: telefonoEnvio, to: telefonoCliente, texto: mensajeMant, apiKey: tenantApiKey }).catch(() => {})
+      return NextResponse.json({ ok: true })
+    }
+  }
+
   // ── 7a. Debounce (F4) — acumular mensajes del cliente en ráfaga ───────────
   let textoCompleto = notaParaBot ? `${textoMensaje}\n\n${notaParaBot}` : textoMensaje
   let ycloudMessageIdFinal = ycloudMessageId
