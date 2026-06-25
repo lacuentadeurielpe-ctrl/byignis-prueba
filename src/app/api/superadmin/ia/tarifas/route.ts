@@ -45,9 +45,11 @@ export async function POST(request: Request) {
       modelo:                modelo.trim(),
       proveedor:             proveedor.trim(),
       unidad:                unidad ?? 'tokens',
-      precio_entrada_por_1k: Number(precio_entrada_por_1k ?? 0),
-      precio_salida_por_1k:  Number(precio_salida_por_1k ?? 0),
-      notas:                 notas?.trim() ?? null,
+      precio_entrada_por_1k:   Number(precio_entrada_por_1k ?? 0),
+      precio_salida_por_1k:    Number(precio_salida_por_1k ?? 0),
+      precio_cobro_usd_por_1k: Number(body.precio_cobro_usd_por_1k ?? 0),
+      precio_cobro_pen_por_1k: Number(body.precio_cobro_pen_por_1k ?? 0),
+      notas:                   notas?.trim() ?? null,
       actualizado_at:        new Date().toISOString(),
     })
     .select()

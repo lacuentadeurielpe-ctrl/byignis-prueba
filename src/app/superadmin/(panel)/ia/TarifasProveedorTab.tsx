@@ -4,33 +4,37 @@ import { useEffect, useState } from 'react'
 import { Pencil, Check, X, Plus, Power } from 'lucide-react'
 
 interface TarifaIA {
-  id:                    string
-  modelo:                string
-  proveedor:             string
-  unidad:                string
-  precio_entrada_por_1k: number
-  precio_salida_por_1k:  number
-  activo:                boolean
-  notas:                 string | null
-  actualizado_at:        string
+  id:                      string
+  modelo:                  string
+  proveedor:               string
+  unidad:                  string
+  precio_entrada_por_1k:   number
+  precio_salida_por_1k:    number
+  precio_cobro_usd_por_1k: number
+  precio_cobro_pen_por_1k: number
+  activo:                  boolean
+  notas:                   string | null
+  actualizado_at:          string
 }
 
 export default function TarifasProveedorTab() {
-  const [tarifas, setTarifas]         = useState<TarifaIA[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [editId, setEditId]           = useState<string | null>(null)
-  const [editValues, setEditValues]   = useState<Partial<TarifaIA>>({})
-  const [saving, setSaving]           = useState(false)
-  const [error, setError]             = useState<string | null>(null)
-  const [showNew, setShowNew]         = useState(false)
-  const [newForm, setNewForm]         = useState({
+  const [tarifas, setTarifas]       = useState<TarifaIA[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [editId, setEditId]         = useState<string | null>(null)
+  const [editValues, setEditValues] = useState<Partial<TarifaIA>>({})
+  const [saving, setSaving]         = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [showNew, setShowNew]       = useState(false)
+  const [newForm, setNewForm]       = useState({
     modelo: '', proveedor: '', unidad: 'tokens',
-    precio_entrada_por_1k: '', precio_salida_por_1k: '', notas: '',
+    precio_entrada_por_1k: '', precio_salida_por_1k: '',
+    precio_cobro_usd_por_1k: '', precio_cobro_pen_por_1k: '',
+    notas: '',
   })
 
   async function cargar() {
     setLoading(true)
-    const res = await fetch('/api/superadmin/ia/tarifas')
+    const res  = await fetch('/api/superadmin/ia/tarifas')
     const json = await res.json()
     setTarifas(json.tarifas ?? [])
     setLoading(false)
@@ -41,57 +45,61 @@ export default function TarifasProveedorTab() {
   function iniciarEdicion(t: TarifaIA) {
     setEditId(t.id)
     setEditValues({
-      proveedor:             t.proveedor,
-      unidad:                t.unidad,
-      precio_entrada_por_1k: t.precio_entrada_por_1k,
-      precio_salida_por_1k:  t.precio_salida_por_1k,
-      notas:                 t.notas ?? '',
+      proveedor:               t.proveedor,
+      unidad:                  t.unidad,
+      precio_entrada_por_1k:   t.precio_entrada_por_1k,
+      precio_salida_por_1k:    t.precio_salida_por_1k,
+      precio_cobro_usd_por_1k: t.precio_cobro_usd_por_1k,
+      precio_cobro_pen_por_1k: t.precio_cobro_pen_por_1k,
+      notas:                   t.notas ?? '',
     })
     setError(null)
   }
 
   async function guardar(id: string) {
-    setSaving(true)
-    setError(null)
-    const res = await fetch(`/api/superadmin/ia/tarifas/${id}`, {
-      method: 'PATCH',
+    setSaving(true); setError(null)
+    const res  = await fetch(`/api/superadmin/ia/tarifas/${id}`, {
+      method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editValues),
+      body:    JSON.stringify(editValues),
     })
     const json = await res.json()
     if (!res.ok) { setError(json.error); setSaving(false); return }
-    setEditId(null)
-    setSaving(false)
-    cargar()
+    setEditId(null); setSaving(false); cargar()
   }
 
   async function toggleActivo(t: TarifaIA) {
     await fetch(`/api/superadmin/ia/tarifas/${t.id}`, {
-      method: 'PATCH',
+      method:  'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ activo: !t.activo }),
+      body:    JSON.stringify({ activo: !t.activo }),
     })
     cargar()
   }
 
   async function crearNuevo() {
-    setSaving(true)
-    setError(null)
-    const res = await fetch('/api/superadmin/ia/tarifas', {
-      method: 'POST',
+    setSaving(true); setError(null)
+    const res  = await fetch('/api/superadmin/ia/tarifas', {
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body:    JSON.stringify({
         ...newForm,
-        precio_entrada_por_1k: Number(newForm.precio_entrada_por_1k),
-        precio_salida_por_1k:  Number(newForm.precio_salida_por_1k),
+        precio_entrada_por_1k:   Number(newForm.precio_entrada_por_1k),
+        precio_salida_por_1k:    Number(newForm.precio_salida_por_1k),
+        precio_cobro_usd_por_1k: Number(newForm.precio_cobro_usd_por_1k),
+        precio_cobro_pen_por_1k: Number(newForm.precio_cobro_pen_por_1k),
       }),
     })
     const json = await res.json()
     if (!res.ok) { setError(json.error); setSaving(false); return }
     setShowNew(false)
-    setNewForm({ modelo: '', proveedor: '', unidad: 'tokens', precio_entrada_por_1k: '', precio_salida_por_1k: '', notas: '' })
-    setSaving(false)
-    cargar()
+    setNewForm({ modelo: '', proveedor: '', unidad: 'tokens', precio_entrada_por_1k: '', precio_salida_por_1k: '', precio_cobro_usd_por_1k: '', precio_cobro_pen_por_1k: '', notas: '' })
+    setSaving(false); cargar()
+  }
+
+  function margenPct(cobro: number, costo: number): string {
+    if (cobro <= 0) return '—'
+    return `${Math.round(((cobro - costo) / cobro) * 100)}%`
   }
 
   const PROVEEDOR_COLOR: Record<string, string> = {
@@ -107,15 +115,18 @@ export default function TarifasProveedorTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="font-semibold text-white">Tarifas de proveedores IA</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Lo que pagamos a Anthropic, DeepSeek, OpenAI y Google por cada llamada</p>
+          <h2 className="font-semibold text-white">APIs de IA — catálogo de precios</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Cada API tiene su costo (lo que pagamos al proveedor) y su precio de cobro (lo que cobramos al tenant).
+            El margen es la diferencia.
+          </p>
         </div>
         <button
           onClick={() => { setShowNew(!showNew); setError(null) }}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-lg transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
-          Nuevo modelo
+          Nueva API
         </button>
       </div>
 
@@ -126,26 +137,28 @@ export default function TarifasProveedorTab() {
       {/* Formulario nuevo */}
       {showNew && (
         <div className="mb-4 bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
-          <p className="text-sm font-medium text-gray-300">Agregar modelo</p>
+          <p className="text-sm font-medium text-gray-300">Agregar API / modelo</p>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Modelo *</label>
-              <input
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
-                placeholder="ej. claude-opus-4"
-                value={newForm.modelo}
-                onChange={(e) => setNewForm(f => ({ ...f, modelo: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Proveedor *</label>
-              <input
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
-                placeholder="ej. Anthropic"
-                value={newForm.proveedor}
-                onChange={(e) => setNewForm(f => ({ ...f, proveedor: e.target.value }))}
-              />
-            </div>
+            {[
+              { label: 'Modelo *',            key: 'modelo',                  placeholder: 'claude-opus-4' },
+              { label: 'Proveedor *',         key: 'proveedor',               placeholder: 'Anthropic' },
+              { label: 'Costo entrada /1K USD', key: 'precio_entrada_por_1k', placeholder: '0.003000', type: 'number' },
+              { label: 'Costo salida /1K USD',  key: 'precio_salida_por_1k',  placeholder: '0.015000', type: 'number' },
+              { label: 'Cobro /1K USD',         key: 'precio_cobro_usd_por_1k', placeholder: '0.015000', type: 'number' },
+              { label: 'Cobro /1K PEN (S/)',    key: 'precio_cobro_pen_por_1k', placeholder: '0.056250', type: 'number' },
+              { label: 'Notas',               key: 'notas',                   placeholder: 'descripción' },
+            ].map(({ label, key, placeholder, type }) => (
+              <div key={key}>
+                <label className="text-xs text-gray-500 mb-1 block">{label}</label>
+                <input
+                  type={type ?? 'text'} step="0.000001" min="0"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  placeholder={placeholder}
+                  value={(newForm as any)[key]}
+                  onChange={(e) => setNewForm(f => ({ ...f, [key]: e.target.value }))}
+                />
+              </div>
+            ))}
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Unidad</label>
               <select
@@ -158,35 +171,6 @@ export default function TarifasProveedorTab() {
                 <option value="imagenes">imágenes</option>
               </select>
             </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Precio entrada /1K unidades (USD)</label>
-              <input
-                type="number" step="0.000001" min="0"
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
-                placeholder="0.003000"
-                value={newForm.precio_entrada_por_1k}
-                onChange={(e) => setNewForm(f => ({ ...f, precio_entrada_por_1k: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Precio salida /1K unidades (USD)</label>
-              <input
-                type="number" step="0.000001" min="0"
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
-                placeholder="0.015000"
-                value={newForm.precio_salida_por_1k}
-                onChange={(e) => setNewForm(f => ({ ...f, precio_salida_por_1k: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Notas</label>
-              <input
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
-                placeholder="descripción opcional"
-                value={newForm.notas}
-                onChange={(e) => setNewForm(f => ({ ...f, notas: e.target.value }))}
-              />
-            </div>
           </div>
           <div className="flex gap-2">
             <button
@@ -196,39 +180,44 @@ export default function TarifasProveedorTab() {
             >
               {saving ? 'Guardando…' : 'Agregar'}
             </button>
-            <button
-              onClick={() => setShowNew(false)}
-              className="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors"
-            >
+            <button onClick={() => setShowNew(false)} className="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors">
               Cancelar
             </button>
           </div>
         </div>
       )}
 
-      {/* Tabla de tarifas */}
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-        <table className="w-full text-sm">
+      {/* Tabla */}
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-x-auto">
+        <table className="w-full text-sm min-w-[900px]">
           <thead>
             <tr className="border-b border-gray-800 text-gray-400 text-left">
               <th className="px-4 py-3 font-medium">Modelo</th>
               <th className="px-4 py-3 font-medium">Proveedor</th>
-              <th className="px-4 py-3 font-medium text-right">Entrada /1K</th>
-              <th className="px-4 py-3 font-medium text-right">Salida /1K</th>
+              <th className="px-4 py-3 font-medium text-right">Costo /1K</th>
+              <th className="px-4 py-3 font-medium text-right">Cobro /1K USD</th>
+              <th className="px-4 py-3 font-medium text-right">Cobro /1K S/</th>
+              <th className="px-4 py-3 font-medium text-center">Margen</th>
               <th className="px-4 py-3 font-medium">Unidad</th>
-              <th className="px-4 py-3 font-medium">Notas</th>
               <th className="px-4 py-3 font-medium text-center">Estado</th>
-              <th className="px-4 py-3 font-medium text-center">Acciones</th>
+              <th className="px-4 py-3 font-medium text-center">Editar</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
             {tarifas.map((t) => {
               const isEditing = editId === t.id
+              const margen = margenPct(
+                Number(isEditing ? editValues.precio_cobro_usd_por_1k : t.precio_cobro_usd_por_1k),
+                Number(isEditing ? editValues.precio_entrada_por_1k   : t.precio_entrada_por_1k)
+              )
               return (
                 <tr key={t.id} className={`hover:bg-gray-800/30 ${!t.activo ? 'opacity-40' : ''}`}>
+                  {/* Modelo */}
                   <td className="px-4 py-3">
                     <span className="font-mono text-xs text-white">{t.modelo}</span>
                   </td>
+
+                  {/* Proveedor */}
                   <td className="px-4 py-3">
                     {isEditing ? (
                       <input
@@ -237,11 +226,11 @@ export default function TarifasProveedorTab() {
                         onChange={(e) => setEditValues(v => ({ ...v, proveedor: e.target.value }))}
                       />
                     ) : (
-                      <span className={`text-xs font-medium ${PROVEEDOR_COLOR[t.proveedor] ?? 'text-gray-300'}`}>
-                        {t.proveedor}
-                      </span>
+                      <span className={`text-xs font-medium ${PROVEEDOR_COLOR[t.proveedor] ?? 'text-gray-300'}`}>{t.proveedor}</span>
                     )}
                   </td>
+
+                  {/* Costo entrada /1K */}
                   <td className="px-4 py-3 text-right">
                     {isEditing ? (
                       <input
@@ -251,25 +240,49 @@ export default function TarifasProveedorTab() {
                         onChange={(e) => setEditValues(v => ({ ...v, precio_entrada_por_1k: Number(e.target.value) }))}
                       />
                     ) : (
-                      <span className="font-mono text-xs text-green-400">
-                        ${Number(t.precio_entrada_por_1k).toFixed(6)}
-                      </span>
+                      <span className="font-mono text-xs text-red-400">${Number(t.precio_entrada_por_1k).toFixed(6)}</span>
                     )}
                   </td>
+
+                  {/* Cobro /1K USD */}
                   <td className="px-4 py-3 text-right">
                     {isEditing ? (
                       <input
                         type="number" step="0.000001" min="0"
                         className="w-28 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white text-right focus:outline-none"
-                        value={String(editValues.precio_salida_por_1k ?? t.precio_salida_por_1k)}
-                        onChange={(e) => setEditValues(v => ({ ...v, precio_salida_por_1k: Number(e.target.value) }))}
+                        value={String(editValues.precio_cobro_usd_por_1k ?? t.precio_cobro_usd_por_1k)}
+                        onChange={(e) => setEditValues(v => ({ ...v, precio_cobro_usd_por_1k: Number(e.target.value) }))}
                       />
                     ) : (
-                      <span className="font-mono text-xs text-blue-400">
-                        ${Number(t.precio_salida_por_1k).toFixed(6)}
-                      </span>
+                      <span className="font-mono text-xs text-green-400">${Number(t.precio_cobro_usd_por_1k).toFixed(6)}</span>
                     )}
                   </td>
+
+                  {/* Cobro /1K PEN */}
+                  <td className="px-4 py-3 text-right">
+                    {isEditing ? (
+                      <input
+                        type="number" step="0.000001" min="0"
+                        className="w-28 bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white text-right focus:outline-none"
+                        value={String(editValues.precio_cobro_pen_por_1k ?? t.precio_cobro_pen_por_1k)}
+                        onChange={(e) => setEditValues(v => ({ ...v, precio_cobro_pen_por_1k: Number(e.target.value) }))}
+                      />
+                    ) : (
+                      <span className="font-mono text-xs text-yellow-400">S/{Number(t.precio_cobro_pen_por_1k).toFixed(6)}</span>
+                    )}
+                  </td>
+
+                  {/* Margen */}
+                  <td className="px-4 py-3 text-center">
+                    <span className={`text-xs font-medium ${
+                      Number(isEditing ? editValues.precio_cobro_usd_por_1k : t.precio_cobro_usd_por_1k) > Number(isEditing ? editValues.precio_entrada_por_1k : t.precio_entrada_por_1k)
+                        ? 'text-emerald-400' : 'text-red-400'
+                    }`}>
+                      {margen}
+                    </span>
+                  </td>
+
+                  {/* Unidad */}
                   <td className="px-4 py-3">
                     {isEditing ? (
                       <select
@@ -285,21 +298,11 @@ export default function TarifasProveedorTab() {
                       <span className="text-xs text-gray-400">{t.unidad}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 max-w-xs">
-                    {isEditing ? (
-                      <input
-                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none"
-                        value={String(editValues.notas ?? (t.notas ?? ''))}
-                        onChange={(e) => setEditValues(v => ({ ...v, notas: e.target.value }))}
-                      />
-                    ) : (
-                      <span className="text-xs text-gray-500 truncate block max-w-[180px]">{t.notas ?? '—'}</span>
-                    )}
-                  </td>
+
+                  {/* Estado */}
                   <td className="px-4 py-3 text-center">
                     <button
                       onClick={() => toggleActivo(t)}
-                      title={t.activo ? 'Desactivar' : 'Activar'}
                       className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition-colors ${
                         t.activo
                           ? 'bg-green-900/40 text-green-400 hover:bg-red-900/40 hover:text-red-400'
@@ -310,31 +313,23 @@ export default function TarifasProveedorTab() {
                       {t.activo ? 'Activo' : 'Inactivo'}
                     </button>
                   </td>
+
+                  {/* Acciones */}
                   <td className="px-4 py-3 text-center">
                     {isEditing ? (
                       <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => guardar(t.id)}
-                          disabled={saving}
-                          className="p-1.5 rounded-lg bg-green-700 hover:bg-green-600 text-white disabled:opacity-40"
-                          title="Guardar"
-                        >
+                        <button onClick={() => guardar(t.id)} disabled={saving}
+                          className="p-1.5 rounded-lg bg-green-700 hover:bg-green-600 text-white disabled:opacity-40">
                           <Check className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => setEditId(null)}
-                          className="p-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
-                          title="Cancelar"
-                        >
+                        <button onClick={() => setEditId(null)}
+                          className="p-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-white">
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => iniciarEdicion(t)}
-                        className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
-                        title="Editar"
-                      >
+                      <button onClick={() => iniciarEdicion(t)}
+                        className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -347,8 +342,8 @@ export default function TarifasProveedorTab() {
       </div>
 
       <p className="mt-3 text-xs text-gray-600">
-        * Los cambios se aplican a las siguientes llamadas IA (cache se invalida al guardar).
-        El historial de costos ya guardado en movimientos_creditos no se recalcula retroactivamente.
+        Costo = lo que pagamos al proveedor · Cobro = lo que cobramos al tenant · Margen = (cobro − costo) / cobro.
+        Los cambios invalidan el cache; el historial en movimientos_creditos no se recalcula retroactivamente.
       </p>
     </div>
   )

@@ -17,12 +17,14 @@ export async function PATCH(
   const body   = await request.json()
 
   const campos: Record<string, unknown> = { actualizado_at: new Date().toISOString() }
-  if (body.precio_entrada_por_1k !== undefined) campos.precio_entrada_por_1k = Number(body.precio_entrada_por_1k)
-  if (body.precio_salida_por_1k  !== undefined) campos.precio_salida_por_1k  = Number(body.precio_salida_por_1k)
-  if (body.proveedor             !== undefined) campos.proveedor             = String(body.proveedor).trim()
-  if (body.unidad                !== undefined) campos.unidad                = String(body.unidad)
-  if (body.notas                 !== undefined) campos.notas                 = body.notas ? String(body.notas).trim() : null
-  if (body.activo                !== undefined) campos.activo                = Boolean(body.activo)
+  if (body.precio_entrada_por_1k    !== undefined) campos.precio_entrada_por_1k    = Number(body.precio_entrada_por_1k)
+  if (body.precio_salida_por_1k    !== undefined) campos.precio_salida_por_1k    = Number(body.precio_salida_por_1k)
+  if (body.precio_cobro_usd_por_1k !== undefined) campos.precio_cobro_usd_por_1k = Number(body.precio_cobro_usd_por_1k)
+  if (body.precio_cobro_pen_por_1k !== undefined) campos.precio_cobro_pen_por_1k = Number(body.precio_cobro_pen_por_1k)
+  if (body.proveedor               !== undefined) campos.proveedor               = String(body.proveedor).trim()
+  if (body.unidad                  !== undefined) campos.unidad                  = String(body.unidad)
+  if (body.notas                   !== undefined) campos.notas                   = body.notas ? String(body.notas).trim() : null
+  if (body.activo                  !== undefined) campos.activo                  = Boolean(body.activo)
 
   const admin = createAdminClient()
   const { data, error } = await admin
