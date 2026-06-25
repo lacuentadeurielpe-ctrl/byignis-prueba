@@ -26,10 +26,13 @@ const TOOL_TIMEOUT_MS = 9_000   // cada tool tiene 9s antes de devolver error
 const RETRY_WAIT_MS   = 800    // espera antes del único reintento en 429/503
 
 export interface OrchestratorResult {
-  respuesta: string
-  toolsUsadas: string[]
-  iteraciones: number
-  motor: 'claude' | 'deepseek'
+  respuesta:     string
+  toolsUsadas:   string[]
+  iteraciones:   number
+  motor:         'claude' | 'deepseek'
+  tokensEntrada: number
+  tokensSalida:  number
+  modeloUsado:   string
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,6 +59,7 @@ type AnthropicMessage =
 interface AnthropicResponse {
   content:     AnthropicContentBlock[]
   stop_reason: 'tool_use' | 'end_turn' | string
+  usage?:      { input_tokens: number; output_tokens: number }
 }
 
 async function callClaudeOnce(
@@ -138,10 +142,15 @@ async function ejecutarOrquestadorClaude(
 
   const toolsUsadas: string[] = []
   let iteracion = 0
+  let totalInputTokens  = 0
+  let totalOutputTokens = 0
 
   while (iteracion < MAX_ITERATIONS) {
     iteracion++
     const resp = await callClaude(systemPrompt, messages, true, toolSchemas)
+
+    totalInputTokens  += resp.usage?.input_tokens  ?? 0
+    totalOutputTokens += resp.usage?.output_tokens ?? 0
 
     // Extract text and tool_use blocks
     const toolUseBlocks = resp.content.filter((b): b is Extract<AnthropicContentBlock, { type: 'tool_use' }> =>
@@ -159,9 +168,9 @@ async function ejecutarOrquestadorClaude(
       const respuesta = textBlocks.map((b) => b.text).join('').trim()
       if (!respuesta) {
         console.warn('[Orchestrator/Claude] Respuesta vacía; iteracion=', iteracion)
-        return { respuesta: 'Disculpe, ¿podría repetir su consulta?', toolsUsadas, iteraciones: iteracion, motor: 'claude' }
+        return { respuesta: 'Disculpe, ¿podría repetir su consulta?', toolsUsadas, iteraciones: iteracion, motor: 'claude', tokensEntrada: totalInputTokens, tokensSalida: totalOutputTokens, modeloUsado: CLAUDE_MODEL }
       }
-      return { respuesta, toolsUsadas, iteraciones: iteracion, motor: 'claude' }
+      return { respuesta, toolsUsadas, iteraciones: iteracion, motor: 'claude', tokensEntrada: totalInputTokens, tokensSalida: totalOutputTokens, modeloUsado: CLAUDE_MODEL }
     }
 
     // Execute tools in parallel — cada una con timeout propio de TOOL_TIMEOUT_MS
@@ -210,8 +219,11 @@ async function ejecutarOrquestadorClaude(
   return {
     respuesta: 'Tuve dificultades procesando tu consulta completa. ¿Podrías preguntarme algo más específico? 🙏',
     toolsUsadas,
-    iteraciones: iteracion,
-    motor: 'claude',
+    iteraciones:   iteracion,
+    motor:         'claude',
+    tokensEntrada: totalInputTokens,
+    tokensSalida:  totalOutputTokens,
+    modeloUsado:   CLAUDE_MODEL,
   }
 }
 
@@ -236,11 +248,17 @@ interface DeepSeekChoice {
   finish_reason: string
 }
 
+interface DeepSeekCallResult {
+  choice:         DeepSeekChoice
+  promptTokens:   number
+  completionTokens: number
+}
+
 async function callDeepSeekOnce(
   messages:    DeepSeekMessage[],
   useTools:    boolean,
   toolSchemas: ToolSchema[]
-): Promise<DeepSeekChoice> {
+): Promise<DeepSeekCallResult> {
   const apiKey = process.env.DEEPSEEK_API_KEY
   if (!apiKey) throw new Error('DEEPSEEK_API_KEY no configurado')
 
@@ -281,7 +299,11 @@ async function callDeepSeekOnce(
 
   const choice = data.choices?.[0]
   if (!choice) throw new Error('DeepSeek respuesta vacía en orquestador')
-  return choice
+  return {
+    choice,
+    promptTokens:    data.usage?.prompt_tokens     ?? 0,
+    completionTokens: data.usage?.completion_tokens ?? 0,
+  }
 }
 
 // Retry único en 429/503 — DeepSeek tiene rate limits frecuentes en horas pico
@@ -289,7 +311,7 @@ async function callDeepSeek(
   messages:    DeepSeekMessage[],
   useTools:    boolean,
   toolSchemas: ToolSchema[]
-): Promise<DeepSeekChoice> {
+): Promise<DeepSeekCallResult> {
   try {
     return await callDeepSeekOnce(messages, useTools, toolSchemas)
   } catch (e) {
@@ -317,10 +339,14 @@ async function ejecutarOrquestadorDeepSeek(
 
   const toolsUsadas: string[] = []
   let iteracion = 0
+  let totalInputTokens  = 0
+  let totalOutputTokens = 0
 
   while (iteracion < MAX_ITERATIONS) {
     iteracion++
-    const choice = await callDeepSeek(messages, true, toolSchemas)
+    const { choice, promptTokens, completionTokens } = await callDeepSeek(messages, true, toolSchemas)
+    totalInputTokens  += promptTokens
+    totalOutputTokens += completionTokens
     const { message, finish_reason } = choice
 
     messages.push({
@@ -331,8 +357,8 @@ async function ejecutarOrquestadorDeepSeek(
 
     if (!message.tool_calls || message.tool_calls.length === 0) {
       const respuesta = (message.content ?? '').trim()
-      if (!respuesta) return { respuesta: 'Disculpe, ¿podría repetir su consulta?', toolsUsadas, iteraciones: iteracion, motor: 'deepseek' }
-      return { respuesta, toolsUsadas, iteraciones: iteracion, motor: 'deepseek' }
+      if (!respuesta) return { respuesta: 'Disculpe, ¿podría repetir su consulta?', toolsUsadas, iteraciones: iteracion, motor: 'deepseek', tokensEntrada: totalInputTokens, tokensSalida: totalOutputTokens, modeloUsado: DEEPSEEK_MODEL }
+      return { respuesta, toolsUsadas, iteraciones: iteracion, motor: 'deepseek', tokensEntrada: totalInputTokens, tokensSalida: totalOutputTokens, modeloUsado: DEEPSEEK_MODEL }
     }
 
     // Ejecutar tools con timeout propio
@@ -381,8 +407,11 @@ async function ejecutarOrquestadorDeepSeek(
   return {
     respuesta: 'Tuve dificultades procesando tu consulta completa. ¿Podrías preguntarme algo más específico? 🙏',
     toolsUsadas,
-    iteraciones: iteracion,
-    motor: 'deepseek',
+    iteraciones:   iteracion,
+    motor:         'deepseek',
+    tokensEntrada: totalInputTokens,
+    tokensSalida:  totalOutputTokens,
+    modeloUsado:   DEEPSEEK_MODEL,
   }
 }
 

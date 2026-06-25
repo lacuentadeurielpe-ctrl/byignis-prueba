@@ -36,14 +36,17 @@ export interface RegistroMovimientoParams {
   costoUsd?: number
 }
 
-// ── Costo en USD estimado por modelo ─────────────────────────────────────────
-// Solo para el panel de superadmin (reference only — no se cobra así)
+// ── Costo en USD por 1000 tokens (per-1K) ────────────────────────────────────
+// Solo para el panel de superadmin. Actualizar cuando los providers cambien precios.
 const COSTO_USD_POR_1K_TOKENS: Record<string, { entrada: number; salida: number }> = {
-  'deepseek-chat':               { entrada: 0.00014, salida: 0.00028 },
-  'gpt-4o-mini':                 { entrada: 0.00015, salida: 0.00060 },
-  'claude-3-5-sonnet-20241022':  { entrada: 0.00300, salida: 0.01500 },
-  'whisper-1':                   { entrada: 0.00600, salida: 0       }, // por minuto, aprox
-  'gpt-4o':                      { entrada: 0.00500, salida: 0.01500 },
+  'deepseek-chat':               { entrada: 0.000140, salida: 0.000280 },
+  'gpt-4o-mini':                 { entrada: 0.000150, salida: 0.000600 },
+  'claude-3-5-sonnet-20241022':  { entrada: 0.003000, salida: 0.015000 },
+  'claude-sonnet-4-6':           { entrada: 0.003000, salida: 0.015000 },
+  'gpt-4o':                      { entrada: 0.005000, salida: 0.015000 },
+  'gemini-2.5-flash':            { entrada: 0.000150, salida: 0.000600 },
+  // Whisper: precio por minuto; se pasa audioSegundos/60 como "tokens de entrada"
+  'whisper-1':                   { entrada: 0.006000, salida: 0       },
 }
 
 export function estimarCostoUsd(

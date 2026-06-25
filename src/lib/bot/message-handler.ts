@@ -33,7 +33,6 @@ import {
   respuestaModoBasico,
   estimarCostoUsd,
 } from '@/lib/credits'
-import { MODELO_POR_TAREA } from '@/types/database'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
 import { geocodificarDireccion } from '@/lib/delivery/geocoding'
@@ -398,7 +397,10 @@ export async function handleIncomingMessage({
         ferreteriaId:   ferreteria.id,
         tipoTarea:      tipoTareaOrq,
         conversacionId: conversacion.id,
-        origen: 'bot',
+        origen:         'bot',
+        tokensEntrada:  resultado.tokensEntrada,
+        tokensSalida:   resultado.tokensSalida,
+        costoUsd:       estimarCostoUsd(resultado.modeloUsado, resultado.tokensEntrada, resultado.tokensSalida),
       }).catch(() => {})
 
       await guardarMensaje(supabase, conversacion.id, 'bot', resultado.respuesta)
@@ -467,9 +469,9 @@ export async function handleIncomingMessage({
     perfilBot,
   })
 
-  let respuestaAI
+  let intentResult: Awaited<ReturnType<typeof llamarDeepSeek>>
   try {
-    respuestaAI = await llamarDeepSeek([
+    intentResult = await llamarDeepSeek([
       { role: 'system', content: systemPrompt },
       ...buildHistorialMensajes(historialParaAI),
       { role: 'user', content: textoMensaje },
@@ -481,31 +483,37 @@ export async function handleIncomingMessage({
     return { respuesta: msg, conversacionId: conversacion.id }
   }
 
+  let respuestaAI = intentResult.respuesta
+  const tkIntentIn  = intentResult.tokensEntrada
+  const tkIntentOut = intentResult.tokensSalida
+
   // ── 9. Routing de créditos y modelo según el intent detectado ────────────
   const tareaIA = intentToTaskType(respuestaAI.intent, historialParaAI.length)
-  const modeloUsado = MODELO_POR_TAREA[tareaIA]
 
-  console.log(`[Bot] intent=${respuestaAI.intent} → tarea=${tareaIA} modelo=${modeloUsado}`)
+  console.log(`[Bot] intent=${respuestaAI.intent} → tarea=${tareaIA}`)
 
   // Descontar los créditos reales de la tarea (atómico)
   const creditosOk = await verificarYDescontarCreditos(ferreteria.id, tareaIA)
   if (!creditosOk.ok) {
-    // Ya consumimos la llamada a DeepSeek — igual respondemos, pero no descontamos más
     console.warn(`[Bot] Créditos insuficientes para ${tareaIA} (necesitaba más de 1)`)
-    // Registrar al menos 1 crédito consumido (lo mínimo que teníamos)
     registrarMovimiento({
-      ferreteriaId: ferreteria.id,
-      tipoTarea:    'respuesta_simple',
+      ferreteriaId:   ferreteria.id,
+      tipoTarea:      'respuesta_simple',
       conversacionId: conversacion.id,
-      origen: 'bot',
+      origen:         'bot',
+      tokensEntrada:  tkIntentIn,
+      tokensSalida:   tkIntentOut,
+      costoUsd:       estimarCostoUsd('deepseek-chat', tkIntentIn, tkIntentOut),
     }).catch(() => {})
   } else {
-    // Registrar movimiento con datos reales (fire-and-forget)
     registrarMovimiento({
       ferreteriaId:   ferreteria.id,
       tipoTarea:      tareaIA,
       conversacionId: conversacion.id,
       origen:         'bot',
+      tokensEntrada:  tkIntentIn,
+      tokensSalida:   tkIntentOut,
+      costoUsd:       estimarCostoUsd('deepseek-chat', tkIntentIn, tkIntentOut),
     }).catch(() => {})
   }
 

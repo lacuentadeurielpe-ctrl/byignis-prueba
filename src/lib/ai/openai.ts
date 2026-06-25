@@ -11,26 +11,31 @@ function getKey(): string | null {
 
 // ── Audio → Texto (Whisper) ──────────────────────────────────────────────────
 
+export interface ResultadoAudio {
+  texto:         string | null
+  audioSegundos: number  // estimado del tamaño del buffer (Whisper no devuelve duración)
+}
+
 /**
  * Transcribe un audio usando OpenAI Whisper.
- * Recibe el buffer del archivo de audio y su mime type.
- * Retorna el texto transcrito, o null si falla o no hay API key.
+ * Retorna el texto y la duración estimada en segundos (para calcular costo).
  */
 export async function transcribirAudio(
   buffer: Buffer,
   mimeType: string,
   idioma = 'es'
-): Promise<string | null> {
+): Promise<ResultadoAudio> {
   const apiKey = getKey()
-  if (!apiKey) return null
+  // OGG/Opus de WhatsApp: ~16kbps ≈ 2000 bytes/seg
+  const audioSegundos = Math.max(1, Math.round(buffer.length / 2000))
+  if (!apiKey) return { texto: null, audioSegundos }
 
-  // Determinar extensión por mime type
   const ext = mimeType.includes('ogg') ? 'ogg'
     : mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a'
     : mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3'
     : mimeType.includes('webm') ? 'webm'
     : mimeType.includes('wav') ? 'wav'
-    : 'ogg'  // WhatsApp por defecto envía ogg/opus
+    : 'ogg'
 
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(buffer)], { type: mimeType }), `audio.${ext}`)
@@ -48,14 +53,14 @@ export async function transcribirAudio(
     if (!res.ok) {
       const err = await res.text()
       console.error('[OpenAI] Error Whisper:', res.status, err)
-      return null
+      return { texto: null, audioSegundos }
     }
 
     const texto = await res.text()
-    return texto.trim() || null
+    return { texto: texto.trim() || null, audioSegundos }
   } catch (e) {
     console.error('[OpenAI] Error en transcribirAudio:', e)
-    return null
+    return { texto: null, audioSegundos }
   }
 }
 
@@ -81,21 +86,24 @@ export interface AnalisisImagen {
   }
 }
 
+export interface ResultadoImagen {
+  analisis:      AnalisisImagen | null
+  tokensEntrada: number
+  tokensSalida:  number
+}
+
 /**
  * Analiza una imagen con Gemini Vision.
- * Usa el SDK oficial @google/generative-ai con gemini-2.5-flash — el MISMO
- * patrón que el módulo de catálogo (compras-ai.ts) que funciona en producción.
- * Detecta si es una lista de productos, una foto de producto, comprobante de pago o algo genérico.
- * Retorna un análisis estructurado para que el bot pueda responder apropiadamente.
+ * Retorna el análisis y los tokens consumidos (para calcular costo real).
  */
 export async function analizarImagen(
   buffer: Buffer,
   mimeType: string,
-): Promise<AnalisisImagen | null> {
+): Promise<ResultadoImagen> {
   const apiKey = getGeminiKey()
   if (!apiKey) {
     console.warn('[Gemini] Vision: GOOGLE_GENERATIVE_AI_API_KEY no configurada')
-    return null
+    return { analisis: null, tokensEntrada: 0, tokensSalida: 0 }
   }
 
   // Normalizar mimeType — Gemini solo acepta tipos de imagen válidos
@@ -171,13 +179,16 @@ Si es comprobante_pago, extrae monto, destinatario, operacion_id y fecha en "pag
     ])
 
     const textResponse = result.response.text()
-    console.log(`[Gemini] Vision OK — ${buffer.length}b mime=${mime} → ${textResponse.slice(0, 120)}`)
+    const meta = result.response.usageMetadata
+    const tokensEntrada = meta?.promptTokenCount     ?? 0
+    const tokensSalida  = meta?.candidatesTokenCount ?? 0
+    console.log(`[Gemini] Vision OK — ${buffer.length}b mime=${mime} in=${tokensEntrada} out=${tokensSalida}`)
 
     const cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim()
-    return JSON.parse(cleanJson) as AnalisisImagen
+    return { analisis: JSON.parse(cleanJson) as AnalisisImagen, tokensEntrada, tokensSalida }
   } catch (e) {
     console.error('[Gemini] Error en analizarImagen:', e instanceof Error ? e.message : e)
-    return null
+    return { analisis: null, tokensEntrada: 0, tokensSalida: 0 }
   }
 }
 

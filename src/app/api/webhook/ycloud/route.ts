@@ -22,6 +22,7 @@ import {
 } from '@/lib/whatsapp/ycloud'
 import { handleIncomingMessage } from '@/lib/bot/message-handler'
 import { transcribirAudio, analizarImagen, openAIDisponible } from '@/lib/ai/openai'
+import { registrarMovimiento, estimarCostoUsd } from '@/lib/credits'
 import { desencriptar } from '@/lib/encryption'
 import { pausarBotPorDueno } from '@/lib/bot/session'
 import { acumularOProcesar } from '@/lib/bot/debounce'
@@ -230,11 +231,21 @@ export async function POST(request: Request) {
         const media = await descargarMedia(audioId, tenantApiKey)
         if (media) {
           console.log(`[Webhook] Audio descargado ${media.buffer.length}b mimeType=${media.mimeType} — enviando a Whisper`)
-          const transcripcion = await transcribirAudio(media.buffer, media.mimeType)
+          const { texto: transcripcion, audioSegundos } = await transcribirAudio(media.buffer, media.mimeType)
           if (transcripcion) {
             console.log(`[Webhook] Transcripción OK: "${transcripcion.slice(0, 80)}"`)
             textoMensaje = transcripcion
             notaParaBot = '[El cliente envió un audio de voz — este es el texto transcrito]'
+            // Registrar costo Whisper (precio por minuto)
+            const costoUsd = (audioSegundos / 60) * 0.006
+            registrarMovimiento({
+              ferreteriaId:  ycloudConfig.ferreteria_id,
+              tipoTarea:     'audio_whisper',
+              origen:        'bot',
+              tokensEntrada: Math.ceil(audioSegundos),
+              tokensSalida:  0,
+              costoUsd,
+            }).catch(() => {})
           } else {
             console.warn('[Webhook] Whisper devolvió null — sin transcripción')
           }
@@ -279,13 +290,21 @@ export async function POST(request: Request) {
       try {
         const media = await descargarMedia(imageId, tenantApiKey)
         if (media) {
-          // Preferir el MIME del payload YCloud sobre el Content-Type del CDN
-          // (CDNs a veces devuelven application/octet-stream, lo que hace fallar a Gemini)
           const mimeParaVision = (media.mimeType && media.mimeType !== 'application/octet-stream')
             ? media.mimeType
             : imageMime
           console.log(`[Webhook] Vision: ${media.buffer.length}b mime=${mimeParaVision}`)
-          const analisis = await analizarImagen(media.buffer, mimeParaVision)
+          const { analisis, tokensEntrada: vTkIn, tokensSalida: vTkOut } = await analizarImagen(media.buffer, mimeParaVision)
+          if (vTkIn > 0 || vTkOut > 0) {
+            registrarMovimiento({
+              ferreteriaId:  ycloudConfig.ferreteria_id,
+              tipoTarea:     'imagen_vision',
+              origen:        'bot',
+              tokensEntrada: vTkIn,
+              tokensSalida:  vTkOut,
+              costoUsd:      estimarCostoUsd('gemini-2.5-flash', vTkIn, vTkOut),
+            }).catch(() => {})
+          }
           if (analisis) {
             console.log(`[Webhook] Imagen tipo: ${analisis.tipo}`)
             if (analisis.tipo === 'lista_productos' && analisis.productosDetectados?.length) {
@@ -415,7 +434,17 @@ export async function POST(request: Request) {
       try {
         const media = await descargarMedia(docId, tenantApiKey)
         if (media) {
-          const analisis = await analizarImagen(media.buffer, media.mimeType)
+          const { analisis, tokensEntrada: dTkIn, tokensSalida: dTkOut } = await analizarImagen(media.buffer, media.mimeType)
+          if (dTkIn > 0 || dTkOut > 0) {
+            registrarMovimiento({
+              ferreteriaId:  ycloudConfig.ferreteria_id,
+              tipoTarea:     'imagen_vision',
+              origen:        'bot',
+              tokensEntrada: dTkIn,
+              tokensSalida:  dTkOut,
+              costoUsd:      estimarCostoUsd('gemini-2.5-flash', dTkIn, dTkOut),
+            }).catch(() => {})
+          }
           if (analisis) {
             textoMensaje = analisis.tipo === 'lista_productos' && analisis.productosDetectados?.length
               ? `Quiero cotizar: ${analisis.productosDetectados.map(p => `${p.cantidad ? p.cantidad + 'x ' : ''}${p.nombre}`).join(', ')}`

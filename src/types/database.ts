@@ -555,37 +555,40 @@ export type TipoIncidencia =
 // Tipo de tarea IA → modelo y créditos
 export type TipoTareaIA =
   | 'respuesta_simple'     // DeepSeek — 1 crédito
-  | 'cotizacion'           // GPT-4o mini — 3 créditos
-  | 'pedido'               // GPT-4o mini — 3 créditos
+  | 'cotizacion'           // Orquestador — 3 créditos
+  | 'pedido'               // Orquestador — 3 créditos
   | 'situacion_compleja'   // Claude — 8 créditos
   | 'audio_whisper'        // Whisper — 2 créditos
-  | 'imagen_vision'        // GPT-4o Vision — 4 créditos
+  | 'imagen_vision'        // Gemini Vision — 4 créditos
   | 'analisis_inventario'  // DeepSeek — 2 créditos
-  | 'reporte'              // GPT-4o mini — 5 créditos
+  | 'reporte'              // DeepSeek — 5 créditos
   | 'crm'                  // DeepSeek — 1 crédito
+  | 'asistente'            // Claude (Asistente IA dashboard) — sin costo de créditos
 
 export const COSTO_CREDITOS: Record<TipoTareaIA, number> = {
-  respuesta_simple:   1,
-  cotizacion:         3,
-  pedido:             3,
-  situacion_compleja: 8,
-  audio_whisper:      2,
-  imagen_vision:      4,
+  respuesta_simple:    1,
+  cotizacion:          3,
+  pedido:              3,
+  situacion_compleja:  8,
+  audio_whisper:       2,
+  imagen_vision:       4,
   analisis_inventario: 2,
-  reporte:            5,
-  crm:                1,
+  reporte:             5,
+  crm:                 1,
+  asistente:           0,
 }
 
 export const MODELO_POR_TAREA: Record<TipoTareaIA, string> = {
   respuesta_simple:    'deepseek-chat',
-  cotizacion:          'gpt-4o-mini',
-  pedido:              'gpt-4o-mini',
-  situacion_compleja:  'claude-3-5-sonnet-20241022',
+  cotizacion:          'claude-sonnet-4-6',
+  pedido:              'claude-sonnet-4-6',
+  situacion_compleja:  'claude-sonnet-4-6',
   audio_whisper:       'whisper-1',
-  imagen_vision:       'gpt-4o-mini',
+  imagen_vision:       'gemini-2.5-flash',
   analisis_inventario: 'deepseek-chat',
-  reporte:             'gpt-4o-mini',
+  reporte:             'deepseek-chat',
   crm:                 'deepseek-chat',
+  asistente:           'claude-sonnet-4-6',
 }
 
 export interface Superadmin {

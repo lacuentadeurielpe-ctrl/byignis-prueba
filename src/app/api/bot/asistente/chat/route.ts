@@ -5,6 +5,7 @@ import { buildAsistenteSystemPrompt, loadConfigSnapshot } from '@/lib/ai/asisten
 import { ASISTENTE_TOOLS, executeToolCall } from '@/lib/ai/asistente/tools'
 import { compactIfNeeded, type AsistenteMsg } from '@/lib/ai/asistente/compact'
 import { checkConflict } from '@/lib/ai/asistente/conflict-checker'
+import { registrarMovimiento, estimarCostoUsd } from '@/lib/credits'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,8 @@ export async function POST(req: NextRequest) {
         const systemPrompt = buildAsistenteSystemPrompt(snapshot)
         let conversation: ApiMessage[] = compacted as ApiMessage[]
         let rounds = 0
+        let totalInputTokens  = 0
+        let totalOutputTokens = 0
 
         while (rounds < MAX_TOOL_ROUNDS) {
           if (Date.now() > deadline) {
@@ -113,6 +116,8 @@ export async function POST(req: NextRequest) {
           }
 
           const data         = await res.json()
+          totalInputTokens  += data.usage?.input_tokens  ?? 0
+          totalOutputTokens += data.usage?.output_tokens ?? 0
           const blocks:ContentBlock[] = data.content ?? []
           const stopReason   = String(data.stop_reason ?? 'end_turn')
 
@@ -168,6 +173,18 @@ export async function POST(req: NextRequest) {
         }
 
         emit({ type: 'done', configSnapshot: snapshot })
+
+        // Registrar consumo real del Asistente IA (fire-and-forget)
+        if (totalInputTokens > 0 || totalOutputTokens > 0) {
+          registrarMovimiento({
+            ferreteriaId:  session.ferreteriaId,
+            tipoTarea:     'asistente',
+            origen:        'bot',
+            tokensEntrada: totalInputTokens,
+            tokensSalida:  totalOutputTokens,
+            costoUsd:      estimarCostoUsd('claude-sonnet-4-6', totalInputTokens, totalOutputTokens),
+          }).catch(() => {})
+        }
 
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Error interno'

@@ -58,8 +58,14 @@ interface MensajeChat {
   content: string
 }
 
+export interface ResultadoDeepSeek {
+  respuesta:     RespuestaAI
+  tokensEntrada: number
+  tokensSalida:  number
+}
+
 // Llama a DeepSeek con reintentos automáticos en caso de error
-export async function llamarDeepSeek(mensajes: MensajeChat[]): Promise<RespuestaAI> {
+export async function llamarDeepSeek(mensajes: MensajeChat[]): Promise<ResultadoDeepSeek> {
   const apiKey = process.env.DEEPSEEK_API_KEY
   if (!apiKey) throw new Error('DEEPSEEK_API_KEY no configurado')
 
@@ -80,7 +86,7 @@ export async function llamarDeepSeek(mensajes: MensajeChat[]): Promise<Respuesta
           model: MODEL,
           messages: mensajes,
           response_format: { type: 'json_object' },
-          temperature: 0.3,      // baja temperatura para respuestas más consistentes
+          temperature: 0.3,
           max_tokens: 1500,
         }),
         signal: controller.signal,
@@ -105,7 +111,6 @@ export async function llamarDeepSeek(mensajes: MensajeChat[]): Promise<Respuesta
 
       if (!contenido) throw new Error('DeepSeek retornó respuesta vacía')
 
-      // Parsear el JSON retornado por el modelo
       let parsed: RespuestaAI
       try {
         parsed = JSON.parse(contenido) as RespuestaAI
@@ -113,12 +118,15 @@ export async function llamarDeepSeek(mensajes: MensajeChat[]): Promise<Respuesta
         throw new Error(`DeepSeek contenido no es JSON: ${String(contenido).slice(0, 300)}`)
       }
 
-      // Validación básica de la estructura
       if (!parsed.intent || !parsed.respuesta) {
         throw new Error('Respuesta de AI con formato inválido')
       }
 
-      return parsed
+      return {
+        respuesta:     parsed,
+        tokensEntrada: data.usage?.prompt_tokens     ?? 0,
+        tokensSalida:  data.usage?.completion_tokens ?? 0,
+      }
     } catch (error) {
       ultimoError = error instanceof Error ? error : new Error(String(error))
       console.error(`[DeepSeek] Intento ${intento + 1} fallido:`, ultimoError.message)
@@ -129,6 +137,5 @@ export async function llamarDeepSeek(mensajes: MensajeChat[]): Promise<Respuesta
     }
   }
 
-  // Si todos los reintentos fallaron, lanzar el error
   throw ultimoError ?? new Error('DeepSeek no disponible')
 }
