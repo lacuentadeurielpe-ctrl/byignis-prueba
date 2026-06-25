@@ -393,15 +393,19 @@ export async function handleIncomingMessage({
 
       console.log(`[Orchestrator] motor=${resultado.motor} tools=${resultado.toolsUsadas.join(',') || 'ninguna'} iter=${resultado.iteraciones} tarea=${tipoTareaOrq}`)
 
-      registrarMovimiento({
-        ferreteriaId:   ferreteria.id,
-        tipoTarea:      tipoTareaOrq,
-        conversacionId: conversacion.id,
-        origen:         'bot',
-        tokensEntrada:  resultado.tokensEntrada,
-        tokensSalida:   resultado.tokensSalida,
-        costoUsd:       estimarCostoUsd(resultado.modeloUsado, resultado.tokensEntrada, resultado.tokensSalida),
-      }).catch(() => {})
+      estimarCostoUsd(resultado.modeloUsado, resultado.tokensEntrada, resultado.tokensSalida)
+        .then((costoUsd) =>
+          registrarMovimiento({
+            ferreteriaId:   ferreteria.id,
+            tipoTarea:      tipoTareaOrq,
+            conversacionId: conversacion.id,
+            origen:         'bot',
+            tokensEntrada:  resultado.tokensEntrada,
+            tokensSalida:   resultado.tokensSalida,
+            costoUsd,
+          })
+        )
+        .catch(() => {})
 
       await guardarMensaje(supabase, conversacion.id, 'bot', resultado.respuesta)
       return { respuesta: resultado.respuesta, conversacionId: conversacion.id }
@@ -496,25 +500,33 @@ export async function handleIncomingMessage({
   const creditosOk = await verificarYDescontarCreditos(ferreteria.id, tareaIA)
   if (!creditosOk.ok) {
     console.warn(`[Bot] Créditos insuficientes para ${tareaIA} (necesitaba más de 1)`)
-    registrarMovimiento({
-      ferreteriaId:   ferreteria.id,
-      tipoTarea:      'respuesta_simple',
-      conversacionId: conversacion.id,
-      origen:         'bot',
-      tokensEntrada:  tkIntentIn,
-      tokensSalida:   tkIntentOut,
-      costoUsd:       estimarCostoUsd('deepseek-chat', tkIntentIn, tkIntentOut),
-    }).catch(() => {})
+    estimarCostoUsd('deepseek-chat', tkIntentIn, tkIntentOut)
+      .then((costoUsd) =>
+        registrarMovimiento({
+          ferreteriaId:   ferreteria.id,
+          tipoTarea:      'respuesta_simple',
+          conversacionId: conversacion.id,
+          origen:         'bot',
+          tokensEntrada:  tkIntentIn,
+          tokensSalida:   tkIntentOut,
+          costoUsd,
+        })
+      )
+      .catch(() => {})
   } else {
-    registrarMovimiento({
-      ferreteriaId:   ferreteria.id,
-      tipoTarea:      tareaIA,
-      conversacionId: conversacion.id,
-      origen:         'bot',
-      tokensEntrada:  tkIntentIn,
-      tokensSalida:   tkIntentOut,
-      costoUsd:       estimarCostoUsd('deepseek-chat', tkIntentIn, tkIntentOut),
-    }).catch(() => {})
+    estimarCostoUsd('deepseek-chat', tkIntentIn, tkIntentOut)
+      .then((costoUsd) =>
+        registrarMovimiento({
+          ferreteriaId:   ferreteria.id,
+          tipoTarea:      tareaIA,
+          conversacionId: conversacion.id,
+          origen:         'bot',
+          tokensEntrada:  tkIntentIn,
+          tokensSalida:   tkIntentOut,
+          costoUsd,
+        })
+      )
+      .catch(() => {})
   }
 
   // ── 10. Si la tarea es situacion_compleja y Claude está disponible ─────────

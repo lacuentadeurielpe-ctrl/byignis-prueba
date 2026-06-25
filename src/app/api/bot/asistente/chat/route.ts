@@ -176,14 +176,18 @@ export async function POST(req: NextRequest) {
 
         // Registrar consumo real del Asistente IA (fire-and-forget)
         if (totalInputTokens > 0 || totalOutputTokens > 0) {
-          registrarMovimiento({
-            ferreteriaId:  session.ferreteriaId,
-            tipoTarea:     'asistente',
-            origen:        'bot',
-            tokensEntrada: totalInputTokens,
-            tokensSalida:  totalOutputTokens,
-            costoUsd:      estimarCostoUsd('claude-sonnet-4-6', totalInputTokens, totalOutputTokens),
-          }).catch(() => {})
+          estimarCostoUsd('claude-sonnet-4-6', totalInputTokens, totalOutputTokens)
+            .then((costoUsd) =>
+              registrarMovimiento({
+                ferreteriaId:  session.ferreteriaId,
+                tipoTarea:     'asistente',
+                origen:        'bot',
+                tokensEntrada: totalInputTokens,
+                tokensSalida:  totalOutputTokens,
+                costoUsd,
+              })
+            )
+            .catch(() => {})
         }
 
       } catch (err) {

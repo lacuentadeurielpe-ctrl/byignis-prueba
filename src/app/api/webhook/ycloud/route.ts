@@ -296,14 +296,18 @@ export async function POST(request: Request) {
           console.log(`[Webhook] Vision: ${media.buffer.length}b mime=${mimeParaVision}`)
           const { analisis, tokensEntrada: vTkIn, tokensSalida: vTkOut } = await analizarImagen(media.buffer, mimeParaVision)
           if (vTkIn > 0 || vTkOut > 0) {
-            registrarMovimiento({
-              ferreteriaId:  ycloudConfig.ferreteria_id,
-              tipoTarea:     'imagen_vision',
-              origen:        'bot',
-              tokensEntrada: vTkIn,
-              tokensSalida:  vTkOut,
-              costoUsd:      estimarCostoUsd('gemini-2.5-flash', vTkIn, vTkOut),
-            }).catch(() => {})
+            estimarCostoUsd('gemini-2.5-flash', vTkIn, vTkOut)
+              .then((costoUsd) =>
+                registrarMovimiento({
+                  ferreteriaId:  ycloudConfig.ferreteria_id,
+                  tipoTarea:     'imagen_vision',
+                  origen:        'bot',
+                  tokensEntrada: vTkIn,
+                  tokensSalida:  vTkOut,
+                  costoUsd,
+                })
+              )
+              .catch(() => {})
           }
           if (analisis) {
             console.log(`[Webhook] Imagen tipo: ${analisis.tipo}`)
@@ -436,14 +440,18 @@ export async function POST(request: Request) {
         if (media) {
           const { analisis, tokensEntrada: dTkIn, tokensSalida: dTkOut } = await analizarImagen(media.buffer, media.mimeType)
           if (dTkIn > 0 || dTkOut > 0) {
-            registrarMovimiento({
-              ferreteriaId:  ycloudConfig.ferreteria_id,
-              tipoTarea:     'imagen_vision',
-              origen:        'bot',
-              tokensEntrada: dTkIn,
-              tokensSalida:  dTkOut,
-              costoUsd:      estimarCostoUsd('gemini-2.5-flash', dTkIn, dTkOut),
-            }).catch(() => {})
+            estimarCostoUsd('gemini-2.5-flash', dTkIn, dTkOut)
+              .then((costoUsd) =>
+                registrarMovimiento({
+                  ferreteriaId:  ycloudConfig.ferreteria_id,
+                  tipoTarea:     'imagen_vision',
+                  origen:        'bot',
+                  tokensEntrada: dTkIn,
+                  tokensSalida:  dTkOut,
+                  costoUsd,
+                })
+              )
+              .catch(() => {})
           }
           if (analisis) {
             textoMensaje = analisis.tipo === 'lista_productos' && analisis.productosDetectados?.length

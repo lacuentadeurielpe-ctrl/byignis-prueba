@@ -36,29 +36,75 @@ export interface RegistroMovimientoParams {
   costoUsd?: number
 }
 
-// ── Costo en USD por 1000 tokens (per-1K) ────────────────────────────────────
-// Solo para el panel de superadmin. Actualizar cuando los providers cambien precios.
-const COSTO_USD_POR_1K_TOKENS: Record<string, { entrada: number; salida: number }> = {
+// ── Precios hardcodeados como fallback si la BD no está disponible ────────────
+const TARIFAS_FALLBACK: Record<string, { entrada: number; salida: number }> = {
   'deepseek-chat':               { entrada: 0.000140, salida: 0.000280 },
   'gpt-4o-mini':                 { entrada: 0.000150, salida: 0.000600 },
   'claude-3-5-sonnet-20241022':  { entrada: 0.003000, salida: 0.015000 },
   'claude-sonnet-4-6':           { entrada: 0.003000, salida: 0.015000 },
   'gpt-4o':                      { entrada: 0.005000, salida: 0.015000 },
   'gemini-2.5-flash':            { entrada: 0.000150, salida: 0.000600 },
-  // Whisper: precio por minuto; se pasa audioSegundos/60 como "tokens de entrada"
   'whisper-1':                   { entrada: 0.006000, salida: 0       },
 }
 
-export function estimarCostoUsd(
+// ── Cache de tarifas cargadas desde la BD (TTL 5 min) ────────────────────────
+let _tarifasCache: Map<string, { entrada: number; salida: number }> | null = null
+let _cacheTTL = 0
+
+async function _getTarifas(): Promise<Map<string, { entrada: number; salida: number }>> {
+  const now = Date.now()
+  if (_tarifasCache && now < _cacheTTL) return _tarifasCache
+
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('tarifas_ia')
+      .select('modelo, precio_entrada_por_1k, precio_salida_por_1k')
+      .eq('activo', true)
+
+    if (data && data.length > 0) {
+      _tarifasCache = new Map(
+        data.map((r) => [
+          r.modelo,
+          {
+            entrada: Number(r.precio_entrada_por_1k),
+            salida:  Number(r.precio_salida_por_1k),
+          },
+        ])
+      )
+      _cacheTTL = now + 5 * 60 * 1000 // 5 minutos
+      return _tarifasCache
+    }
+  } catch {
+    // BD no disponible — usar fallback y reintentar en 60s
+    _cacheTTL = now + 60 * 1000
+  }
+
+  _tarifasCache = new Map(Object.entries(TARIFAS_FALLBACK))
+  return _tarifasCache
+}
+
+/** Invalida el cache inmediatamente (llamar después de editar tarifas_ia). */
+export function invalidarCacheTarifas(): void {
+  _tarifasCache = null
+  _cacheTTL     = 0
+}
+
+/**
+ * Estima el costo en USD de una llamada IA.
+ * Lee tarifas desde la BD (cache 5 min) con fallback hardcodeado.
+ */
+export async function estimarCostoUsd(
   modelo: string,
   tokensEntrada: number,
   tokensSalida: number
-): number {
-  const tarifa = COSTO_USD_POR_1K_TOKENS[modelo]
+): Promise<number> {
+  const tarifas = await _getTarifas()
+  const tarifa  = tarifas.get(modelo)
   if (!tarifa) return 0
   return (
     (tokensEntrada / 1000) * tarifa.entrada +
-    (tokensSalida / 1000) * tarifa.salida
+    (tokensSalida  / 1000) * tarifa.salida
   )
 }
 
