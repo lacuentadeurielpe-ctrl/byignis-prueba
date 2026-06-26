@@ -7,8 +7,7 @@
 //   emergencia     — solo notifica al dueño por WhatsApp
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { recalcularETAsCola } from '@/lib/delivery/assignment'
 import { completarPrediccion } from '@/lib/delivery/intelligence'
 import {
@@ -67,12 +66,13 @@ export async function PATCH(
   if (accion === 'emergencia') {
     if (ferr?.telefono_whatsapp && ferr?.telefono_dueno) {
       const msg = `🚨 *EMERGENCIA — ${ferr.nombre}*\n\nRepartidor: *${repartidor.nombre}*\nPedido: *${pedidoActual.numero_pedido}*\n\n${mensaje_emergencia ?? 'Sin detalles adicionales.'}`
-      getYCloudApiKey(repartidor.ferreteria_id).then((apiKey) => {
-        if (apiKey) {
-          enviarMensaje({ from: ferr.telefono_whatsapp.replace(/^\+/, ''), to: ferr.telefono_dueno, texto: msg, apiKey })
-            .catch((e) => console.error('[Delivery] Error enviando emergencia:', e))
-        }
-      }).catch(() => {})
+      resolverSender(supabase, repartidor.ferreteria_id, (ferr.telefono_whatsapp as string).replace(/^\+/, ''))
+        .then((sender) => {
+          if (sender) {
+            sender.enviarMensaje({ to: ferr.telefono_dueno as string, texto: msg })
+              .catch((e) => console.error('[Delivery] Error enviando emergencia:', e))
+          }
+        }).catch(() => {})
     }
     return NextResponse.json({ ok: true, mensaje: 'Emergencia reportada al dueño' })
   }
@@ -294,85 +294,83 @@ export async function PATCH(
     }
   }
 
-  // ── Notificaciones multi-canal + WhatsApp legacy (fire-and-forget) ──────────
+  // ── Notificaciones multi-canal (fire-and-forget) ─────────────────────────
   if (ferr?.telefono_whatsapp) {
-    getYCloudApiKey(repartidor.ferreteria_id).then((apiKey) => {
-      if (!apiKey) return
-      const from = ferr.telefono_whatsapp.replace(/^\+/, '')
-      const telefono = (pedidoActual.clientes as any)?.telefono ?? pedidoActual.telefono_cliente
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+    resolverSender(supabase, repartidor.ferreteria_id, (ferr.telefono_whatsapp as string).replace(/^\+/, ''))
+      .then((sender) => {
+        if (!sender) return
+        const from = (ferr.telefono_whatsapp as string).replace(/^\+/, '')
+        const telefono = (pedidoActual.clientes as any)?.telefono ?? pedidoActual.telefono_cliente
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
 
-      // Build notification context for multi-channel dispatch
-      const notifCtx: DeliveryNotificationContext = {
-        ferreteriaId: repartidor.ferreteria_id,
-        entregaId: entregaIdParaTracking ?? '',
-        pedidoId,
-        numeroPedido: pedidoActual.numero_pedido as string,
-        nombreFerreteria: ferr.nombre ?? '',
-        telefonoWhatsapp: from,
-        telefonoCliente: telefono ?? '',
-        apiKey,
-        trackingUrl: entregaIdParaTracking ? `${appUrl}/tracking/${entregaIdParaTracking}` : undefined,
-        repartidorNombre: repartidor.nombre as string,
-      }
-
-      // ── "En camino" — multi-channel notification + Inngest delay detector ──
-      if (accion === 'cambiar_estado' && nuevo_estado === 'enviado' && telefono) {
-        const etaMin = (pedidoActual as any).eta_minutos as number | null
-        const etaTs = (pedidoActual as any).eta_timestamp as string | null
-        notificarEnRuta(notifCtx, etaMin, supabase, etaTs ? new Date(etaTs) : null)
-          .catch(e => console.error('[Delivery] Error notif en_ruta:', e))
-
-        // Disparar Inngest para detectar retraso si ETA existe
-        if (etaMin && etaMin > 0) {
-          inngest.send({
-            name: 'delivery/pedido.enviado',
-            data: {
-              ferreteriaId: repartidor.ferreteria_id,
-              pedidoId,
-              entregaId: entregaIdParaTracking ?? '',
-              numeroPedido: (pedidoActual as any).numero_pedido as string,
-              etaMinutos: etaMin,
-              telefonoCliente: telefono,
-              telefonoWhatsapp: from,
-              nombreFerreteria: ferr?.nombre ?? '',
-              repartidorNombre: repartidor.nombre as string,
-            },
-          }).catch(e => console.error('[Delivery] Error enviando evento pedido.enviado:', e))
+        const notifCtx: DeliveryNotificationContext = {
+          ferreteriaId: repartidor.ferreteria_id,
+          entregaId: entregaIdParaTracking ?? '',
+          pedidoId,
+          numeroPedido: pedidoActual.numero_pedido as string,
+          nombreFerreteria: ferr.nombre ?? '',
+          telefonoWhatsapp: from,
+          telefonoCliente: telefono ?? '',
+          sender,
+          trackingUrl: entregaIdParaTracking ? `${appUrl}/tracking/${entregaIdParaTracking}` : undefined,
+          repartidorNombre: repartidor.nombre as string,
         }
-      }
 
-      // ── "Entregado" — multi-channel notification ──────────────────────────
-      if (accion === 'entregado' && telefono) {
-        notificarEntregado(notifCtx, supabase)
-          .catch(e => console.error('[Delivery] Error notif entregado:', e))
-      }
+        // ── "En camino" — multi-channel notification + Inngest delay detector ──
+        if (accion === 'cambiar_estado' && nuevo_estado === 'enviado' && telefono) {
+          const etaMin = (pedidoActual as any).eta_minutos as number | null
+          const etaTs = (pedidoActual as any).eta_timestamp as string | null
+          notificarEnRuta(notifCtx, etaMin, supabase, etaTs ? new Date(etaTs) : null)
+            .catch(e => console.error('[Delivery] Error notif en_ruta:', e))
 
-      // ── "Retorno/Fallida" — multi-channel notification to client ──────────
-      if (accion === 'retorno' && telefono) {
-        const motivo = incidencia_desc ?? 'Pedido retornado a tienda'
-        notificarFallida(notifCtx, motivo, supabase)
-          .catch(e => console.error('[Delivery] Error notif fallida:', e))
-      }
-
-      // ── Incidencia/retorno — notify OWNER via WhatsApp (direct) ───────────
-      if ((accion === 'incidencia' || accion === 'retorno') && ferr?.telefono_dueno) {
-        const labelInc: Record<string, string> = {
-          cliente_ausente:   'Cliente no estaba',
-          pedido_incorrecto: 'Pedido incorrecto',
-          pago_rechazado:    'No pudo pagar',
-          otro:              'Otro problema',
+          if (etaMin && etaMin > 0) {
+            inngest.send({
+              name: 'delivery/pedido.enviado',
+              data: {
+                ferreteriaId: repartidor.ferreteria_id,
+                pedidoId,
+                entregaId: entregaIdParaTracking ?? '',
+                numeroPedido: (pedidoActual as any).numero_pedido as string,
+                etaMinutos: etaMin,
+                telefonoCliente: telefono,
+                telefonoWhatsapp: from,
+                nombreFerreteria: ferr?.nombre ?? '',
+                repartidorNombre: repartidor.nombre as string,
+              },
+            }).catch(e => console.error('[Delivery] Error enviando evento pedido.enviado:', e))
+          }
         }
-        const tipoLabel = labelInc[incidencia_tipo ?? 'otro'] ?? incidencia_tipo ?? 'Problema'
-        const emoji  = accion === 'retorno' ? '🔄' : '⚠️'
-        const titulo = accion === 'retorno' ? 'RETORNO' : 'INCIDENCIA'
-        enviarMensaje({
-          from, to: ferr.telefono_dueno,
-          texto: `${emoji} *${titulo} — ${ferr.nombre}*\n\nRepartidor: *${repartidor.nombre}*\nPedido: *${pedidoActual.numero_pedido}*\nProblema: ${tipoLabel}${incidencia_desc ? `\nDetalle: ${incidencia_desc}` : ''}`,
-          apiKey,
-        }).catch((e) => console.error('[Delivery] Error notificando incidencia al dueño:', e))
-      }
-    }).catch(() => {})
+
+        // ── "Entregado" ───────────────────────────────────────────────────────
+        if (accion === 'entregado' && telefono) {
+          notificarEntregado(notifCtx, supabase)
+            .catch(e => console.error('[Delivery] Error notif entregado:', e))
+        }
+
+        // ── "Retorno/Fallida" ─────────────────────────────────────────────────
+        if (accion === 'retorno' && telefono) {
+          const motivo = incidencia_desc ?? 'Pedido retornado a tienda'
+          notificarFallida(notifCtx, motivo, supabase)
+            .catch(e => console.error('[Delivery] Error notif fallida:', e))
+        }
+
+        // ── Incidencia/retorno — notificar al dueño directamente ─────────────
+        if ((accion === 'incidencia' || accion === 'retorno') && ferr?.telefono_dueno) {
+          const labelInc: Record<string, string> = {
+            cliente_ausente:   'Cliente no estaba',
+            pedido_incorrecto: 'Pedido incorrecto',
+            pago_rechazado:    'No pudo pagar',
+            otro:              'Otro problema',
+          }
+          const tipoLabel = labelInc[incidencia_tipo ?? 'otro'] ?? incidencia_tipo ?? 'Problema'
+          const emoji  = accion === 'retorno' ? '🔄' : '⚠️'
+          const titulo = accion === 'retorno' ? 'RETORNO' : 'INCIDENCIA'
+          sender.enviarMensaje({
+            to:    ferr.telefono_dueno as string,
+            texto: `${emoji} *${titulo} — ${ferr.nombre}*\n\nRepartidor: *${repartidor.nombre}*\nPedido: *${pedidoActual.numero_pedido}*\nProblema: ${tipoLabel}${incidencia_desc ? `\nDetalle: ${incidencia_desc}` : ''}`,
+          }).catch((e) => console.error('[Delivery] Error notificando incidencia al dueño:', e))
+        }
+      }).catch(() => {})
   }
 
   return NextResponse.json(data)

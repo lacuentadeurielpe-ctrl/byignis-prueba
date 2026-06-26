@@ -15,7 +15,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { inngest } from '@/lib/inngest/client'
 import { notificarAsignacion } from '@/lib/notifications/delivery.notifications'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 
 export async function POST(
   request: Request,
@@ -116,24 +116,25 @@ export async function POST(
       .eq('id', session.ferreteriaId)
       .single()
 
-    const apiKey = await getYCloudApiKey(session.ferreteriaId).catch(() => null)
-
-    if (apiKey && ferreteria?.telefono_whatsapp && pedido.telefono_cliente) {
-      await notificarAsignacion(
-        {
-          ferreteriaId: session.ferreteriaId,
-          entregaId,
-          pedidoId,
-          numeroPedido: pedido.numero_pedido as string,
-          nombreFerreteria: (ferreteria.nombre as string) ?? '',
-          telefonoWhatsapp: (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
-          telefonoCliente: pedido.telefono_cliente as string,
-          apiKey,
-          repartidorNombre: repartidor.nombre as string,
-        },
-        pedido.eta_minutos as number | null,
-        supabaseAdmin,
-      )
+    if (ferreteria?.telefono_whatsapp && pedido.telefono_cliente) {
+      const sender = await resolverSender(supabaseAdmin, session.ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+      if (sender) {
+        await notificarAsignacion(
+          {
+            ferreteriaId: session.ferreteriaId,
+            entregaId,
+            pedidoId,
+            numeroPedido: pedido.numero_pedido as string,
+            nombreFerreteria: (ferreteria.nombre as string) ?? '',
+            telefonoWhatsapp: (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+            telefonoCliente: pedido.telefono_cliente as string,
+            sender,
+            repartidorNombre: repartidor.nombre as string,
+          },
+          pedido.eta_minutos as number | null,
+          supabaseAdmin,
+        )
+      }
     }
   } catch (e) {
     console.error('[Cola/Asignar] Error notificando cliente:', e)
@@ -142,26 +143,15 @@ export async function POST(
   // ── Disparar Inngest check-delay si tiene ETA ────────────────────────────
   if (pedido.eta_minutos) {
     try {
-      const { data: ferreteria } = await supabase
-        .from('ferreterias')
-        .select('nombre, telefono_whatsapp')
-        .eq('id', session.ferreteriaId)
-        .single()
-
-      const apiKey = await getYCloudApiKey(session.ferreteriaId).catch(() => null)
-      if (apiKey && ferreteria) {
-        // El check-delay se activará cuando el repartidor marque "enviado",
-        // pero lo preparamos con los datos que ya tenemos
-        await inngest.send({
-          name: 'delivery/eta.updated',
-          data: {
-            ferreteriaId: session.ferreteriaId,
-            pedidoId,
-            etaMinutos: pedido.eta_minutos as number,
-            source: 'asignacion_manual',
-          },
-        })
-      }
+      await inngest.send({
+        name: 'delivery/eta.updated',
+        data: {
+          ferreteriaId: session.ferreteriaId,
+          pedidoId,
+          etaMinutos: pedido.eta_minutos as number,
+          source: 'asignacion_manual',
+        },
+      })
     } catch (e) {
       console.error('[Cola/Asignar] Error enviando evento Inngest:', e)
     }

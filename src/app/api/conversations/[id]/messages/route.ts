@@ -1,9 +1,8 @@
 // El dueño envía un mensaje desde el panel — pausa el bot automáticamente
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
 import { getSessionInfo } from '@/lib/auth/roles'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionInfo()
@@ -44,21 +43,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Enviar por WhatsApp vía YCloud
+  // Enviar por WhatsApp
   const telefonoCliente = (conversacion.clientes as any)?.telefono
   if (telefonoCliente) {
     try {
-      const apiKey = await getYCloudApiKey(ferreteria.id)
-      if (apiKey) {
-        await enviarMensaje({
-          from: ferreteria.telefono_whatsapp.replace(/^\+/, ''),
-          to: telefonoCliente,
-          texto: texto.trim(),
-          apiKey,
-        })
+      const sender = await resolverSender(supabase, ferreteria.id, (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''))
+      if (sender) {
+        await sender.enviarMensaje({ to: telefonoCliente, texto: texto.trim() })
       }
     } catch (e) {
-      console.error('[API] Error enviando mensaje del dueño por YCloud:', e)
+      console.error('[API] Error enviando mensaje del dueño por WhatsApp:', e)
       // No fallar — el mensaje ya quedó guardado en la BD
     }
   }

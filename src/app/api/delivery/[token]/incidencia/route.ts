@@ -18,8 +18,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { inngest } from '@/lib/inngest/client'
 
 function adminClient() {
@@ -101,9 +100,9 @@ export async function POST(
 
   // 4. Notificar al dueño por WhatsApp (fire-and-forget)
   if (ferr?.telefono_whatsapp && ferr?.telefono_dueno) {
-    getYCloudApiKey(repartidor.ferreteria_id as string)
-      .then((apiKey) => {
-        if (!apiKey) return
+    resolverSender(supabase, repartidor.ferreteria_id as string, (ferr.telefono_whatsapp as string).replace(/^\+/, ''))
+      .then((sender) => {
+        if (!sender) return
         const emoji   = body.grave ? '🚨' : '⚠️'
         const titulo  = body.grave ? 'AVERÍA GRAVE' : 'AVERÍA LEVE'
         const tipoMap: Record<string, string> = {
@@ -114,11 +113,9 @@ export async function POST(
           otro:       'Otro problema',
         }
         const tipoLabel = tipoMap[body.tipo] ?? body.tipo
-        enviarMensaje({
-          from:  ferr.telefono_whatsapp.replace(/^\+/, ''),
-          to:    ferr.telefono_dueno,
+        sender.enviarMensaje({
+          to:    ferr.telefono_dueno as string,
           texto: `${emoji} *${titulo} — ${ferr.nombre}*\n\nRepartidor: *${repartidor.nombre}*\nProblema: ${tipoLabel}\nDetalle: ${body.descripcion}\n\n${body.grave ? '⚡ Reasignación automática iniciada.' : 'Repartidor avisado de continuar o esperar asistencia.'}`,
-          apiKey,
         }).catch((e) => console.error('[Delivery] Error notif avería dueño:', e))
       })
       .catch(() => {})
