@@ -11,8 +11,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '../client'
-import { getYCloudApiKey } from '@/lib/tenant'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
+import { resolverSender } from '@/lib/whatsapp/provider'
 
 const MINUTOS_ESPERA_ALERTA = 15 // alertar si espera más de 15 min sin asignar
 
@@ -94,16 +93,16 @@ export const fnUnassignedAlert = inngest.createFunction(
 
         const extra = sinAsignar.length > 5 ? `\n  ...y ${sinAsignar.length - 5} más` : ''
 
-        const apiKey = await getYCloudApiKey(ferreteria.id).catch(() => null)
-        if (!apiKey || !ferreteria.telefono_whatsapp || !ferreteria.telefono_dueno) {
+        if (!ferreteria.telefono_whatsapp || !ferreteria.telefono_dueno) {
           return { alertado: false, count: sinAsignar.length, motivo: 'sin_config' }
         }
 
-        await enviarMensaje({
-          from: (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+        const sender = await resolverSender(supabase, ferreteria.id, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+        if (!sender) return { alertado: false, count: sinAsignar.length, motivo: 'sin_config' }
+
+        await sender.enviarMensaje({
           to: ferreteria.telefono_dueno as string,
           texto: `🚨 *Cola sin asignar — ${ferreteria.nombre}*\n\n*${sinAsignar.length} pedido(s)* llevan más de ${MINUTOS_ESPERA_ALERTA} min sin repartidor:\n\n${lineas}${extra}\n\n👉 Asigna desde el *dashboard de Delivery* para no demorar más al cliente.`,
-          apiKey,
         })
 
         // Registrar el evento para el anti-spam

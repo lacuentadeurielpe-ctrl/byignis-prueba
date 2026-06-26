@@ -12,8 +12,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '../client'
 import { notificarDelay } from '@/lib/notifications/delivery.notifications'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 
 const MARGEN_MIN = 10 // minutos de gracia antes de considerar retraso
 
@@ -110,8 +109,8 @@ export const fnCheckDelay = inngest.createFunction(
     if (telefonoCliente && telefonoWhatsapp) {
       await step.run('notificar-cliente', async () => {
         const supabase = adminClient()
-        const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-        if (!apiKey) return { skipped: true }
+        const sender = await resolverSender(supabase, ferreteriaId, telefonoWhatsapp.replace(/^\+/, '')).catch(() => null)
+        if (!sender) return { skipped: true }
 
         await notificarDelay(
           {
@@ -122,7 +121,7 @@ export const fnCheckDelay = inngest.createFunction(
             nombreFerreteria,
             telefonoWhatsapp: telefonoWhatsapp.replace(/^\+/, ''),
             telefonoCliente,
-            apiKey,
+            sender,
             repartidorNombre,
           },
           nuevoEta,
@@ -142,16 +141,16 @@ export const fnCheckDelay = inngest.createFunction(
         .eq('id', ferreteriaId)
         .single()
 
-      const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-      if (!apiKey || !ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) {
+      if (!ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) {
         return { skipped: true }
       }
 
-      await enviarMensaje({
-        from: (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+      const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+      if (!sender) return { skipped: true }
+
+      await sender.enviarMensaje({
         to: ferreteria.telefono_dueno as string,
         texto: `⚠️ *Retraso detectado — ${nombreFerreteria}*\n\nPedido: *${numeroPedido}*\nRepartidor: ${repartidorNombre}\n\nEl ETA original fue de ${etaMinutos} min pero aún no hay confirmación de entrega.\nNuevo estimado: ~${nuevoEta} min adicionales.\n\n📊 _Detectado automáticamente por el módulo de inteligencia_`,
-        apiKey,
       })
       return { enviado: true }
     })

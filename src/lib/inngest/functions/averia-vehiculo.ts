@@ -13,8 +13,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '../client'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { manejarAveriaVehiculo } from '@/lib/delivery/reassignment-engine'
 import { recalcularETAsCascada } from '@/lib/delivery/cascade-eta'
 
@@ -61,8 +60,6 @@ export const fnAveriaVehiculo = inngest.createFunction(
     // ── Paso 2: Notificar al dueño ─────────────────────────────────────────────
     await step.run('notificar-dueno', async () => {
       const supabase = adminClient()
-      const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-      if (!apiKey) return
 
       const { data: ferreteria } = await supabase
         .from('ferreterias')
@@ -70,6 +67,9 @@ export const fnAveriaVehiculo = inngest.createFunction(
         .eq('id', ferreteriaId).single()
 
       if (!ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) return
+
+      const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+      if (!sender) return
 
       const { data: vehiculo } = await supabase
         .from('vehiculos_delivery')
@@ -87,11 +87,9 @@ export const fnAveriaVehiculo = inngest.createFunction(
         ? `Tiempo estimado de reparación: ~${tiempoEstimadoMin} min`
         : 'Tiempo de reparación: indeterminado'
 
-      await enviarMensaje({
-        from:  (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+      await sender.enviarMensaje({
         to:    ferreteria.telefono_dueno as string,
         texto: `${tipoAveria} — ${ferreteria.nombre ?? 'Tu ferretería'}\n\n🚗 Vehículo: ${vehiculo?.nombre ?? vehiculoId} (${vehiculo?.tipo ?? ''})\n${vehiculo?.placa ? `📋 Placa: ${vehiculo.placa}` : ''}\n👤 Repartidor: ${repartidor?.nombre ?? repartidorId}\n\n📝 Descripción: ${descripcion}\n⏱ ${eta}\n\n📦 Entregas afectadas: *${entregasAfectadas}*\n${entregasAfectadas > 0 ? resultado?.requiereAprobacion ? '⚠️ Reasignación pendiente de tu aprobación.' : '✅ Entregas reasignadas automáticamente.' : '✅ No había entregas en ruta.'}`,
-        apiKey,
       })
     })
 
@@ -99,8 +97,6 @@ export const fnAveriaVehiculo = inngest.createFunction(
     if ((resultado?.entregasReasignadas?.length ?? 0) > 0) {
       await step.run('notificar-clientes-afectados', async () => {
         const supabase = adminClient()
-        const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-        if (!apiKey) return
 
         const { data: ferreteria } = await supabase
           .from('ferreterias')
@@ -108,6 +104,9 @@ export const fnAveriaVehiculo = inngest.createFunction(
           .eq('id', ferreteriaId).single()
 
         if (!ferreteria?.telefono_whatsapp) return
+
+        const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+        if (!sender) return
 
         // Obtener pedidos afectados con teléfono de cliente
         const entregaIds = (resultado.entregasReasignadas ?? []).map((e: Record<string, string>) => e.entregaId)
@@ -126,11 +125,9 @@ export const fnAveriaVehiculo = inngest.createFunction(
             ? `~${(p.eta_minutos as number ?? 30) + tiempoEstimadoMin} min`
             : 'un momento adicional'
 
-          await enviarMensaje({
-            from:  (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+          await sender.enviarMensaje({
             to:    (p.cliente_telefono as string).replace(/^\+/, ''),
             texto: `⚠️ *Pequeño retraso en tu entrega*\n\nHola, somos ${ferreteria.nombre ?? 'tu ferretería'}. Tu pedido *${p.numero_pedido ?? ''}* tiene un retraso inesperado.\n\n⏱ Nueva hora estimada: ${nuevaEta}\nEstamos trabajando para resolver esto lo antes posible. ¡Gracias por tu comprensión!`,
-            apiKey,
           }).catch(() => null) // No bloquear si falla un envío individual
         }
       })
@@ -178,21 +175,19 @@ export const fnAveriaVehiculo = inngest.createFunction(
           // Vehículo reparado — recalcular ETAs con flota completa
           await recalcularETAsCascada(ferreteriaId, supabase)
 
-          const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-          if (!apiKey) return
-
           const { data: ferreteria } = await supabase
             .from('ferreterias')
             .select('telefono_dueno, telefono_whatsapp')
             .eq('id', ferreteriaId).single()
 
-          if (ferreteria?.telefono_dueno) {
-            await enviarMensaje({
-              from:  (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
-              to:    ferreteria.telefono_dueno as string,
-              texto: `✅ El vehículo ya está disponible. ETAs recalculados automáticamente.`,
-              apiKey,
-            }).catch(() => null)
+          if (ferreteria?.telefono_dueno && ferreteria?.telefono_whatsapp) {
+            const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+            if (sender) {
+              await sender.enviarMensaje({
+                to:    ferreteria.telefono_dueno as string,
+                texto: `✅ El vehículo ya está disponible. ETAs recalculados automáticamente.`,
+              }).catch(() => null)
+            }
           }
         }
       })

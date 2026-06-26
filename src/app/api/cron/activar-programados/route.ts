@@ -7,8 +7,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { crearEntrega } from '@/lib/delivery/assignment'
 // (tiempo utils unused after cron window refactor)
 
@@ -78,19 +77,15 @@ export async function GET(request: Request) {
 
       // 3. Notificación WhatsApp al cliente (fire-and-forget)
       if (ferr?.telefono_whatsapp && pedido.telefono_cliente) {
-        const apiKey = await getYCloudApiKey(pedido.ferreteria_id).catch(() => null)
-        if (apiKey) {
+        const sender = await resolverSender(supabase, pedido.ferreteria_id, (ferr.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+        if (sender) {
           const textoCliente =
             pedido.modalidad === 'delivery'
               ? `📦 *${ferr.nombre}*\n\n¡Tu pedido programado *${pedido.numero_pedido}* ya está en preparación! Pronto te avisaremos cuando esté en camino. 🚚`
               : `📦 *${ferr.nombre}*\n\n¡Tu pedido programado *${pedido.numero_pedido}* ya está en preparación! Puedes pasar a recogerlo cuando gustes. 🙌`
 
-          enviarMensaje({
-            from:  ferr.telefono_whatsapp,
-            to:    pedido.telefono_cliente,
-            texto: textoCliente,
-            apiKey,
-          }).catch((e) => console.error('[cron/activar-programados] Error notif cliente:', e))
+          sender.enviarMensaje({ to: pedido.telefono_cliente, texto: textoCliente })
+            .catch((e) => console.error('[cron/activar-programados] Error notif cliente:', e))
         }
       }
 

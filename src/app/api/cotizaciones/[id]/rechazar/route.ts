@@ -1,9 +1,8 @@
 // El dueño rechaza una cotización pendiente — notifica al cliente
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { getSessionInfo } from '@/lib/auth/roles'
-import { getYCloudApiKey } from '@/lib/tenant'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionInfo()
@@ -51,14 +50,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const telefonoCliente = (cotizacion.clientes as any)?.telefono
   if (telefonoCliente) {
     try {
-      const apiKey = await getYCloudApiKey(ferreteria.id)
-      if (apiKey) {
-        await enviarMensaje({
-          from: ferreteria.telefono_whatsapp.replace(/^\+/, ''),
-          to: telefonoCliente,
-          texto: mensaje,
-          apiKey,
-        })
+      const sender = await resolverSender(supabase, ferreteria.id, ferreteria.telefono_whatsapp.replace(/^\+/, ''))
+      if (sender) {
+        await sender.enviarMensaje({ to: telefonoCliente, texto: mensaje })
       }
     } catch (e) {
       console.error('[API] Error enviando rechazo:', e)

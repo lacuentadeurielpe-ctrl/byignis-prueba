@@ -16,8 +16,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '../client'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { manejarRepartidorNoDisponible } from '@/lib/delivery/reassignment-engine'
 import { recalcularETAsCascada } from '@/lib/delivery/cascade-eta'
 
@@ -70,8 +69,6 @@ export const fnRepartidorEmergencia = inngest.createFunction(
     // ── Paso 3: Notificar al dueño ────────────────────────────────────────────
     await step.run('notificar-dueno', async () => {
       const supabase = adminClient()
-      const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-      if (!apiKey) return
 
       const { data: ferreteria } = await supabase
         .from('ferreterias')
@@ -79,6 +76,9 @@ export const fnRepartidorEmergencia = inngest.createFunction(
         .eq('id', ferreteriaId).single()
 
       if (!ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) return
+
+      const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+      if (!sender) return
 
       const { data: repartidor } = await supabase
         .from('repartidores')
@@ -95,11 +95,9 @@ export const fnRepartidorEmergencia = inngest.createFunction(
           ? `✅ ${entregasReasignadas} entregas reasignadas automáticamente.`
           : '📭 No tenía entregas activas.'
 
-      await enviarMensaje({
-        from:  (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+      await sender.enviarMensaje({
         to:    ferreteria.telefono_dueno as string,
         texto: `🚨 *Emergencia de repartidor — ${ferreteria.nombre ?? 'Tu ferretería'}*\n\n👤 Repartidor: ${repartidor?.nombre ?? repartidorId}\n📝 Motivo: ${motivo}\n${retornoTexto}\n\n${reasigTexto}`,
-        apiKey,
       })
     })
 
@@ -140,21 +138,19 @@ export const fnRepartidorEmergencia = inngest.createFunction(
           await recalcularETAsCascada(ferreteriaId, supabase)
         } else {
           // Sigue en emergencia → volver a alertar al dueño
-          const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-          if (!apiKey) return
-
           const { data: ferreteria } = await supabase
             .from('ferreterias')
             .select('telefono_dueno, telefono_whatsapp')
             .eq('id', ferreteriaId).single()
 
-          if (!ferreteria?.telefono_dueno) return
+          if (!ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) return
 
-          await enviarMensaje({
-            from:  (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+          const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+          if (!sender) return
+
+          await sender.enviarMensaje({
             to:    ferreteria.telefono_dueno as string,
             texto: `⚠️ El repartidor aún no está disponible. Verifica su estado manualmente desde el dashboard.`,
-            apiKey,
           }).catch(() => null)
         }
       })

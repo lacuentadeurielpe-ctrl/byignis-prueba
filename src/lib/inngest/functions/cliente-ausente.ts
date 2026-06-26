@@ -14,8 +14,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '../client'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { incrementarIntentos, reprogramarPedido } from '@/lib/delivery/queue-engine'
 import { actualizarFactorZona } from '@/lib/delivery/incident-classifier'
 
@@ -55,17 +54,16 @@ export const fnClienteAusente = inngest.createFunction(
     const mensajeEnviado = await step.run('contactar-cliente', async () => {
       if (!telefonoCliente || !telefonoWhatsapp) return false
 
-      const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-      if (!apiKey) return false
+      const supabase = adminClient()
+      const sender = await resolverSender(supabase, ferreteriaId, telefonoWhatsapp.replace(/^\+/, '')).catch(() => null)
+      if (!sender) return false
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
       const trackingUrl = entregaId ? `${appUrl}/track/${entregaId}` : ''
 
-      await enviarMensaje({
-        from:  telefonoWhatsapp.replace(/^\+/, ''),
+      await sender.enviarMensaje({
         to:    telefonoCliente.replace(/^\+/, ''),
         texto: `🚚 *${nombreFerreteria}* — Tu pedido *${numeroPedido}* llegó a tu dirección.\n\n👤 Repartidor: ${repartidorNombre}\nEsta es nuestra ${intento === 1 ? 'primera' : intento === 2 ? 'segunda' : 'última'} visita.\n\n${trackingUrl ? `📍 Tracking: ${trackingUrl}\n\n` : ''}Por favor responde *AQUÍ* o llama para coordinar la entrega.`,
-        apiKey,
       })
       return true
     })
@@ -124,32 +122,28 @@ export const fnClienteAusente = inngest.createFunction(
         }, supabase)
 
         // Notificar al dueño
-        const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-        if (!apiKey) return
-
         const { data: ferreteria } = await supabase
           .from('ferreterias')
           .select('telefono_dueno, telefono_whatsapp')
           .eq('id', ferreteriaId).single()
 
-        if (!ferreteria?.telefono_dueno) return
+        if (!ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) return
 
-        await enviarMensaje({
-          from:  (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
-          to:    ferreteria.telefono_dueno as string,
-          texto: `⚠️ *Cliente ausente — ${nombreFerreteria}*\n\nPedido: *${numeroPedido}*\nRepartidor: ${repartidorNombre}\n\nSe intentó ${intento} veces y el cliente no estaba disponible.\n\n📅 Pedido reagendado para ${fechaNueva.toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short' })}\n\nPuedes cambiar la fecha desde el dashboard.`,
-          apiKey,
-        }).catch(() => null)
+        const senderDueno = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+        if (senderDueno) {
+          await senderDueno.enviarMensaje({
+            to:    ferreteria.telefono_dueno as string,
+            texto: `⚠️ *Cliente ausente — ${nombreFerreteria}*\n\nPedido: *${numeroPedido}*\nRepartidor: ${repartidorNombre}\n\nSe intentó ${intento} veces y el cliente no estaba disponible.\n\n📅 Pedido reagendado para ${fechaNueva.toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short' })}\n\nPuedes cambiar la fecha desde el dashboard.`,
+          }).catch(() => null)
+        }
 
         // Notificar al cliente del reagendamiento
         if (telefonoCliente && telefonoWhatsapp) {
-          const apiKeyWa = await getYCloudApiKey(ferreteriaId).catch(() => null)
-          if (apiKeyWa) {
-            await enviarMensaje({
-              from:  telefonoWhatsapp.replace(/^\+/, ''),
+          const senderCliente = await resolverSender(supabase, ferreteriaId, telefonoWhatsapp.replace(/^\+/, '')).catch(() => null)
+          if (senderCliente) {
+            await senderCliente.enviarMensaje({
               to:    telefonoCliente.replace(/^\+/, ''),
               texto: `📦 ${nombreFerreteria}: No pudimos entregarte el pedido *${numeroPedido}* hoy. Lo hemos reagendado para ${fechaNueva.toLocaleString('es-PE', { timeZone: 'America/Lima', dateStyle: 'short', timeStyle: 'short' })}. Si necesitas cambiar la hora, contáctanos.`,
-              apiKey: apiKeyWa,
             }).catch(() => null)
           }
         }

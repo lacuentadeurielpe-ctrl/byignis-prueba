@@ -13,8 +13,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { inicioDiaLima } from '@/lib/tiempo'
 import { formatPEN } from '@/lib/utils'
 
@@ -133,14 +132,12 @@ export async function GET(request: Request) {
       ].join('\n')
 
       try {
-        const apiKey = await getYCloudApiKey(ferreteria.id)
-        if (!apiKey) continue
+        const sender = await resolverSender(supabase, ferreteria.id, (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''))
+        if (!sender) continue
 
-        await enviarMensaje({
-          apiKey,
-          from:   ferreteria.telefono_whatsapp,
-          to:     `+${cliente.telefono}`,
-          texto:  mensaje,
+        await sender.enviarMensaje({
+          to:    cliente.telefono,
+          texto: mensaje,
         })
 
         // 5. Actualizar timestamp del último recordatorio

@@ -14,8 +14,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '../client'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { recalcularETAsCascada } from '@/lib/delivery/cascade-eta'
 
 function adminClient() {
@@ -212,9 +211,6 @@ export const fnMonitorDemora = inngest.createFunction(
         const hayCriticas = alertasF.some(a => a.critico)
         if (!hayCriticas) continue  // Solo enviar si hay alertas críticas
 
-        const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-        if (!apiKey) continue
-
         const { data: ferreteria } = await supabase
           .from('ferreterias')
           .select('telefono_dueno, telefono_whatsapp, nombre')
@@ -222,13 +218,14 @@ export const fnMonitorDemora = inngest.createFunction(
 
         if (!ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) continue
 
+        const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+        if (!sender) continue
+
         const lineasAlertas = alertasF.map(a => a.mensaje).join('\n')
 
-        await enviarMensaje({
-          from:  (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+        await sender.enviarMensaje({
           to:    ferreteria.telefono_dueno as string,
           texto: `🔔 *Monitor Delivery — ${ferreteria.nombre ?? ''}*\n${new Date().toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit' })}\n\n${lineasAlertas}\n\n_Revisa el dashboard para tomar acción._`,
-          apiKey,
         }).catch(() => null)
 
         // Registrar alertas en log

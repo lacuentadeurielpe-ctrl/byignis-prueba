@@ -4,10 +4,9 @@
 
 import { NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { formatPEN } from '@/lib/utils'
 import { inicioDiaLima, etiquetaFechaLima } from '@/lib/tiempo'
-import { getYCloudApiKey } from '@/lib/tenant'
 
 function adminClient() {
   return createAdminClient(
@@ -179,13 +178,9 @@ export async function GET(request: Request) {
 
       const texto = lineas.join('\n')
 
-      const apiKey = await getYCloudApiKey(ferreteria.id)
-      await enviarMensaje({
-        from: ferreteria.telefono_whatsapp,
-        to: ferreteria.telefono_dueno!,
-        texto,
-        apiKey,
-      })
+      const sender = await resolverSender(supabase, ferreteria.id, (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''))
+      if (!sender) throw new Error('Sin proveedor WhatsApp activo')
+      await sender.enviarMensaje({ to: ferreteria.telefono_dueno!, texto })
 
       resultados.push({ ferreteria: nombre, ok: true })
     } catch (e) {

@@ -13,8 +13,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '../client'
 import { recalcularETAsCola } from '@/lib/delivery/assignment'
-import { getYCloudApiKey } from '@/lib/tenant'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
+import { resolverSender } from '@/lib/whatsapp/provider'
 
 function adminClient() {
   return createClient(
@@ -103,27 +102,27 @@ export const fnQueueRecalculate = inngest.createFunction(
     if (colaInfo.pendientesCount > 0 && colaInfo.disponiblesCount > 0 && motivo !== 'entregado') {
       await step.run('alertar-capacidad-libre', async () => {
         const supabase = adminClient()
-        const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
         const { data: ferreteria } = await supabase
           .from('ferreterias')
           .select('telefono_dueno, telefono_whatsapp, nombre')
           .eq('id', ferreteriaId)
           .single()
 
-        if (!apiKey || !ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) {
+        if (!ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) {
           return { skipped: true }
         }
+
+        const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+        if (!sender) return { skipped: true }
 
         const motivoLabel = motivo === 'cancelado' ? 'cancelado' : 'retornado'
         const pedidosList = colaInfo.pendientes
           .map((p: { numero: string; minutosEsperando: number }) => `  • ${p.numero} (${p.minutosEsperando} min esperando)`)
           .join('\n')
 
-        await enviarMensaje({
-          from: (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+        await sender.enviarMensaje({
           to: ferreteria.telefono_dueno as string,
           texto: `📦 *Capacidad libre — ${ferreteria.nombre}*\n\nSe ${motivoLabel} un pedido y hay *${colaInfo.disponiblesCount} repartidor(es) disponible(s)*.\n\nPedidos esperando asignación:\n${pedidosList}\n\n👉 Asigna desde el dashboard de Delivery.`,
-          apiKey,
         })
         return { enviado: true }
       })

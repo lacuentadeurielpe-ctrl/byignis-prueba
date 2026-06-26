@@ -16,8 +16,6 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '../client'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
 import { obtenerSiguienteItem, actualizarEstadoCola, cancelarEnCola } from '@/lib/delivery/queue-engine'
 import { crearEntrega } from '@/lib/delivery/assignment'
 import { eliminarParada } from '@/lib/delivery/multi-stop'

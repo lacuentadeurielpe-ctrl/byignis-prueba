@@ -13,8 +13,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { inngest } from '../client'
-import { enviarMensaje } from '@/lib/whatsapp/ycloud'
-import { getYCloudApiKey } from '@/lib/tenant'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { crearEntrega } from '@/lib/delivery/assignment'
 import { encolarPedido } from '@/lib/delivery/queue-engine'
 import { calcularCascadaETA } from '@/lib/delivery/cascade-eta'
@@ -71,8 +70,6 @@ export const fnPedidoProgramado = inngest.createFunction(
       // Notificar al dueño: sin repartidor disponible en 30 min
       await step.run('notificar-dueno-sin-repartidor', async () => {
         const supabase = adminClient()
-        const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-        if (!apiKey) return
 
         const { data: ferreteria } = await supabase
           .from('ferreterias')
@@ -81,11 +78,12 @@ export const fnPedidoProgramado = inngest.createFunction(
 
         if (!ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) return
 
-        await enviarMensaje({
-          from:  (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+        const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+        if (!sender) return
+
+        await sender.enviarMensaje({
           to:    ferreteria.telefono_dueno as string,
           texto: `⚠️ *Pedido programado sin repartidor — ${nombreFerreteria}*\n\nEl pedido *${numeroPedido}* está programado para las ${new Date(horaProgramadaAt).toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit' })} y *no hay repartidores disponibles*.\n\nAsigna un repartidor o el sistema intentará de nuevo en 15 min.`,
-          apiKey,
         })
       })
     }
@@ -167,18 +165,17 @@ export const fnPedidoProgramado = inngest.createFunction(
     // ── Paso 7: Notificar al cliente que su pedido está siendo preparado ───────
     if (telefonoCliente && telefonoWhatsapp) {
       await step.run('notificar-cliente', async () => {
-        const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-        if (!apiKey) return
+        const supabase = adminClient()
+        const sender = await resolverSender(supabase, ferreteriaId, telefonoWhatsapp.replace(/^\+/, '')).catch(() => null)
+        if (!sender) return
 
         const hora = new Date(horaProgramadaAt).toLocaleTimeString('es-PE', {
           timeZone: 'America/Lima', hour: '2-digit', minute: '2-digit',
         })
 
-        await enviarMensaje({
-          from:  telefonoWhatsapp.replace(/^\+/, ''),
+        await sender.enviarMensaje({
           to:    telefonoCliente,
           texto: `🚀 *¡Tu pedido programado está en camino!*\n\n${nombreFerreteria} está preparando tu pedido *${numeroPedido}* que programaste para las ${hora}.\n\n📦 En breve sale hacia tu dirección.`,
-          apiKey,
         })
       })
     }
@@ -195,9 +192,6 @@ export const fnPedidoProgramado = inngest.createFunction(
 
       if (data?.estado === 'pendiente' && !data?.repartidor_id) {
         // Aún sin repartidor — escalar al dueño
-        const apiKey = await getYCloudApiKey(ferreteriaId).catch(() => null)
-        if (!apiKey) return
-
         const { data: ferreteria } = await supabase
           .from('ferreterias')
           .select('telefono_dueno, telefono_whatsapp')
@@ -205,11 +199,12 @@ export const fnPedidoProgramado = inngest.createFunction(
 
         if (!ferreteria?.telefono_dueno || !ferreteria?.telefono_whatsapp) return
 
-        await enviarMensaje({
-          from:  (ferreteria.telefono_whatsapp as string).replace(/^\+/, ''),
+        const sender = await resolverSender(supabase, ferreteriaId, (ferreteria.telefono_whatsapp as string).replace(/^\+/, '')).catch(() => null)
+        if (!sender) return
+
+        await sender.enviarMensaje({
           to:    ferreteria.telefono_dueno as string,
           texto: `🔴 *Alerta: Pedido programado sin repartidor — ${nombreFerreteria}*\n\nEl pedido *${numeroPedido}* ya debería estar en camino pero *no tiene repartidor asignado*.\n\nAsigna uno manualmente desde el dashboard.`,
-          apiKey,
         })
       }
     })
