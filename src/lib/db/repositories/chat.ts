@@ -231,11 +231,18 @@ export class ChatRepository {
   /**
    * Obtiene la lista de conversaciones filtradas por ferretería.
    */
-  async obtenerConversacionesList(ferreteriaId: string, limite = 50) {
+  async obtenerConversacionesList(ferreteriaId: string, limite = 100) {
     const { data, error } = await this.supabase
       .from('conversaciones')
-      .select('id, estado, bot_pausado, bot_pausado_hasta, bot_pausado_motivo, ultima_actividad, clientes(nombre, telefono)')
+      .select(`
+        id, estado, bot_pausado, bot_pausado_hasta, bot_pausado_motivo,
+        ultima_actividad, no_leido_count, estado_atencion, archivada,
+        fijada, snooze_hasta, asignado_a,
+        clientes(id, nombre, telefono),
+        conversacion_etiquetas(etiquetas(id, nombre, color))
+      `)
       .eq('ferreteria_id', ferreteriaId)
+      .order('fijada', { ascending: false })
       .order('ultima_actividad', { ascending: false })
       .limit(limite)
 

@@ -34,9 +34,14 @@ export default async function ConversationsPage({ searchParams }: { searchParams
   const enriquecidas = (conversaciones ?? []).map((conv) => {
     const ultimo   = ultimosMensajes[conv.id]
     const clientes = Array.isArray(conv.clientes) ? conv.clientes[0] ?? null : conv.clientes
+    // Aplanar etiquetas desde el join conversacion_etiquetas → etiquetas
+    type EtiquetaRow = { id: string; nombre: string; color: string }
+    const etiquetasJoin = (conv as Record<string, unknown>).conversacion_etiquetas as Array<{ etiquetas: EtiquetaRow | null }> | null
+    const etiquetas = (etiquetasJoin ?? []).map(ce => ce.etiquetas).filter((e): e is EtiquetaRow => e !== null)
     return {
       ...conv,
-      clientes:       clientes as { nombre: string | null; telefono: string } | null,
+      clientes:       clientes as { id?: string; nombre: string | null; telefono: string } | null,
+      etiquetas,
       ultimo_mensaje: ultimo?.contenido ?? undefined,
       rol_ultimo:     ultimo?.role      ?? undefined,
     }

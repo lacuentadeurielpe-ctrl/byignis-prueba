@@ -150,6 +150,10 @@ export interface Ferreteria {
   // ── Telegram (FASE 3) ───────────────────────────────────────────
   telegram_bot_token: string | null   // token del bot de Telegram
   telegram_chat_id:   string | null   // chat/grupo donde se notifica
+  // ── Bandeja CRM (089) ───────────────────────────────────────────
+  bot_global_activo: boolean
+  horario_atencion:  Record<string, unknown>
+  mensajes_auto:     Record<string, unknown>
   // ── Bot (settings-2) ────────────────────────────────────────────
   bot_nombre: string | null
   bot_instrucciones: string | null
@@ -359,6 +363,9 @@ export interface Cliente {
   tipo_persona: TipoPersona | null
   // Memoria del bot
   perfil: Record<string, unknown>
+  // Bandeja CRM (089)
+  acepta_marketing: boolean
+  campos_extra:     Record<string, unknown>
   created_at: string
   updated_at: string
 }
@@ -382,9 +389,18 @@ export interface Conversacion {
   ultima_actividad: string
   datos_flujo: DatosFlujoPedido | null
   created_at: string
+  // Bandeja CRM (089)
+  no_leido_count:    number
+  estado_atencion:   'abierta' | 'pendiente' | 'esperando' | 'resuelta'
+  archivada:         boolean
+  fijada:            boolean
+  snooze_hasta:      string | null
+  asignado_a:        string | null
+  ultima_lectura_at: string | null
   // joins
   clientes?: Cliente
   mensajes?: Mensaje[]
+  etiquetas?: Etiqueta[]
 }
 
 export interface Mensaje {
@@ -395,6 +411,111 @@ export interface Mensaje {
   tipo: TipoMensaje
   ycloud_message_id: string | null
   created_at: string
+  // Bandeja CRM (089)
+  media_url:       string | null
+  media_tipo:      'imagen' | 'video' | 'audio' | 'documento' | 'sticker' | null
+  es_nota_interna: boolean
+  responde_a:      string | null
+  tipo_nota:       'nota' | 'llamada' | 'reunion' | 'whatsapp' | null
+  reaccion:        string | null
+  // join para citar
+  mensaje_citado?: Mensaje | null
+}
+
+export interface Etiqueta {
+  id:            string
+  ferreteria_id: string
+  nombre:        string
+  color:         string
+  orden:         number
+  created_at:    string
+}
+
+export interface ConversacionEtiqueta {
+  conversacion_id: string
+  etiqueta_id:     string
+  asignado_at:     string
+  etiquetas?:      Etiqueta
+}
+
+export interface RespuestaRapida {
+  id:            string
+  ferreteria_id: string
+  atajo:         string
+  contenido:     string
+  categoria:     string | null
+  orden:         number
+  created_at:    string
+}
+
+export interface PlantillaWA {
+  id:                  string
+  ferreteria_id:       string
+  nombre:              string
+  categoria:           'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
+  idioma:              string
+  header_tipo:         'TEXT' | 'IMAGE' | 'DOCUMENT' | 'VIDEO' | null
+  header_contenido:    string | null
+  cuerpo:              string
+  footer:              string | null
+  botones:             PlantillaBoton[]
+  variables:           string[]
+  meta_template_id:    string | null
+  meta_status:         'borrador' | 'pendiente' | 'aprobada' | 'rechazada'
+  meta_rechazo_motivo: string | null
+  ycloud_template_name: string | null
+  created_at:          string
+  updated_at:          string
+}
+
+export interface PlantillaBoton {
+  tipo:    'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER'
+  texto:   string
+  valor?:  string
+}
+
+export interface Campana {
+  id:              string
+  ferreteria_id:   string
+  nombre:          string
+  plantilla_id:    string | null
+  mensaje_libre:   string | null
+  filtro_tags:     string[]
+  filtro_tipo:     string | null
+  acepta_mkt_only: boolean
+  estado:          'borrador' | 'programada' | 'enviando' | 'completada' | 'cancelada'
+  programada_at:   string | null
+  iniciada_at:     string | null
+  completada_at:   string | null
+  total_destinos:  number
+  total_enviados:  number
+  total_errores:   number
+  creado_por:      string | null
+  created_at:      string
+  updated_at:      string
+  // joins
+  plantillas_wa?: PlantillaWA
+}
+
+export interface CampanaDestinatario {
+  id:           string
+  campana_id:   string
+  cliente_id:   string
+  estado:       'pendiente' | 'enviado' | 'fallido' | 'respondido'
+  error_detalle: string | null
+  enviado_at:   string | null
+  clientes?:    Cliente
+}
+
+export interface PushSubscription {
+  id:            string
+  user_id:       string
+  ferreteria_id: string
+  endpoint:      string
+  p256dh:        string
+  auth:          string
+  user_agent:    string | null
+  created_at:    string
 }
 
 export interface Cotizacion {
