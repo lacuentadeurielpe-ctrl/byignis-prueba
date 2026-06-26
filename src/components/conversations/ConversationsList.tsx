@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn, truncar, matchesFuzzy } from '@/lib/utils'
 import {
   Search, X, Bot, UserCheck, Timer, Pin,
-  Archive, MoreVertical, CheckCheck, Check, Filter,
+  Archive, MoreVertical, CheckCheck, Check, Filter, Trash2,
 } from 'lucide-react'
 
 interface Etiqueta {
@@ -192,6 +192,21 @@ export default function ConversationsList({ inicial, ferreteriaId, initialFiltro
     await fetch(`/api/bandeja/${id}/leer`, { method: 'POST' })
     setConversaciones(prev => prev.map(c => c.id === id ? { ...c, no_leido_count: 0 } : c))
   }, [])
+
+  const eliminarChat = useCallback(async (id: string, nombre: string) => {
+    if (!confirm(`¿Eliminar el chat con ${nombre}? Esta acción es permanente.`)) return
+    setAccionLoading(id)
+    try {
+      const res = await fetch(`/api/bandeja/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setConversaciones(prev => prev.filter(c => c.id !== id))
+        setMenuOpen(null)
+        router.push('/dashboard/conversations')
+      }
+    } finally {
+      setAccionLoading(null)
+    }
+  }, [router])
 
   const cambiarEstado = useCallback(async (id: string, campo: string, valor: unknown) => {
     setAccionLoading(id)
@@ -525,6 +540,16 @@ export default function ConversationsList({ inicial, ferreteriaId, initialFiltro
                         </button>
                       )
                     })}
+                    <div style={{ borderTop: '1px solid #e9edef', margin: '4px 0' }} />
+                    <button
+                      onClick={() => eliminarChat(conv.id, getNombreCliente(conv))}
+                      disabled={accionLoading === conv.id}
+                      className="w-full text-left px-4 py-2.5 hover:bg-red-50 flex items-center gap-3"
+                      style={{ color: '#ef4444' }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Eliminar chat
+                    </button>
                   </div>
                 )}
               </div>

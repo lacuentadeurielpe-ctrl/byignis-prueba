@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   Plus, Edit3, Trash2, CheckCircle2, XCircle, Clock,
-  AlertCircle, Send, FileText, Eye, EyeOff,
+  AlertCircle, Send, FileText, Eye, EyeOff, RefreshCw, Upload, Zap,
 } from 'lucide-react'
 
 interface PlantillaBoton {
@@ -31,10 +31,10 @@ interface Plantilla {
 }
 
 const STATUS_BADGE: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
-  borrador:  { label: 'Borrador',  className: 'bg-zinc-100 text-zinc-600',     icon: <Clock className="w-3 h-3" /> },
-  pendiente: { label: 'Pendiente', className: 'bg-blue-100 text-blue-700',     icon: <Clock className="w-3 h-3" /> },
+  borrador:  { label: 'Borrador',  className: 'bg-zinc-100 text-zinc-600',       icon: <Edit3 className="w-3 h-3" /> },
+  pendiente: { label: 'Pendiente', className: 'bg-blue-100 text-blue-700',       icon: <Clock className="w-3 h-3" /> },
   aprobada:  { label: 'Aprobada',  className: 'bg-emerald-100 text-emerald-700', icon: <CheckCircle2 className="w-3 h-3" /> },
-  rechazada: { label: 'Rechazada', className: 'bg-red-100 text-red-700',       icon: <XCircle className="w-3 h-3" /> },
+  rechazada: { label: 'Rechazada', className: 'bg-red-100 text-red-700',         icon: <XCircle className="w-3 h-3" /> },
 }
 
 const CATEGORIA_COLOR: Record<string, string> = {
@@ -43,7 +43,10 @@ const CATEGORIA_COLOR: Record<string, string> = {
   AUTHENTICATION: 'bg-amber-50 text-amber-700',
 }
 
-interface Props { plantillasIniciales: Plantilla[] }
+interface Props {
+  plantillasIniciales: Plantilla[]
+  tieneMetaActivo: boolean
+}
 
 const EMPTY_FORM = {
   nombre: '',
@@ -56,16 +59,19 @@ const EMPTY_FORM = {
   ycloud_template_name: '',
 }
 
-export default function PlantillasWAClient({ plantillasIniciales }: Props) {
+export default function PlantillasWAClient({ plantillasIniciales, tieneMetaActivo }: Props) {
   const [plantillas,  setPlantillas]  = useState<Plantilla[]>(plantillasIniciales)
   const [showNueva,   setShowNueva]   = useState(false)
   const [form,        setForm]        = useState(EMPTY_FORM)
   const [preview,     setPreview]     = useState<string | null>(null)
   const [error,       setError]       = useState<string | null>(null)
   const [guardando,   setGuardando]   = useState(false)
+  const [publicando,  setPublicando]  = useState<string | null>(null)
+  const [eliminandoMeta, setEliminandoMeta] = useState<string | null>(null)
+  const [sincronizando, setSincronizando]   = useState(false)
+  const [syncMsg, setSyncMsg]               = useState<string | null>(null)
 
   function variable(texto: string) {
-    // Extrae variables tipo {{1}}, {{2}}, etc.
     return (texto.match(/\{\{(\d+)\}\}/g) ?? [])
   }
 
@@ -113,6 +119,59 @@ export default function PlantillasWAClient({ plantillasIniciales }: Props) {
     if (res.ok) setPlantillas(prev => prev.filter(p => p.id !== id))
   }
 
+  async function publicarEnMeta(id: string) {
+    setPublicando(id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/plantillas-wa/${id}/publicar-meta`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Error al publicar en Meta')
+        return
+      }
+      setPlantillas(prev => prev.map(p => p.id === id ? { ...p, meta_status: 'pendiente' } : p))
+    } finally {
+      setPublicando(null)
+    }
+  }
+
+  async function eliminarDeMeta(id: string, nombre: string) {
+    if (!confirm(`¿Eliminar "${nombre}" de Meta? Meta eliminará todas las versiones de esta plantilla.`)) return
+    setEliminandoMeta(id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/plantillas-wa/${id}/meta`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Error al eliminar de Meta')
+        return
+      }
+      setPlantillas(prev => prev.map(p => p.id === id ? { ...p, meta_status: 'borrador', meta_rechazo_motivo: null } : p))
+    } finally {
+      setEliminandoMeta(null)
+    }
+  }
+
+  async function sincronizarDesdeMeta() {
+    setSincronizando(true)
+    setSyncMsg(null)
+    setError(null)
+    try {
+      const res = await fetch('/api/plantillas-wa/sync-meta')
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Error al sincronizar')
+        return
+      }
+      setSyncMsg(`Sincronizado: ${data.actualizadas} plantilla${data.actualizadas !== 1 ? 's' : ''} actualizada${data.actualizadas !== 1 ? 's' : ''} de ${data.total} en Meta`)
+      // Recargar lista completa
+      const listRes = await fetch('/api/plantillas-wa')
+      if (listRes.ok) setPlantillas(await listRes.json())
+    } finally {
+      setSincronizando(false)
+    }
+  }
+
   function renderPreview(p: Plantilla) {
     const vars = ['Nombre', 'Producto', 'Monto', 'Fecha']
     let texto = p.cuerpo
@@ -132,13 +191,25 @@ export default function PlantillasWAClient({ plantillasIniciales }: Props) {
             Crea y gestiona tus plantillas HSM para campañas fuera de la ventana de 24h
           </p>
         </div>
-        <button
-          onClick={() => setShowNueva(true)}
-          className="flex items-center gap-2 bg-zinc-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-zinc-800 transition"
-        >
-          <Plus className="w-4 h-4" />
-          Nueva plantilla
-        </button>
+        <div className="flex items-center gap-2">
+          {tieneMetaActivo && (
+            <button
+              onClick={sincronizarDesdeMeta}
+              disabled={sincronizando}
+              className="flex items-center gap-2 border border-zinc-200 text-zinc-700 px-3 py-2 rounded-xl text-sm font-medium hover:bg-zinc-50 transition disabled:opacity-50"
+            >
+              <RefreshCw className={cn('w-4 h-4', sincronizando && 'animate-spin')} />
+              Sincronizar Meta
+            </button>
+          )}
+          <button
+            onClick={() => setShowNueva(true)}
+            className="flex items-center gap-2 bg-zinc-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-zinc-800 transition"
+          >
+            <Plus className="w-4 h-4" />
+            Nueva plantilla
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -149,11 +220,29 @@ export default function PlantillasWAClient({ plantillasIniciales }: Props) {
         </div>
       )}
 
+      {syncMsg && (
+        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          {syncMsg}
+          <button onClick={() => setSyncMsg(null)} className="ml-auto"><XCircle className="w-4 h-4" /></button>
+        </div>
+      )}
+
       {/* Info */}
-      <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-        <p className="font-semibold mb-1">¿Cómo funciona?</p>
-        <p>Crea la plantilla aquí, luego envíala a Meta para aprobación. Una vez aprobada, podrás usarla en tus campañas de difusión masiva. Con YCloud, usa el nombre exacto de la plantilla de tu cuenta YCloud.</p>
-      </div>
+      {tieneMetaActivo ? (
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800 flex items-start gap-3">
+          <Zap className="w-4 h-4 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold mb-0.5">Meta Cloud API conectada</p>
+            <p>Puedes enviar plantillas directamente a Meta para aprobación desde esta pantalla. Una vez aprobadas, úsalas en campañas masivas.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+          <p className="font-semibold mb-1">¿Cómo funciona?</p>
+          <p>Crea la plantilla aquí, luego configura tu cuenta Meta en <strong>Ajustes → Integraciones → Meta</strong> para enviarla a aprobación. Con YCloud, usa el nombre exacto de la plantilla de tu cuenta YCloud.</p>
+        </div>
+      )}
 
       {/* Formulario */}
       {showNueva && (
@@ -288,6 +377,8 @@ export default function PlantillasWAClient({ plantillasIniciales }: Props) {
             const badge      = STATUS_BADGE[p.meta_status] ?? STATUS_BADGE.borrador
             const isPreview  = preview === p.id
             const catClass   = CATEGORIA_COLOR[p.categoria] ?? ''
+            const isPub      = publicando === p.id
+            const isDelMeta  = eliminandoMeta === p.id
 
             return (
               <div key={p.id} className="p-4 bg-white border border-zinc-200 rounded-2xl hover:border-zinc-300 transition">
@@ -321,7 +412,7 @@ export default function PlantillasWAClient({ plantillasIniciales }: Props) {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                     <button
                       onClick={() => setPreview(isPreview ? null : p.id)}
                       className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition"
@@ -329,6 +420,32 @@ export default function PlantillasWAClient({ plantillasIniciales }: Props) {
                     >
                       {isPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
+
+                    {/* Publicar en Meta (si tiene Meta activo y está en borrador o rechazada) */}
+                    {tieneMetaActivo && (p.meta_status === 'borrador' || p.meta_status === 'rechazada') && (
+                      <button
+                        onClick={() => publicarEnMeta(p.id)}
+                        disabled={isPub}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition disabled:opacity-50"
+                        title="Enviar a Meta para aprobación"
+                      >
+                        {isPub ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                        {isPub ? 'Enviando…' : 'Publicar en Meta'}
+                      </button>
+                    )}
+
+                    {/* Eliminar de Meta (si fue enviada y Meta activo) */}
+                    {tieneMetaActivo && (p.meta_status === 'pendiente' || p.meta_status === 'aprobada') && (
+                      <button
+                        onClick={() => eliminarDeMeta(p.id, p.nombre)}
+                        disabled={isDelMeta}
+                        className="p-1.5 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded-xl transition disabled:opacity-50"
+                        title="Eliminar de Meta"
+                      >
+                        {isDelMeta ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 rotate-180" />}
+                      </button>
+                    )}
+
                     <button
                       onClick={() => eliminar(p.id)}
                       className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition"
