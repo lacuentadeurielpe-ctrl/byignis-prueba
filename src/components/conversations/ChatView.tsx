@@ -7,7 +7,8 @@ import { cn, formatFecha, formatHora } from '@/lib/utils'
 import {
   Send, RefreshCw, ArrowLeft, Bot, Mic, Image as ImageIcon,
   FileText, X, CornerDownLeft, Lock, ChevronRight, Tag, User,
-  Paperclip, StickyNote,
+  Paperclip, StickyNote, Search, MoreVertical, Phone,
+  CheckCheck, Check, Smile,
 } from 'lucide-react'
 import VentanaEntregaBadge from '@/components/delivery/VentanaEntregaBadge'
 
@@ -58,28 +59,15 @@ interface ChatViewProps {
   etiquetasDisponibles?: Etiqueta[]
 }
 
-// ── Estilos de burbuja ─────────────────────────────────────────────────────
-function getBubbleStyle(role: string, esNotaInterna: boolean) {
-  if (esNotaInterna) return {
-    wrap:   'mr-4 ml-4 items-start',
-    bubble: 'bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl shadow-sm',
-    time:   'text-amber-600/70',
-  }
-  if (role === 'cliente') return {
-    wrap:   'mr-12 items-start',
-    bubble: 'bg-white border border-zinc-200 text-zinc-900 rounded-2xl rounded-tl-none shadow-sm',
-    time:   'text-zinc-400',
-  }
-  if (role === 'dueno') return {
-    wrap:   'ml-12 items-end',
-    bubble: 'bg-zinc-900 text-white rounded-2xl rounded-tr-none',
-    time:   'text-zinc-500',
-  }
-  return {
-    wrap:   'mr-12 items-start',
-    bubble: 'bg-zinc-50 border border-zinc-200 text-zinc-700 rounded-2xl rounded-tl-none',
-    time:   'text-zinc-400',
-  }
+// Colores de avatar (misma función que ConversationsList)
+const AVATAR_COLORS = [
+  '#d97706','#059669','#7c3aed','#db2777','#2563eb',
+  '#dc2626','#0891b2','#65a30d','#9333ea','#ea580c',
+]
+function getAvatarColor(texto: string): string {
+  let hash = 0
+  for (let i = 0; i < texto.length; i++) hash = texto.charCodeAt(i) + ((hash << 5) - hash)
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }
 
 function getRoleLabel(role: string, primerNombre: string): string {
@@ -89,40 +77,26 @@ function getRoleLabel(role: string, primerNombre: string): string {
   return role
 }
 
-function BubbleTail({ role }: { role: string }) {
-  if (role === 'dueno') {
-    return <div className="absolute -right-[7px] top-0 w-0 h-0 border-l-[8px] border-l-zinc-900 border-b-[8px] border-b-transparent" />
-  }
-  const color = role === 'bot' ? 'border-r-zinc-200' : 'border-r-white'
-  return (
-    <div className={cn(
-      'absolute -left-[7px] top-0 w-0 h-0',
-      'border-r-[8px]', color,
-      'border-b-[8px] border-b-transparent'
-    )} />
-  )
-}
-
 // ── Media Render ────────────────────────────────────────────────────────────
-function MediaBubble({ url, tipo, isDueno }: { url: string; tipo: string; isDueno: boolean }) {
+function MediaBubble({ url, tipo, isOutgoing }: { url: string; tipo: string; isOutgoing: boolean }) {
   if (tipo === 'imagen') {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer">
         <img
           src={url}
           alt="Imagen"
-          className="rounded-xl max-w-[240px] max-h-[240px] object-cover cursor-pointer hover:opacity-90 transition"
+          className="rounded-lg max-w-[240px] max-h-[240px] object-cover cursor-pointer hover:opacity-90 transition"
           loading="lazy"
         />
       </a>
     )
   }
   if (tipo === 'audio') {
-    return <audio controls src={url} className="max-w-[240px] h-10" />
+    return <audio controls src={url} className="max-w-[220px] h-10" />
   }
   if (tipo === 'video') {
     return (
-      <video controls src={url} className="rounded-xl max-w-[240px] max-h-[240px]">
+      <video controls src={url} className="rounded-lg max-w-[240px] max-h-[240px]">
         <source src={url} />
       </video>
     )
@@ -134,12 +108,12 @@ function MediaBubble({ url, tipo, isDueno }: { url: string; tipo: string; isDuen
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className={cn(
-          'flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium hover:opacity-80 transition',
-          isDueno
-            ? 'bg-white/10 text-white border border-white/20'
-            : 'bg-zinc-100 text-zinc-800 border border-zinc-200'
-        )}
+        className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium hover:opacity-80 transition"
+        style={{
+          backgroundColor: isOutgoing ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.04)',
+          color: isOutgoing ? '#111b21' : '#111b21',
+          border: '1px solid rgba(0,0,0,0.08)',
+        }}
       >
         <FileText className="w-4 h-4 shrink-0" />
         <span className="truncate max-w-[160px]">{nombre}</span>
@@ -159,32 +133,30 @@ export default function ChatView({
 }: ChatViewProps) {
   const router = useRouter()
 
-  const [mensajes,        setMensajes]        = useState<Mensaje[]>(mensajesIniciales)
-  const [botPausado,      setBotPausado]       = useState(conversacion.bot_pausado)
+  const [mensajes,        setMensajes]       = useState<Mensaje[]>(mensajesIniciales)
+  const [botPausado,      setBotPausado]      = useState(conversacion.bot_pausado)
   const [texto,           setTexto]           = useState('')
-  const [enviando,        setEnviando]         = useState(false)
-  const [resumiendo,      setResumiendo]       = useState(false)
-  const [pausando,        setPausando]         = useState(false)
-  const [error,           setError]            = useState<string | null>(null)
-  const [modoNota,        setModoNota]         = useState(false)
-  const [citando,         setCitando]          = useState<Mensaje | null>(null)
+  const [enviando,        setEnviando]        = useState(false)
+  const [resumiendo,      setResumiendo]      = useState(false)
+  const [pausando,        setPausando]        = useState(false)
+  const [error,           setError]           = useState<string | null>(null)
+  const [modoNota,        setModoNota]        = useState(false)
+  const [citando,         setCitando]         = useState<Mensaje | null>(null)
   const [etasPedido, setEtasPedido] = useState<{ numero: string; etaTimestamp: string | null } | null>(null)
 
-  // Respuestas rápidas
-  const [respuestas,    setRespuestas]    = useState<RespuestaRapida[]>([])
-  const [showRespuestas, setShowRespuestas] = useState(false)
+  const [respuestas,      setRespuestas]      = useState<RespuestaRapida[]>([])
+  const [showRespuestas,  setShowRespuestas]  = useState(false)
   const [filtroRespuesta, setFiltroRespuesta] = useState('')
 
-  // Etiquetas
   const [etiquetasLocales, setEtiquetasLocales] = useState<Etiqueta[]>(etiquetasConv)
   const [showEtiquetas,    setShowEtiquetas]    = useState(false)
+  const [showMenu,         setShowMenu]         = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [mensajes])
 
-  // Cargar respuestas rápidas
   useEffect(() => {
     fetch('/api/respuestas-rapidas')
       .then(r => r.json())
@@ -192,7 +164,6 @@ export default function ChatView({
       .catch(() => {})
   }, [])
 
-  // ETA pedido delivery
   useEffect(() => {
     const tel = conversacion.clientes?.telefono
     if (!tel) return
@@ -212,7 +183,6 @@ export default function ChatView({
       })
   }, [conversacion.clientes?.telefono, ferreteriaId])
 
-  // Realtime
   useEffect(() => {
     const supabase = createClient()
     const channel  = supabase
@@ -232,11 +202,9 @@ export default function ChatView({
         }
       )
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [conversacion.id])
 
-  // Texto → mostrar respuestas rápidas si empieza con /
   useEffect(() => {
     if (texto.startsWith('/')) {
       setFiltroRespuesta(texto.slice(1).toLowerCase())
@@ -246,19 +214,15 @@ export default function ChatView({
     }
   }, [texto])
 
-  // ── Enviar mensaje ────────────────────────────────────────────────────────
   async function handleEnviar() {
     const contenido = texto.trim()
     if (!contenido || enviando) return
-
     setTexto('')
     setError(null)
     setEnviando(true)
     setCitando(null)
-
     try {
       if (modoNota) {
-        // Nota interna (no se envía por WhatsApp)
         const supabase = createClient()
         const { data } = await supabase
           .from('mensajes')
@@ -345,7 +309,6 @@ export default function ChatView({
     setTimeout(() => inputRef.current?.focus(), 50)
   }
 
-  // Etiquetas
   async function toggleEtiqueta(etiqueta: Etiqueta) {
     const tieneEtiqueta = etiquetasLocales.some(e => e.id === etiqueta.id)
     if (tieneEtiqueta) {
@@ -366,70 +329,91 @@ export default function ChatView({
   const telefono      = conversacion.clientes?.telefono ?? ''
   const iniciales     = nombreCliente.trim().split(' ').filter(Boolean)
     .slice(0, 2).map((w: string) => w[0].toUpperCase()).join('')
+  const avatarBg      = getAvatarColor(nombreCliente)
 
   const respuestasFiltradas = respuestas.filter(r =>
     r.atajo.includes(filtroRespuesta) || r.contenido.toLowerCase().includes(filtroRespuesta)
   ).slice(0, 6)
 
   let lastDate = ''
-  let lastRole = ''
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div
+      className="flex flex-col h-full"
+      onClick={() => { setShowEtiquetas(false); setShowMenu(false) }}
+    >
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="px-4 py-3 border-b border-zinc-100 bg-white flex items-center justify-between shrink-0 gap-3">
+      {/* ── Header WhatsApp ─────────────────────────────────────────── */}
+      <div
+        className="flex items-center justify-between px-4 py-2 shrink-0"
+        style={{ backgroundColor: '#075e54', minHeight: 60 }}
+      >
         <div className="flex items-center gap-3 min-w-0">
-
           <button
             onClick={() => router.push('/dashboard/conversations')}
-            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 transition text-zinc-500 shrink-0"
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition text-white shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
 
-          <div className="w-9 h-9 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0 select-none">
-            <span className="text-xs font-bold text-zinc-600">{iniciales || '?'}</span>
+          {/* Avatar */}
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold text-white select-none shrink-0"
+            style={{ backgroundColor: avatarBg }}
+          >
+            {iniciales || '?'}
           </div>
 
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-zinc-950 leading-tight truncate">{nombreCliente}</p>
-              {/* Link al perfil CRM */}
+              <p className="text-sm font-semibold text-white leading-tight truncate">{nombreCliente}</p>
               {conversacion.clientes?.id && (
                 <a
                   href={`/dashboard/clientes/${conversacion.clientes.id}`}
-                  className="text-zinc-400 hover:text-zinc-700 transition"
+                  className="text-white/60 hover:text-white/90 transition"
                   title="Ver perfil CRM"
                 >
-                  <User className="w-3.5 h-3.5" />
+                  <User className="w-3 h-3" />
                 </a>
               )}
             </div>
-            {telefono && (
-              <p className="text-[11px] text-zinc-400 tabular-nums">+{telefono}</p>
-            )}
+            <p className="text-[11px] text-white/70 tabular-nums">
+              {botPausado
+                ? '✏️ Tú al control'
+                : <span className="flex items-center gap-1"><Bot className="w-2.5 h-2.5" /> Bot activo</span>
+              }
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Acciones header */}
+        <div className="flex items-center gap-1 shrink-0">
           {/* Etiquetas */}
           <div className="relative">
             <button
-              onClick={() => setShowEtiquetas(!showEtiquetas)}
-              className="p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-400 transition relative"
+              onClick={(e) => { e.stopPropagation(); setShowEtiquetas(!showEtiquetas); setShowMenu(false) }}
+              className="p-2 rounded-full hover:bg-white/10 transition relative text-white/80"
               title="Etiquetas"
             >
               <Tag className="w-4 h-4" />
               {etiquetasLocales.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-indigo-500 rounded-full" />
+                <span
+                  className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: '#25d366' }}
+                />
               )}
             </button>
             {showEtiquetas && (
-              <div className="absolute right-0 top-8 z-50 bg-white border border-zinc-200 rounded-xl shadow-lg py-1 min-w-[180px]">
-                <p className="px-3 py-1.5 text-[11px] text-zinc-400 font-medium uppercase tracking-wide">Etiquetas</p>
+              <div
+                className="absolute right-0 top-10 z-50 rounded-xl shadow-2xl py-1 min-w-[180px] overflow-hidden"
+                style={{ backgroundColor: '#ffffff', border: '1px solid #e9edef' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: '#8696a0' }}>
+                  Etiquetas
+                </p>
                 {etiquetasDisponibles.length === 0 && (
-                  <p className="px-3 py-2 text-xs text-zinc-400">Sin etiquetas creadas</p>
+                  <p className="px-4 py-2 text-xs" style={{ color: '#8696a0' }}>Sin etiquetas creadas</p>
                 )}
                 {etiquetasDisponibles.map(e => {
                   const activa = etiquetasLocales.some(l => l.id === e.id)
@@ -437,11 +421,11 @@ export default function ChatView({
                     <button
                       key={e.id}
                       onClick={() => toggleEtiqueta(e)}
-                      className="w-full text-left px-3 py-1.5 hover:bg-zinc-50 flex items-center gap-2 text-sm"
+                      className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 flex items-center gap-3 text-sm"
                     >
                       <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: e.color }} />
-                      <span className={activa ? 'font-semibold text-zinc-900' : 'text-zinc-600'}>{e.nombre}</span>
-                      {activa && <span className="ml-auto text-xs text-indigo-500">✓</span>}
+                      <span style={{ color: '#111b21', fontWeight: activa ? 600 : 400 }}>{e.nombre}</span>
+                      {activa && <Check className="w-3.5 h-3.5 ml-auto" style={{ color: '#25d366' }} />}
                     </button>
                   )
                 })}
@@ -449,45 +433,53 @@ export default function ChatView({
             )}
           </div>
 
-          {/* Estado del bot */}
-          {botPausado ? (
-            <>
-              <span className="hidden sm:inline text-[11px] text-zinc-500 bg-zinc-100 px-2.5 py-1 rounded-full font-medium border border-zinc-200">
-                Tú al control
-              </span>
-              <button
-                onClick={handleResumir}
-                disabled={resumiendo}
-                className="text-xs bg-zinc-900 hover:bg-zinc-800 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50 font-medium"
+          {/* Menú más opciones */}
+          <div className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); setShowEtiquetas(false) }}
+              className="p-2 rounded-full hover:bg-white/10 transition text-white/80"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            {showMenu && (
+              <div
+                className="absolute right-0 top-10 z-50 rounded-xl shadow-2xl py-1 min-w-[200px] overflow-hidden"
+                style={{ backgroundColor: '#ffffff', border: '1px solid #e9edef' }}
+                onClick={(e) => e.stopPropagation()}
               >
-                <RefreshCw className={cn('w-3 h-3', resumiendo && 'animate-spin')} />
-                <span className="hidden sm:inline">Activar bot</span>
-                <span className="sm:hidden">Activar</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="hidden sm:flex items-center gap-1.5 text-[11px] text-zinc-400 bg-zinc-50 px-2.5 py-1 rounded-full border border-zinc-100 font-medium">
-                <Bot className="w-3 h-3" />
-                Bot activo
-              </span>
-              <button
-                onClick={handlePausar}
-                disabled={pausando}
-                className="text-xs bg-zinc-100 hover:bg-amber-50 hover:text-amber-700 text-zinc-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition disabled:opacity-50 font-medium"
-              >
-                <Bot className={cn('w-3 h-3', pausando && 'animate-pulse')} />
-                <span className="hidden sm:inline">Tomar control</span>
-                <span className="sm:hidden">Pausar</span>
-              </button>
-            </>
-          )}
+                {botPausado ? (
+                  <button
+                    onClick={() => { handleResumir(); setShowMenu(false) }}
+                    disabled={resumiendo}
+                    className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 flex items-center gap-3 text-sm disabled:opacity-50"
+                    style={{ color: '#111b21' }}
+                  >
+                    <RefreshCw className={cn('w-4 h-4', resumiendo && 'animate-spin')} style={{ color: '#8696a0' }} />
+                    Activar bot
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { handlePausar(); setShowMenu(false) }}
+                    disabled={pausando}
+                    className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 flex items-center gap-3 text-sm disabled:opacity-50"
+                    style={{ color: '#111b21' }}
+                  >
+                    <Bot className={cn('w-4 h-4', pausando && 'animate-pulse')} style={{ color: '#8696a0' }} />
+                    Tomar control
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Etiquetas activas */}
       {etiquetasLocales.length > 0 && (
-        <div className="px-4 py-1.5 border-b border-zinc-100 flex gap-1.5 flex-wrap">
+        <div
+          className="flex gap-1.5 px-4 py-1.5 flex-wrap shrink-0"
+          style={{ backgroundColor: '#f0f2f5', borderBottom: '1px solid #e9edef' }}
+        >
           {etiquetasLocales.map(e => (
             <span
               key={e.id}
@@ -502,125 +494,205 @@ export default function ChatView({
 
       {/* ETA entrega */}
       {etasPedido && (
-        <div className="px-4 py-2 border-b border-zinc-100 bg-zinc-50 flex items-center gap-2 shrink-0">
-          <span className="text-[11px] text-zinc-500 font-medium">Entrega {etasPedido.numero}:</span>
+        <div
+          className="flex items-center gap-2 px-4 py-2 shrink-0"
+          style={{ backgroundColor: '#f0f2f5', borderBottom: '1px solid #e9edef' }}
+        >
+          <span className="text-[11px] font-medium" style={{ color: '#667781' }}>
+            Entrega {etasPedido.numero}:
+          </span>
           <VentanaEntregaBadge etaTimestamp={etasPedido.etaTimestamp} />
         </div>
       )}
 
-      {/* ── Mensajes ──────────────────────────────────────────────────── */}
+      {/* ── Área de mensajes ────────────────────────────────────────── */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-4"
-        style={{ background: 'linear-gradient(180deg, #fafafa 0%, #f4f4f5 100%)' }}
+        className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5"
+        style={{
+          // Fondo papel de WhatsApp
+          backgroundColor: '#efeae2',
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='400' height='400' viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d9d0c7' fill-opacity='0.3' fill-rule='evenodd'%3E%3Cpath d='M0 200L200 0L400 200L200 400z' /%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundSize: '400px 400px',
+        }}
       >
         {mensajes.length === 0 && (
-          <p className="text-center text-xs text-zinc-300 mt-16 select-none">Sin mensajes aún</p>
+          <div className="flex items-center justify-center py-12">
+            <span
+              className="text-xs px-4 py-2 rounded-lg"
+              style={{ backgroundColor: 'rgba(255,255,255,0.7)', color: '#667781' }}
+            >
+              Sin mensajes aún
+            </span>
+          </div>
         )}
 
         {mensajes.map((msg, idx) => {
           const fechaStr      = formatFecha(msg.created_at)
           const showDate      = fechaStr !== lastDate
           const isNotaInterna = msg.es_nota_interna === true
-          const isFirst       = msg.role !== lastRole || showDate
-          const isLast        = idx === mensajes.length - 1 || mensajes[idx + 1]?.role !== msg.role
+          const isOutgoing    = msg.role === 'dueno' || (msg.role === 'bot' && !isNotaInterna)
           const isDueno       = msg.role === 'dueno'
+          const isBot         = msg.role === 'bot'
 
           lastDate = fechaStr
-          lastRole = msg.role
 
-          const styles = getBubbleStyle(msg.role, isNotaInterna)
+          // Colores de burbuja
+          let bubbleBg: string
+          let bubbleText: string
+          let tailColor: string
+
+          if (isNotaInterna) {
+            bubbleBg   = '#fff8e5'
+            bubbleText = '#92400e'
+            tailColor  = '#fff8e5'
+          } else if (isDueno) {
+            bubbleBg   = '#d9fdd3'
+            bubbleText = '#111b21'
+            tailColor  = '#d9fdd3'
+          } else if (isBot) {
+            bubbleBg   = '#f0f2f5'
+            bubbleText = '#111b21'
+            tailColor  = '#f0f2f5'
+          } else {
+            // cliente
+            bubbleBg   = '#ffffff'
+            bubbleText = '#111b21'
+            tailColor  = '#ffffff'
+          }
 
           return (
             <div key={msg.id}>
               {showDate && (
-                <div className="flex items-center gap-3 my-5">
-                  <div className="flex-1 h-px bg-zinc-200/60" />
-                  <span className="text-[10px] text-zinc-400 font-medium bg-white px-2.5 py-1 rounded-full border border-zinc-200 select-none">
+                <div className="flex items-center justify-center my-3">
+                  <span
+                    className="text-[11px] font-medium px-3 py-1 rounded-lg select-none shadow-sm"
+                    style={{ backgroundColor: '#e1f3fb', color: '#54656f' }}
+                  >
                     {fechaStr}
                   </span>
-                  <div className="flex-1 h-px bg-zinc-200/60" />
                 </div>
               )}
 
               <div
-                className={cn('flex flex-col mb-0.5', isLast && 'mb-3', styles.wrap)}
+                className={cn(
+                  'flex mb-0.5',
+                  isNotaInterna ? 'justify-center' : isOutgoing ? 'justify-end' : 'justify-start'
+                )}
                 onDoubleClick={() => !isNotaInterna && setCitando(msg)}
               >
-                {isFirst && (
-                  <span className={cn(
-                    'text-[10px] font-semibold mb-1 px-1 select-none flex items-center gap-1',
-                    isDueno ? 'self-end text-zinc-400' : 'text-zinc-400'
-                  )}>
-                    {isNotaInterna && <Lock className="w-2.5 h-2.5 text-amber-600" />}
-                    {msg.role === 'bot' && <Bot className="w-2.5 h-2.5" />}
-                    {isNotaInterna ? 'Nota interna' : getRoleLabel(msg.role, primerNombre)}
-                  </span>
-                )}
-
-                <div className={cn('relative', isDueno ? 'self-end' : 'self-start')}>
-                  {isFirst && !isNotaInterna && <BubbleTail role={msg.role} />}
-
-                  <div className={cn(
-                    'px-3.5 py-2.5 text-sm whitespace-pre-wrap break-words leading-relaxed',
-                    'max-w-[min(400px,72vw)]',
-                    styles.bubble
-                  )}>
-                    {/* Mensaje citado */}
-                    {msg.responde_a && (() => {
-                      const citado = mensajes.find(m => m.id === msg.responde_a)
-                      if (!citado) return null
-                      return (
-                        <div className={cn(
-                          'text-xs mb-2 px-2 py-1.5 rounded-lg border-l-2 opacity-70',
-                          isDueno ? 'border-white/40 bg-white/10' : 'border-zinc-400 bg-zinc-100'
-                        )}>
-                          <p className="font-semibold mb-0.5">{getRoleLabel(citado.role, primerNombre)}</p>
-                          <p className="truncate">{citado.contenido}</p>
-                        </div>
-                      )
-                    })()}
-
-                    {/* Audio transcrito */}
-                    {msg.tipo === 'audio' && !msg.media_url && (
-                      <span className="flex items-center gap-1 text-[10px] font-medium text-zinc-400 mb-1.5 select-none">
-                        <Mic className="w-3 h-3" />
-                        Audio transcrito
-                      </span>
-                    )}
-
-                    {/* Media */}
-                    {msg.media_url && msg.media_tipo && (
-                      <div className="mb-2">
-                        <MediaBubble url={msg.media_url} tipo={msg.media_tipo} isDueno={isDueno} />
-                      </div>
-                    )}
-
-                    {/* Texto */}
+                {/* Nota interna: burbuja centrada amarilla */}
+                {isNotaInterna ? (
+                  <div
+                    className="max-w-[80%] px-4 py-2.5 rounded-xl text-xs shadow-sm"
+                    style={{ backgroundColor: bubbleBg, color: bubbleText, border: '1px solid #fde68a' }}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1 opacity-70">
+                      <Lock className="w-3 h-3" />
+                      <span className="font-semibold text-[10px] uppercase tracking-wide">Nota interna</span>
+                    </div>
                     {msg.contenido}
-
-                    {/* Hora */}
-                    <span className={cn(
-                      'text-[10px] ml-2 float-right mt-1 tabular-nums select-none',
-                      styles.time
-                    )}>
+                    <span className="text-[10px] ml-2 float-right mt-1 opacity-60 tabular-nums">
                       {formatHora(msg.created_at)}
                     </span>
                   </div>
-                </div>
-
-                {/* Acción citar (doble-click) hint — solo hover */}
-                {!isNotaInterna && (
-                  <button
-                    onClick={() => setCitando(msg)}
-                    className={cn(
-                      'opacity-0 hover:opacity-100 text-[10px] text-zinc-400 mt-0.5 px-1 transition-opacity flex items-center gap-0.5',
-                      isDueno ? 'self-end' : 'self-start'
+                ) : (
+                  <div className={cn('flex flex-col', isOutgoing ? 'items-end' : 'items-start')}>
+                    {/* Label bot */}
+                    {isBot && (
+                      <span className="text-[10px] flex items-center gap-1 mb-0.5 px-1" style={{ color: '#8696a0' }}>
+                        <Bot className="w-2.5 h-2.5" /> Bot
+                      </span>
                     )}
-                    title="Responder este mensaje"
-                  >
-                    <CornerDownLeft className="w-2.5 h-2.5" />
-                    Responder
-                  </button>
+
+                    {/* Burbuja */}
+                    <div
+                      className="relative max-w-[min(360px,70vw)] rounded-xl shadow-sm overflow-hidden"
+                      style={{ backgroundColor: bubbleBg }}
+                    >
+                      {/* Cola de la burbuja (SVG clip-path approach) */}
+                      {!isOutgoing && (
+                        <div
+                          className="absolute -left-[6px] top-0 w-0 h-0"
+                          style={{
+                            borderRight: `7px solid ${tailColor}`,
+                            borderBottom: '7px solid transparent',
+                          }}
+                        />
+                      )}
+                      {isOutgoing && (
+                        <div
+                          className="absolute -right-[6px] top-0 w-0 h-0"
+                          style={{
+                            borderLeft: `7px solid ${tailColor}`,
+                            borderBottom: '7px solid transparent',
+                          }}
+                        />
+                      )}
+
+                      <div className="px-3 py-2 text-sm whitespace-pre-wrap break-words leading-relaxed"
+                        style={{ color: bubbleText }}
+                      >
+                        {/* Mensaje citado */}
+                        {msg.responde_a && (() => {
+                          const citado = mensajes.find(m => m.id === msg.responde_a)
+                          if (!citado) return null
+                          return (
+                            <div
+                              className="text-xs mb-2 px-2 py-1.5 rounded-lg border-l-[3px]"
+                              style={{
+                                backgroundColor: 'rgba(0,0,0,0.06)',
+                                borderColor: isOutgoing ? '#25d366' : '#53bdeb',
+                              }}
+                            >
+                              <p className="font-semibold mb-0.5" style={{ color: isOutgoing ? '#25d366' : '#53bdeb' }}>
+                                {getRoleLabel(citado.role, primerNombre)}
+                              </p>
+                              <p className="truncate opacity-80">{citado.contenido}</p>
+                            </div>
+                          )
+                        })()}
+
+                        {/* Audio transcrito label */}
+                        {msg.tipo === 'audio' && !msg.media_url && (
+                          <span className="flex items-center gap-1 text-[10px] font-medium mb-1.5 select-none opacity-60">
+                            <Mic className="w-3 h-3" />
+                            Audio transcrito
+                          </span>
+                        )}
+
+                        {/* Media */}
+                        {msg.media_url && msg.media_tipo && (
+                          <div className="mb-2">
+                            <MediaBubble url={msg.media_url} tipo={msg.media_tipo} isOutgoing={isOutgoing} />
+                          </div>
+                        )}
+
+                        {/* Texto */}
+                        <span>{msg.contenido}</span>
+
+                        {/* Hora + checks inline */}
+                        <span className="inline-flex items-center gap-1 ml-2 float-right mt-1">
+                          <span className="text-[10px] tabular-nums select-none" style={{ color: '#8696a0' }}>
+                            {formatHora(msg.created_at)}
+                          </span>
+                          {isOutgoing && (
+                            <CheckCheck className="w-3 h-3 shrink-0" style={{ color: '#53bdeb' }} />
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Botón citar (hover) */}
+                    <button
+                      onClick={() => setCitando(msg)}
+                      className="opacity-0 hover:opacity-100 text-[10px] mt-0.5 px-1 transition-opacity flex items-center gap-0.5"
+                      style={{ color: '#8696a0' }}
+                      title="Responder"
+                    >
+                      <CornerDownLeft className="w-2.5 h-2.5" />
+                      Responder
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -630,117 +702,142 @@ export default function ChatView({
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Error ─────────────────────────────────────────────────────── */}
+      {/* ── Error ─────────────────────────────────────────────────── */}
       {error && (
-        <div className="mx-4 mb-2 px-3 py-2 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
+        <div
+          className="mx-3 mb-1 px-3 py-2 rounded-lg text-xs"
+          style={{ backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}
+        >
           {error}
         </div>
       )}
 
-      {/* ── Cita activa ───────────────────────────────────────────────── */}
+      {/* ── Cita activa ──────────────────────────────────────────── */}
       {citando && (
-        <div className="mx-4 mb-1 px-3 py-2 bg-zinc-100 border-l-2 border-zinc-400 rounded-r-xl flex items-start justify-between gap-2">
+        <div
+          className="mx-3 mb-1 px-3 py-2 rounded-lg flex items-start justify-between gap-2"
+          style={{ backgroundColor: '#f0f2f5', borderLeft: '4px solid #25d366' }}
+        >
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold text-zinc-600">{getRoleLabel(citando.role, primerNombre)}</p>
-            <p className="text-xs text-zinc-500 truncate">{citando.contenido}</p>
+            <p className="text-[11px] font-semibold" style={{ color: '#25d366' }}>
+              {getRoleLabel(citando.role, primerNombre)}
+            </p>
+            <p className="text-xs truncate" style={{ color: '#667781' }}>{citando.contenido}</p>
           </div>
-          <button onClick={() => setCitando(null)} className="text-zinc-400 hover:text-zinc-700 shrink-0">
+          <button onClick={() => setCitando(null)} className="shrink-0" style={{ color: '#8696a0' }}>
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* ── Respuestas rápidas ────────────────────────────────────────── */}
+      {/* ── Respuestas rápidas ────────────────────────────────────── */}
       {showRespuestas && respuestasFiltradas.length > 0 && (
-        <div className="mx-4 mb-1 bg-white border border-zinc-200 rounded-xl shadow-lg overflow-hidden">
+        <div
+          className="mx-3 mb-1 rounded-xl shadow-lg overflow-hidden"
+          style={{ backgroundColor: '#ffffff', border: '1px solid #e9edef' }}
+        >
           {respuestasFiltradas.map(r => (
             <button
               key={r.id}
               onClick={() => aplicarRespuesta(r)}
-              className="w-full text-left px-3 py-2 hover:bg-zinc-50 border-b border-zinc-50 last:border-0"
+              className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 transition"
+              style={{ borderBottom: '1px solid #f0f2f5' }}
             >
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">/
-                  {r.atajo}
+                <span
+                  className="text-[11px] font-bold px-1.5 py-0.5 rounded"
+                  style={{ backgroundColor: '#e8f5e9', color: '#075e54' }}
+                >
+                  /{r.atajo}
                 </span>
-                <span className="text-xs text-zinc-600 truncate">{r.contenido}</span>
+                <span className="text-xs truncate" style={{ color: '#667781' }}>{r.contenido}</span>
               </div>
             </button>
           ))}
         </div>
       )}
 
-      {/* ── Input ─────────────────────────────────────────────────────── */}
-      <div className="px-4 py-3 border-t border-zinc-100 bg-white shrink-0">
-        {/* Modo nota / mensaje */}
+      {/* ── Input área WhatsApp ───────────────────────────────────── */}
+      <div
+        className="px-3 py-2 shrink-0"
+        style={{ backgroundColor: '#f0f2f5' }}
+      >
+        {/* Toggle nota / mensaje */}
         <div className="flex gap-1 mb-2">
           <button
             onClick={() => setModoNota(false)}
-            className={cn(
-              'text-[11px] px-2.5 py-1 rounded-full font-medium transition flex items-center gap-1',
-              !modoNota ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
-            )}
+            className="text-[11px] px-3 py-1 rounded-full font-medium transition"
+            style={!modoNota
+              ? { backgroundColor: '#075e54', color: '#ffffff' }
+              : { backgroundColor: '#e9edef', color: '#667781' }
+            }
           >
-            <Send className="w-2.5 h-2.5" />
+            <Send className="w-2.5 h-2.5 inline mr-1" />
             Mensaje
           </button>
           <button
             onClick={() => setModoNota(true)}
-            className={cn(
-              'text-[11px] px-2.5 py-1 rounded-full font-medium transition flex items-center gap-1',
-              modoNota ? 'bg-amber-500 text-white' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
-            )}
+            className="text-[11px] px-3 py-1 rounded-full font-medium transition flex items-center gap-1"
+            style={modoNota
+              ? { backgroundColor: '#f59e0b', color: '#ffffff' }
+              : { backgroundColor: '#e9edef', color: '#667781' }
+            }
           >
             <StickyNote className="w-2.5 h-2.5" />
             Nota interna
           </button>
         </div>
 
-        {botPausado && !modoNota && (
-          <p className="text-[11px] text-zinc-400 mb-2 select-none">
-            El bot está pausado — tus mensajes llegan directamente al cliente
+        {/* Info contextual */}
+        {!modoNota && botPausado && (
+          <p className="text-[11px] mb-2 px-1 select-none" style={{ color: '#8696a0' }}>
+            Tú al control — los mensajes llegan directamente al cliente
           </p>
         )}
         {modoNota && (
-          <p className="text-[11px] text-amber-600 mb-2 select-none">
+          <p className="text-[11px] mb-2 px-1 select-none" style={{ color: '#92400e' }}>
             <Lock className="inline w-2.5 h-2.5 mr-1" />
-            Nota interna — solo visible en el dashboard, no se envía al cliente
+            Nota interna — no se envía al cliente
           </p>
         )}
 
+        {/* Barra de input */}
         <div className="flex items-end gap-2">
-          <textarea
-            ref={inputRef}
-            value={texto}
-            onChange={(e) => { setTexto(e.target.value); autoResize(e.target) }}
-            onKeyDown={handleKeyDown}
-            placeholder={modoNota ? 'Escribe una nota interna…' : 'Escribe un mensaje… (/ para respuestas rápidas)'}
-            rows={1}
-            className={cn(
-              'flex-1 resize-none rounded-2xl px-4 py-2.5 text-sm text-zinc-900',
-              'focus:outline-none focus:ring-2 focus:border-transparent',
-              'transition placeholder:text-zinc-400 min-h-[44px] max-h-32 leading-relaxed border',
-              modoNota
-                ? 'bg-amber-50 border-amber-200 focus:ring-amber-400'
-                : 'bg-zinc-50 border-zinc-200 focus:ring-zinc-900 focus:border-zinc-900'
-            )}
-          />
+          <div
+            className="flex-1 flex items-end rounded-2xl overflow-hidden"
+            style={{ backgroundColor: '#ffffff' }}
+          >
+            <textarea
+              ref={inputRef}
+              value={texto}
+              onChange={(e) => { setTexto(e.target.value); autoResize(e.target) }}
+              onKeyDown={handleKeyDown}
+              placeholder={modoNota ? 'Escribe una nota interna…' : 'Escribe un mensaje…'}
+              rows={1}
+              className="flex-1 resize-none px-4 py-3 text-sm focus:outline-none min-h-[46px] max-h-32 leading-relaxed"
+              style={{
+                backgroundColor: 'transparent',
+                color: '#111b21',
+              }}
+            />
+          </div>
+
+          {/* Botón enviar (círculo verde) */}
           <button
             onClick={handleEnviar}
             disabled={!texto.trim() || enviando}
-            className={cn(
-              'w-11 h-11 rounded-2xl text-white flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed shrink-0',
-              modoNota ? 'bg-amber-500 hover:bg-amber-600' : 'bg-zinc-900 hover:bg-zinc-800'
-            )}
+            className="w-11 h-11 rounded-full flex items-center justify-center transition shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: modoNota ? '#f59e0b' : '#25d366' }}
           >
             {enviando
-              ? <RefreshCw className="w-4 h-4 animate-spin" />
-              : <Send className="w-4 h-4" />
+              ? <RefreshCw className="w-4 h-4 text-white animate-spin" />
+              : <Send className="w-4 h-4 text-white" />
             }
           </button>
         </div>
-        <p className="text-[10px] text-zinc-300 mt-1.5 select-none">
-          Shift+Enter para nueva línea · / para respuestas rápidas · doble-click para citar
+
+        <p className="text-[10px] mt-1.5 px-1 select-none" style={{ color: '#8696a0' }}>
+          Enter para enviar · Shift+Enter nueva línea · / para respuestas rápidas
         </p>
       </div>
 
