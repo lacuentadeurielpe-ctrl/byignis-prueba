@@ -93,10 +93,13 @@ export async function POST(_req: Request, { params }: Params) {
     }, { status: metaRes.status })
   }
 
-  // Actualizar estado local a pendiente
+  // Guardar meta_template_id + estado pendiente
   await supabase
     .from('plantillas_wa')
-    .update({ meta_status: 'pendiente' })
+    .update({
+      meta_status:      'pendiente',
+      meta_template_id: metaData.id ?? null,
+    })
     .eq('id', id)
 
   return NextResponse.json({ ok: true, meta_id: metaData.id, status: metaData.status })

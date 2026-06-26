@@ -16,7 +16,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   const supabase = await createClient()
   const { data: plantilla, error: errP } = await supabase
     .from('plantillas_wa')
-    .select('nombre, ferreteria_id')
+    .select('nombre, meta_template_id, ferreteria_id')
     .eq('id', id)
     .eq('ferreteria_id', session.ferreteriaId)
     .single()
@@ -36,13 +36,16 @@ export async function DELETE(_req: Request, { params }: Params) {
 
   const accessToken = await desencriptar(metaConfig.access_token_enc)
 
-  const metaRes = await fetch(
-    `https://graph.facebook.com/v18.0/${metaConfig.waba_id}/message_templates?name=${encodeURIComponent(plantilla.nombre)}`,
-    {
-      method:  'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  )
+  // Si tenemos el ID de Meta, usarlo para eliminar solo esa variante de idioma.
+  // Si no, eliminar por nombre (afecta todos los idiomas).
+  const deleteUrl = plantilla.meta_template_id
+    ? `https://graph.facebook.com/v18.0/${metaConfig.waba_id}/message_templates?hsm_id=${plantilla.meta_template_id}&name=${encodeURIComponent(plantilla.nombre)}`
+    : `https://graph.facebook.com/v18.0/${metaConfig.waba_id}/message_templates?name=${encodeURIComponent(plantilla.nombre)}`
+
+  const metaRes = await fetch(deleteUrl, {
+    method:  'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
 
   if (!metaRes.ok) {
     const err = await metaRes.json()
@@ -52,10 +55,10 @@ export async function DELETE(_req: Request, { params }: Params) {
     }, { status: metaRes.status })
   }
 
-  // Resetear estado local a borrador
+  // Resetear estado local
   await supabase
     .from('plantillas_wa')
-    .update({ meta_status: 'borrador', meta_rechazo_motivo: null })
+    .update({ meta_status: 'borrador', meta_rechazo_motivo: null, meta_template_id: null })
     .eq('id', id)
 
   return NextResponse.json({ ok: true })
