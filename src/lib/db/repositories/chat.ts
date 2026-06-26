@@ -299,7 +299,7 @@ export class ChatRepository {
   async obtenerConversacionPorId(ferreteriaId: string, conversacionId: string) {
     const { data, error } = await this.supabase
       .from('conversaciones')
-      .select('*, clientes(nombre, telefono)')
+      .select('*, clientes(id, nombre, telefono), conversacion_etiquetas(etiquetas(id, nombre, color))')
       .eq('id', conversacionId)
       .eq('ferreteria_id', ferreteriaId)
       .single()

@@ -22,6 +22,8 @@ import {
   ScanLine,
   FileText,
   Target,
+  Megaphone,
+  LayoutTemplate,
 } from 'lucide-react'
 import NotificationBadge from '@/components/layout/NotificationBadge'
 import type { Rol } from '@/lib/auth/roles'
@@ -58,6 +60,8 @@ const navGroups: NavGroup[] = [
       { label: 'Catálogo',  href: '/dashboard/catalog',   icon: Package,    permiso: 'ver_stock', moduleName: 'catalog' },
       { label: 'Clientes',  href: '/dashboard/clientes',  icon: Users,      permiso: 'ver_historial_clientes', moduleName: 'clientes' },
       { label: 'CRM / Pipeline', href: '/dashboard/crm',  icon: Target,     permiso: 'ver_historial_clientes', moduleName: 'crm' },
+      { label: 'Difusiones', href: '/dashboard/difusiones', icon: Megaphone, permiso: 'ver_pedidos', moduleName: 'chat' },
+      { label: 'Plantillas WA', href: '/dashboard/plantillas-wa', icon: LayoutTemplate, permiso: 'ver_pedidos', moduleName: 'chat' },
       { label: 'Deudas',    href: '/dashboard/ventas?tab=deudas', icon: CreditCard, permiso: 'ver_creditos', moduleName: 'creditos' },
       { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos', moduleName: 'delivery' },
     ],

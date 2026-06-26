@@ -68,8 +68,21 @@ export default async function ConversationPage({ params }: Props) {
   const clienteRaw   = Array.isArray(conversacion.clientes)
     ? conversacion.clientes[0] ?? null
     : conversacion.clientes
-  const cliente      = clienteRaw as { nombre: string | null; telefono: string } | null
-  const clienteId    = (conversacion as Record<string, unknown>).cliente_id as string | null
+  const cliente      = clienteRaw as { id?: string; nombre: string | null; telefono: string } | null
+  const clienteId    = cliente?.id ?? ((conversacion as Record<string, unknown>).cliente_id as string | null)
+
+  // Etiquetas de esta conversación
+  type EtiquetaRow = { id: string; nombre: string; color: string }
+  const etiquetasJoin = (conversacion as Record<string, unknown>).conversacion_etiquetas as Array<{ etiquetas: EtiquetaRow | null }> | null
+  const etiquetasConv: EtiquetaRow[] = (etiquetasJoin ?? []).map(ce => ce.etiquetas).filter((e): e is EtiquetaRow => e !== null)
+
+  // Todas las etiquetas disponibles del negocio
+  const { data: etiquetasDisponibles } = await supabase
+    .from('etiquetas')
+    .select('id, nombre, color')
+    .eq('ferreteria_id', session.ferreteriaId)
+    .order('orden')
+    .order('nombre')
 
   // Últimos pedidos del cliente para el panel CRM
   let pedidosCliente: any[] = []
@@ -98,6 +111,8 @@ export default async function ConversationPage({ params }: Props) {
           }}
           mensajesIniciales={mensajes ?? []}
           ferreteriaId={session.ferreteriaId}
+          etiquetasConv={etiquetasConv}
+          etiquetasDisponibles={etiquetasDisponibles ?? []}
         />
       </div>
 
