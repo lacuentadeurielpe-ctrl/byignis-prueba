@@ -4,7 +4,8 @@
 import React from 'react'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { enviarDocumento } from '@/lib/whatsapp/ycloud'
+import type { WASender } from '@/lib/whatsapp/types'
+import { resolverSender } from '@/lib/whatsapp/provider'
 import { ComprobantePDF, type DatosComprobante } from './comprobante'
 
 // Repositories
@@ -48,13 +49,12 @@ export async function generarYEnviarComprobante({
   pedidoId,
   ferreteriaId,
   esProforma = false,
-  ycloudApiKey,
+  sender,
 }: {
   pedidoId: string
   ferreteriaId: string
   esProforma?: boolean
-  /** api_key del tenant (desencriptada). Si no se pasa, usa YCLOUD_API_KEY del env */
-  ycloudApiKey?: string
+  sender?: WASender
 }): Promise<ResultadoComprobante> {
   const supabase = createAdminClient()
   const ventasRepo = new VentasRepository(supabase)
@@ -101,9 +101,8 @@ export async function generarYEnviarComprobante({
       : `📄 *${ferreteria.nombre}*\nAquí está tu comprobante N° ${existente.numero_comprobante} del pedido *${pedido.numero_pedido}*. 🙏`
 
     try {
-      const apiKeyR = ycloudApiKey ?? process.env.YCLOUD_API_KEY
-      if (apiKeyR && existente.pdf_url) {
-        await enviarDocumento({ from: fromR, to: telefonoClienteR, pdfUrl: existente.pdf_url, filename: filenameR, caption: captionR, apiKey: ycloudApiKey })
+      if (sender && existente.pdf_url) {
+        await sender.enviarDocumento({ to: telefonoClienteR, pdfUrl: existente.pdf_url, filename: filenameR, caption: captionR })
         await facturacionRepo.actualizarEnvioComprobante(existente.id, true, null)
       }
     } catch (_) { /* no fallar */ }
@@ -227,7 +226,6 @@ export async function generarYEnviarComprobante({
 
   // ── 9. Enviar por WhatsApp (con un reintento) ────────────────────────────
   const telefonoCliente = (pedido as any).clientes?.telefono ?? pedido.telefono_cliente
-  const from = ferreteria.telefono_whatsapp.replace(/^\+/, '')
   const filename = `${numeroComprobante}.pdf`
   const caption = esProforma
     ? `📋 *${ferreteria.nombre}*\nAquí está tu proforma N° ${numeroComprobante} del pedido *${pedido.numero_pedido}*.\nCuando el encargado confirme el pedido recibirás el comprobante oficial. 🙏`
@@ -236,24 +234,19 @@ export async function generarYEnviarComprobante({
   let enviado = false
   let errorEnvio: string | null = null
 
-  const apiKeyEnvio = ycloudApiKey ?? process.env.YCLOUD_API_KEY
-  for (let intento = 0; intento < 2; intento++) {
-    try {
-      if (apiKeyEnvio && apiKeyEnvio !== 'your_ycloud_api_key') {
-        await enviarDocumento({ from, to: telefonoCliente, pdfUrl: publicUrl, filename, caption, apiKey: ycloudApiKey })
+  if (sender) {
+    for (let intento = 0; intento < 2; intento++) {
+      try {
+        await sender.enviarDocumento({ to: telefonoCliente, pdfUrl: publicUrl, filename, caption })
         enviado = true
         break
-      } else {
-        // YCloud no configurado — registrar pero no fallar
-        errorEnvio = 'YCloud API key no configurada'
-        break
-      }
-    } catch (err) {
-      errorEnvio = err instanceof Error ? err.message : String(err)
-      if (intento === 0) {
-        await new Promise((r) => setTimeout(r, 2000))
+      } catch (err) {
+        errorEnvio = err instanceof Error ? err.message : String(err)
+        if (intento === 0) await new Promise((r) => setTimeout(r, 2000))
       }
     }
+  } else {
+    errorEnvio = 'Sin proveedor WhatsApp configurado'
   }
 
   // ── 10. Actualizar estado de envío en DB ─────────────────────────────────
@@ -278,13 +271,13 @@ export async function generarYEnviarCotizacionPDF({
   ferreteriaId,
   telefonoCliente,
   nombreCliente,
-  ycloudApiKey,
+  sender,
 }: {
   cotizacionId: string
   ferreteriaId: string
   telefonoCliente: string
   nombreCliente?: string
-  ycloudApiKey?: string
+  sender?: WASender
 }): Promise<ResultadoComprobante> {
   const supabase = createAdminClient()
   const facturacionRepo = new FacturacionRepository(supabase)
@@ -383,19 +376,15 @@ export async function generarYEnviarCotizacionPDF({
   const { data: { publicUrl } } = supabase.storage.from('comprobantes').getPublicUrl(storagePath)
 
   // ── 9. Enviar por WhatsApp ───────────────────────────────────────────────────
-  const from = ferreteria.telefono_whatsapp.replace(/^\+/, '')
-  const apiKeyEnvio = ycloudApiKey ?? process.env.YCLOUD_API_KEY
   let enviado = false
 
-  if (apiKeyEnvio && apiKeyEnvio !== 'your_ycloud_api_key') {
+  if (sender) {
     try {
-      await enviarDocumento({
-        from,
-        to: telefonoCliente,
+      await sender.enviarDocumento({
+        to:       telefonoCliente,
         pdfUrl:   publicUrl,
         filename: `${numeroCotizacion}.pdf`,
         caption:  `📋 *${ferreteria.nombre}*\nAquí tienes tu cotización *${numeroCotizacion}*.\n_Precios válidos sujetos a disponibilidad._ 🙏`,
-        apiKey:   ycloudApiKey,
       })
       enviado = true
     } catch (e) {
@@ -460,19 +449,14 @@ export async function reenviarComprobante({
   }
 
   const telefonoCliente = (pedido as any).clientes?.telefono ?? pedido.telefono_cliente
-  const from = ferreteria.telefono_whatsapp.replace(/^\+/, '')
+  const telefonoFerreteria = ferreteria.telefono_whatsapp.replace(/^\+/, '')
   const filename = `${comprobante.numero_comprobante}.pdf`
   const caption = `📄 *${ferreteria.nombre}*\nAquí está su comprobante N° ${comprobante.numero_comprobante} del pedido *${pedido.numero_pedido}* (reenvío). 🙏`
 
   try {
-    if (process.env.YCLOUD_API_KEY && process.env.YCLOUD_API_KEY !== 'your_ycloud_api_key' && comprobante.pdf_url) {
-      await enviarDocumento({
-        from,
-        to: telefonoCliente,
-        pdfUrl: comprobante.pdf_url,
-        filename,
-        caption,
-      })
+    if (comprobante.pdf_url) {
+      const sender = await resolverSender(supabase, ferreteriaId, telefonoFerreteria)
+      await sender?.enviarDocumento({ to: telefonoCliente, pdfUrl: comprobante.pdf_url, filename, caption })
     }
 
     await facturacionRepo.actualizarEnvioComprobante(comprobante.id, true, null)

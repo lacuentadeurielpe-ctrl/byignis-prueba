@@ -83,12 +83,13 @@ async function sendDeliveryNotification(
       to: ctx.telefonoCliente,
       from: ctx.telefonoWhatsapp,
       message,
-      metadata: { apiKey: ctx.apiKey },
+      metadata: { apiKey: ctx.apiKey, sender: ctx.sender },
     },
     {
       ferreteriaId: ctx.ferreteriaId,
       telefonoWhatsapp: ctx.telefonoWhatsapp,
       apiKey: ctx.apiKey,
+      sender: ctx.sender,
     },
   )
 

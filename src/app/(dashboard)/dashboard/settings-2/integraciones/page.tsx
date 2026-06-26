@@ -9,9 +9,16 @@ import IntegrationCard from './components/IntegrationCard'
 
 const INTEGRACIONES_CORE = [
   {
+    id: 'meta',
+    name: 'Meta WhatsApp',
+    description: 'API oficial de WhatsApp Business (proveedor principal)',
+    icon: MessageCircle,
+    href: '/dashboard/settings-2/integraciones/meta',
+  },
+  {
     id: 'ycloud',
     name: 'YCloud',
-    description: 'API WhatsApp para mensajes bidireccionales',
+    description: 'API WhatsApp alternativa (respaldo automático)',
     icon: MessageCircle,
     href: '/dashboard/settings-2/integraciones/ycloud',
   },
@@ -120,8 +127,8 @@ export default function IntegracionesPage() {
         {/* Core */}
         <div>
           <h3 className="text-sm font-semibold text-zinc-900 mb-1">Operaciones</h3>
-          <p className="text-xs text-zinc-500 mb-4">WhatsApp, pagos, facturación y mapas</p>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <p className="text-xs text-zinc-500 mb-4">WhatsApp (Meta + YCloud), pagos, facturación y mapas</p>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {INTEGRACIONES_CORE.map(integration => (
               <IntegrationCard key={integration.id} {...integration} actionLabel="Configurar" />
             ))}

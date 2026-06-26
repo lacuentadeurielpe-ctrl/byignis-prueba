@@ -14,12 +14,9 @@ import {
   verificarFirmaWebhook,
   extraerMensaje,
   descargarMedia,
-  marcarLeido,
   type YCloudWebhookPayload,
-  enviarMensaje,
-  enviarImagen,
-  enviarDocumento,
 } from '@/lib/whatsapp/ycloud'
+import { crearYCloudSender } from '@/lib/whatsapp/drivers/ycloud-driver'
 import { handleIncomingMessage } from '@/lib/bot/message-handler'
 import { transcribirAudio, analizarImagen, openAIDisponible } from '@/lib/ai/openai'
 import { registrarMovimiento, estimarCostoUsd } from '@/lib/credits'
@@ -186,9 +183,16 @@ export async function POST(request: Request) {
   const ycloudMessageId = mensaje.id
   const telefonoEnvio = telefonoFerreteria.replace(/^\+/, '')
 
+  // Crear sender YCloud (abstracción multi-proveedor)
+  const sender = crearYCloudSender({
+    ferreteriaId:      ferreteria.id,
+    telefonoFerreteria: telefonoEnvio,
+    apiKey:            tenantApiKey ?? '',
+  })
+
   // Marcar como leído inmediatamente → ticks azules para el cliente (fire & forget)
   if (ycloudMessageId) {
-    marcarLeido(ycloudMessageId, tenantApiKey).catch(() => {})
+    sender.marcarLeido?.(ycloudMessageId).catch(() => {})
   }
 
   // Bug 1 fix: ignorar si el remitente es la propia ferretería (eco del bot)
@@ -264,15 +268,10 @@ export async function POST(request: Request) {
     if (!textoMensaje) {
       // Sin transcripción: responder al cliente sin pausar el bot
       // (pausar bloquearía los mensajes de texto posteriores)
-      try {
-        await enviarMensaje({
-          from: telefonoEnvio, to: telefonoCliente,
-          texto: '🎧 Recibí tu nota de voz. Escríbeme tu consulta por texto y te ayudo enseguida 🙌',
-          apiKey: tenantApiKey,
-        }).catch(() => {})
-      } catch (e) {
-        console.error('[Webhook] Error en fallback de audio:', e)
-      }
+      await sender.enviarMensaje({
+        to:    telefonoCliente,
+        texto: '🎧 Recibí tu nota de voz. Escríbeme tu consulta por texto y te ayudo enseguida 🙌',
+      }).catch(() => {})
       return NextResponse.json({ ok: true })
     }
 
@@ -362,20 +361,16 @@ export async function POST(request: Request) {
                 // Notificar al dueño si necesita revisión manual
                 if (resultado.estado === 'pendiente_revision' && resultado.mensajeDueno && ferreteria.telefono_dueno) {
                   const montoStr = datosComprobante.monto ? `S/${datosComprobante.monto.toFixed(2)}` : 'monto no legible'
-                  enviarMensaje({
-                    from: telefonoEnvio,
-                    to: ferreteria.telefono_dueno,
+                  sender.enviarMensaje({
+                    to:    ferreteria.telefono_dueno,
                     texto: `${resultado.mensajeDueno}\nCliente: ${telefonoCliente}\nMonto: ${montoStr}\nOp: ${datosComprobante.numero_operacion ?? 'N/A'}\n\nRevisa en el panel 👇`,
-                    apiKey: tenantApiKey,
                   }).catch(() => {})
                 }
 
                 // Responder al cliente directamente — sin pasar por el LLM
-                await enviarMensaje({
-                  from: telefonoEnvio,
-                  to: telefonoCliente,
+                await sender.enviarMensaje({
+                  to:    telefonoCliente,
                   texto: resultado.mensajeCliente,
-                  apiKey: tenantApiKey,
                 }).catch(() => {})
 
                 // Guardar en historial de conversación (fire & forget)
@@ -469,10 +464,9 @@ export async function POST(request: Request) {
       if (caption) {
         textoMensaje = caption
       } else {
-        await enviarMensaje({
-          from: telefonoEnvio, to: telefonoCliente,
+        await sender.enviarMensaje({
+          to:    telefonoCliente,
           texto: `📄 Recibí tu ${nombre ? `archivo "${nombre}"` : 'documento'}. Para ayudarte mejor, cuéntame por texto qué necesitas 🙌`,
-          apiKey: tenantApiKey,
         }).catch(() => {})
         return NextResponse.json({ ok: true })
       }
@@ -489,7 +483,7 @@ export async function POST(request: Request) {
     }
     const respuesta = tipos[mensaje.type]
     if (respuesta) {
-      await enviarMensaje({ from: telefonoEnvio, to: telefonoCliente, texto: respuesta, apiKey: tenantApiKey }).catch(() => {})
+      await sender.enviarMensaje({ to: telefonoCliente, texto: respuesta }).catch(() => {})
     }
     return NextResponse.json({ ok: true })
   }
@@ -517,7 +511,7 @@ export async function POST(request: Request) {
         ? msgCfg.valor
         : 'Estamos realizando mantenimiento. El asistente estará disponible en breve.'
 
-      await enviarMensaje({ from: telefonoEnvio, to: telefonoCliente, texto: mensajeMant, apiKey: tenantApiKey }).catch(() => {})
+      await sender.enviarMensaje({ to: telefonoCliente, texto: mensajeMant }).catch(() => {})
       return NextResponse.json({ ok: true })
     }
   }
@@ -554,7 +548,7 @@ export async function POST(request: Request) {
       telefonoCliente,
       textoMensaje: textoCompleto,
       ycloudMessageId: ycloudMessageIdFinal,
-      ycloudApiKey: tenantApiKey,
+      sender,
     })
 
     if (!respuesta) {
@@ -568,7 +562,7 @@ export async function POST(request: Request) {
       await new Promise((resolve) => setTimeout(resolve, delayRespuestaMs))
     }
 
-    await enviarMensaje({ from: telefonoEnvio, to: telefonoCliente, texto: respuesta, apiKey: tenantApiKey })
+    await sender.enviarMensaje({ to: telefonoCliente, texto: respuesta })
     console.log(`[Webhook] ENVIADO OK a ${telefonoCliente} (${respuesta.length} chars)`)
 
     // Marcar conexión YCloud como activa (fire & forget)
@@ -580,11 +574,11 @@ export async function POST(request: Request) {
       for (const extra of mensajesExtra) {
         try {
           if (extra.tipo === 'texto') {
-            await enviarMensaje({ from: telefonoEnvio, to: telefonoCliente, texto: extra.texto, apiKey: tenantApiKey })
+            await sender.enviarMensaje({ to: telefonoCliente, texto: extra.texto })
           } else if (extra.tipo === 'imagen') {
-            await enviarImagen({ from: telefonoEnvio, to: telefonoCliente, imageUrl: extra.url, caption: extra.caption, apiKey: tenantApiKey })
+            await sender.enviarImagen({ to: telefonoCliente, imageUrl: extra.url, caption: extra.caption })
           } else if (extra.tipo === 'documento') {
-            await enviarDocumento({ from: telefonoEnvio, to: telefonoCliente, pdfUrl: extra.url, filename: extra.filename, caption: extra.caption, apiKey: tenantApiKey })
+            await sender.enviarDocumento({ to: telefonoCliente, pdfUrl: extra.url, filename: extra.filename, caption: extra.caption })
           }
         } catch (e) {
           console.error('[Webhook] Error enviando mensaje extra:', e instanceof Error ? e.message : e)
@@ -606,13 +600,10 @@ export async function POST(request: Request) {
       })
       .eq('ferreteria_id', ferreteria.id)
 
-    try {
-      await enviarMensaje({
-        from: telefonoEnvio, to: telefonoCliente,
-        texto: 'Disculpe, tuvimos un inconveniente. Por favor intente nuevamente en un momento. 🙏',
-        apiKey: tenantApiKey,
-      })
-    } catch { /* nada más que hacer */ }
+    await sender.enviarMensaje({
+      to:    telefonoCliente,
+      texto: 'Disculpe, tuvimos un inconveniente. Por favor intente nuevamente en un momento. 🙏',
+    }).catch(() => {})
     return NextResponse.json({ ok: true })
   }
 }

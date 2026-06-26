@@ -15,6 +15,7 @@ interface Tenant {
   creditos_disp:    number
   creditos_mes:     number
   mrr:              number
+  proveedor_wa:     'meta' | 'ycloud' | 'ninguno'
 }
 
 interface Plan {
@@ -251,6 +252,7 @@ export default function TenantsClient({ tenants, planes, filtroInicial = '' }: P
                   className="rounded border-gray-600 bg-gray-800 accent-indigo-500" />
               </th>
               <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Ferretería</th>
+              <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">WA</th>
               <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Plan</th>
               <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Estado</th>
               <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Créditos</th>
@@ -262,7 +264,7 @@ export default function TenantsClient({ tenants, planes, filtroInicial = '' }: P
           <tbody className="divide-y divide-gray-800">
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-gray-500">
+                <td colSpan={9} className="text-center py-12 text-gray-500">
                   No hay tenants con estos filtros
                 </td>
               </tr>
@@ -282,6 +284,21 @@ export default function TenantsClient({ tenants, planes, filtroInicial = '' }: P
                   <td className="px-4 py-3">
                     <div className="font-medium text-white text-sm">{t.nombre}</div>
                     <div className="text-xs text-gray-500 font-mono">{t.telefono_whatsapp}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {t.proveedor_wa === 'meta' && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-900/40 text-blue-300 border border-blue-700 font-medium">
+                        Meta
+                      </span>
+                    )}
+                    {t.proveedor_wa === 'ycloud' && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-purple-900/40 text-purple-300 border border-purple-700 font-medium">
+                        YCloud
+                      </span>
+                    )}
+                    {t.proveedor_wa === 'ninguno' && (
+                      <span className="text-xs text-gray-600">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-400">{t.plan_nombre ?? '—'}</td>
                   <td className="px-4 py-3">

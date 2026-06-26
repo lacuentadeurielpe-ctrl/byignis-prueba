@@ -13,7 +13,7 @@ import { pausarBot } from '@/lib/bot/session'
 import { generarYEnviarComprobante, generarYEnviarCotizacionPDF, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
 import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
-import { enviarMensaje, enviarDocumento, enviarImagen } from '@/lib/whatsapp/ycloud'
+import type { WASender } from '@/lib/whatsapp/types'
 import { enviarMensajeTelegram } from '@/lib/integrations/telegram'
 import { enviarEmail } from '@/lib/integrations/resend'
 import { getValidAccessToken } from '@/lib/integrations/google'
@@ -40,7 +40,7 @@ export interface ToolContext {
   zonas: ZonaDelivery[]
   datosFlujo: DatosFlujoPedido | null
   ventanaGraciaMinutos?: number
-  ycloudApiKey?: string
+  sender?: WASender
   agentesActivos?: AgentesActivos      // F4: si undefined → todo activo
   herramientasDesactivadas?: string[]  // tools explícitamente apagadas (desde bot_herramientas_desactivadas)
   integracionesConectadas?: string[]   // tipos de integración activas (para gating de tools que las requieren)
@@ -1224,7 +1224,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     generarYEnviarComprobante({
       pedidoId:     pedidoId,
       ferreteriaId: ctx.ferreteriaId,
-      ycloudApiKey: ctx.ycloudApiKey,
+      sender: ctx.sender,
     }).catch((e) => console.error('[crear_pedido] Error comprobante:', e))
 
     // Enviar instrucciones de pago si hay métodos digitales configurados
@@ -1235,8 +1235,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
         .eq('id', ctx.ferreteriaId)
         .single()
 
-      if (ferrPago && ctx.ycloudApiKey) {
-        const telefonoWA = (ferrPago as unknown as { telefono_whatsapp?: string }).telefono_whatsapp ?? null
+      if (ferrPago && ctx.sender) {
         const metodosActivos: string[] = (ferrPago as unknown as { metodos_pago_activos?: string[] }).metodos_pago_activos ?? []
         const datosYape = (ferrPago as unknown as { datos_yape?: Record<string, string> }).datos_yape ?? null
         const datosTransferencia = (ferrPago as unknown as { datos_transferencia?: Record<string, string> }).datos_transferencia ?? null
@@ -1257,26 +1256,17 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
           lineasPago.push(`💵 *Efectivo* al momento de la entrega`)
         }
 
-        if (lineasPago.length > 0 && telefonoWA) {
+        if (lineasPago.length > 0) {
           const textoPago =
             `💳 *Formas de pago disponibles:*\n\n` +
             lineasPago.join('\n\n') +
             `\n\nSi pagas por Yape o transferencia, envía el comprobante y lo confirmaremos. 🙏`
-          enviarMensaje({
-            from: telefonoWA,
-            to: ctx.telefonoCliente,
-            texto: textoPago,
-            apiKey: ctx.ycloudApiKey,
-          }).catch((e) => console.error('[crear_pedido] Error instrucciones pago:', e))
+          ctx.sender.enviarMensaje({ to: ctx.telefonoCliente, texto: textoPago })
+            .catch((e) => console.error('[crear_pedido] Error instrucciones pago:', e))
 
           if (metodosActivos.includes('yape') && datosYape?.qr_url) {
-            enviarImagen({
-              from: telefonoWA,
-              to: ctx.telefonoCliente,
-              imageUrl: datosYape.qr_url,
-              caption: `QR de Yape — ${datosYape.numero}`,
-              apiKey: ctx.ycloudApiKey,
-            }).catch((e) => console.error('[crear_pedido] Error QR Yape:', e))
+            ctx.sender.enviarImagen({ to: ctx.telefonoCliente, imageUrl: datosYape.qr_url, caption: `QR de Yape — ${datosYape.numero}` })
+              .catch((e) => console.error('[crear_pedido] Error QR Yape:', e))
           }
         }
       }
@@ -1352,7 +1342,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
                 nombreFerreteria: (ferr as unknown as { nombre?: string }).nombre ?? '',
                 telefonoWhatsapp: telefonoWA.replace(/^\+/, ''),
                 telefonoCliente: ctx.telefonoCliente,
-                apiKey: ctx.ycloudApiKey,
+                sender: ctx.sender,
               }
               await notificarAsignacion(notifCtx, etaMinutos, ctx.supabase, eta)
             }
@@ -1518,7 +1508,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
 
     try {
       await eliminarComprobantePedido(pedido.id, ctx.ferreteriaId)
-      await generarYEnviarComprobante({ pedidoId: pedido.id, ferreteriaId: ctx.ferreteriaId, esProforma: false, ycloudApiKey: ctx.ycloudApiKey })
+      await generarYEnviarComprobante({ pedidoId: pedido.id, ferreteriaId: ctx.ferreteriaId, esProforma: false, sender: ctx.sender })
     } catch (e) { console.error('[agregar_a_pedido_reciente] Error comprobante:', e) }
 
     return {
@@ -1768,7 +1758,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
         pedidoId:     ped.id,
         ferreteriaId: ctx.ferreteriaId,
         esProforma,
-        ycloudApiKey: ctx.ycloudApiKey,
+        sender: ctx.sender,
       })
       if (!resultadoNV.ok) {
         return { ok: false, error: resultadoNV.error ?? 'Error generando documento' }
@@ -1793,7 +1783,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
         pedidoId:     ped.id,
         ferreteriaId: ctx.ferreteriaId,
         esProforma:   false,
-        ycloudApiKey: ctx.ycloudApiKey,
+        sender: ctx.sender,
       })
       if (!resultadoNV.ok) {
         return { ok: false, error: resultadoNV.error ?? 'Error generando documento' }
@@ -1841,14 +1831,12 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
         tokenPlano:    ctx.nubefactTokenPlano || '',
       })
 
-      if (resultFact.ok && resultFact.pdfUrl && telefonoWA && ctx.ycloudApiKey) {
-        enviarDocumento({
-          from:     telefonoWA,
+      if (resultFact.ok && resultFact.pdfUrl && ctx.sender) {
+        ctx.sender.enviarDocumento({
           to:       ctx.telefonoCliente,
           pdfUrl:   resultFact.pdfUrl,
           filename: `${resultFact.numeroCompleto ?? 'factura'}.pdf`,
           caption:  `Factura ${resultFact.numeroCompleto} — Pedido ${ped.numero_pedido}`,
-          apiKey:   ctx.ycloudApiKey,
         }).catch((e) => console.error('[solicitar_comprobante] Error enviando factura:', e))
 
         return {
@@ -1879,14 +1867,12 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       tokenPlano:    ctx.nubefactTokenPlano || '',
     })
 
-    if (resultBol.ok && resultBol.pdfUrl && telefonoWA && ctx.ycloudApiKey) {
-      enviarDocumento({
-        from:     telefonoWA,
+    if (resultBol.ok && resultBol.pdfUrl && ctx.sender) {
+      ctx.sender.enviarDocumento({
         to:       ctx.telefonoCliente,
         pdfUrl:   resultBol.pdfUrl,
         filename: `${resultBol.numeroCompleto ?? 'boleta'}.pdf`,
         caption:  `Boleta ${resultBol.numeroCompleto} — Pedido ${ped.numero_pedido}`,
-        apiKey:   ctx.ycloudApiKey,
       }).catch((e) => console.error('[solicitar_comprobante] Error enviando boleta:', e))
 
       return {
@@ -1901,7 +1887,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     } else if (resultBol.tokenInvalido) {
       // Fallback a nota de venta
       const resultNV = await generarYEnviarComprobante({
-        pedidoId: ped.id, ferreteriaId: ctx.ferreteriaId, ycloudApiKey: ctx.ycloudApiKey,
+        pedidoId: ped.id, ferreteriaId: ctx.ferreteriaId, sender: ctx.sender,
       })
       if (resultNV.ok) {
         return {
@@ -1941,7 +1927,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       ferreteriaId:    ctx.ferreteriaId,
       telefonoCliente: ctx.telefonoCliente,
       nombreCliente,
-      ycloudApiKey:    ctx.ycloudApiKey,
+      sender:          ctx.sender,
     })
 
     if (!resultado.ok) {
@@ -2182,7 +2168,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
         cotizacionId:   cidActivo,
         ferreteriaId:   ctx.ferreteriaId,
         telefonoCliente: ctx.telefonoCliente,
-        ycloudApiKey:    ctx.ycloudApiKey,
+        sender:          ctx.sender,
       })
       if (!res.ok) return { ok: false, error: res.error }
       pdfUrl     = res.pdf_url ?? null

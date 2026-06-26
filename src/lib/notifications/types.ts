@@ -6,6 +6,8 @@
  * the NotificationChannel interface.
  */
 
+import type { WASender } from '@/lib/whatsapp/types'
+
 // ── Channel Interface ────────────────────────────────────────────────────────
 
 export interface NotificationChannel {
@@ -26,6 +28,7 @@ export interface ChannelContext {
   ferreteriaId: string
   telefonoWhatsapp?: string
   apiKey?: string
+  sender?: WASender
 }
 
 export interface SendParams {
@@ -68,6 +71,7 @@ export interface DeliveryNotificationContext {
   telefonoWhatsapp: string
   telefonoCliente: string
   apiKey?: string
+  sender?: WASender
   trackingUrl?: string
   repartidorNombre?: string
 }

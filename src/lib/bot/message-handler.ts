@@ -23,7 +23,7 @@ import {
 import { ChatRepository } from '@/lib/db/repositories/chat'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { formatHora } from '@/lib/utils'
-import { enviarMensaje as enviarWhatsApp, enviarEscribiendo } from '@/lib/whatsapp/ycloud'
+import type { WASender } from '@/lib/whatsapp/types'
 import { generarYEnviarComprobante, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -77,8 +77,7 @@ interface HandleMessageParams {
   telefonoCliente: string
   textoMensaje: string
   ycloudMessageId?: string
-  /** api_key del tenant para enviar WhatsApp (desencriptada) */
-  ycloudApiKey?: string
+  sender: WASender
 }
 
 type MensajeExtra =
@@ -126,7 +125,7 @@ export async function handleIncomingMessage({
   telefonoCliente,
   textoMensaje,
   ycloudMessageId,
-  ycloudApiKey,
+  sender,
 }: HandleMessageParams): Promise<HandleMessageResult> {
 
   console.log(`[Bot] handleIncomingMessage INICIO — cliente=${telefonoCliente} texto="${textoMensaje.slice(0, 40)}"`)
@@ -354,10 +353,7 @@ export async function handleIncomingMessage({
       })
 
       // Typing indicator antes de esperar la respuesta del AI
-      if (ycloudApiKey) {
-        const fromNum = (ferreteria as any).telefono_whatsapp ?? ''
-        enviarEscribiendo({ from: fromNum, to: telefonoCliente, apiKey: ycloudApiKey }).catch(() => {})
-      }
+      sender.enviarEscribiendo?.(telefonoCliente).catch(() => {})
 
       const resultado = await ejecutarOrquestador(
         systemPromptOrq,
@@ -378,7 +374,7 @@ export async function handleIncomingMessage({
           zonas:               zonas ?? [],      // para crear_pedido (zona lookup)
           datosFlujo,                            // cotización activa y paso actual
           ventanaGraciaMinutos: (config as unknown as { ventana_gracia_minutos?: number } | null)?.ventana_gracia_minutos ?? 30,
-          ycloudApiKey,
+          sender,
           agentesActivos,                        // F4: tools habilitadas por tenant
           herramientasDesactivadas,              // FASE 0: tools apagadas individualmente
           integracionesConectadas,               // FASE 3: qué integraciones están configuradas
@@ -417,9 +413,9 @@ export async function handleIncomingMessage({
       )
 
       // Alertar al dueño si tiene teléfono configurado y la última alerta fue hace >1h
-      // (evitar spam: el campo ultimo_error_at en configuracion_ycloud sirve como throttle)
-      if (ycloudApiKey && ferreteria.telefono_dueno && ferreteria.telefono_whatsapp) {
+      if (ferreteria.telefono_dueno) {
         try {
+          // Rate-limit: leer último error de ambos proveedores (usar configuracion_ycloud como throttle genérico)
           const { data: ycConf } = await supabase
             .from('configuracion_ycloud')
             .select('ultimo_error_at')
@@ -431,16 +427,13 @@ export async function handleIncomingMessage({
           const UNA_HORA_MS = 60 * 60 * 1000
 
           if (pasaronMs > UNA_HORA_MS) {
-            // Marcar antes de enviar para no duplicar si el send tarda
             void supabase.from('configuracion_ycloud')
               .update({ ultimo_error_at: new Date().toISOString(), ultimo_error: `[DEGRADED] ${errMsg.slice(0, 300)}` })
               .eq('ferreteria_id', ferreteria.id)
 
-            enviarWhatsApp({
-              from:   ferreteria.telefono_whatsapp,
-              to:     ferreteria.telefono_dueno,
-              texto:  `⚠️ *Uintegrus — Alerta técnica*\nEl bot tuvo un problema y está en modo básico por ahora.\n\nError: ${errMsg.slice(0, 150)}\n\nTu bot sigue respondiendo pero con funciones reducidas. Revisa los logs si persiste.`,
-              apiKey: ycloudApiKey,
+            sender.enviarMensaje({
+              to:    ferreteria.telefono_dueno,
+              texto: `⚠️ *Uintegrus — Alerta técnica*\nEl bot tuvo un problema y está en modo básico por ahora.\n\nError: ${errMsg.slice(0, 150)}\n\nTu bot sigue respondiendo pero con funciones reducidas. Revisa los logs si persiste.`,
             }).catch(() => {})
           }
         } catch { /* no bloquear el flujo por fallo en la alerta */ }
@@ -879,7 +872,7 @@ export async function handleIncomingMessage({
       generarYEnviarComprobante({
         pedidoId: pedido.id,
         ferreteriaId: ferreteria.id,
-        ycloudApiKey,
+        sender,
       }).catch((err) => {
         console.error('[Bot] Error generando comprobante:', err)
       })
@@ -1224,7 +1217,7 @@ export async function handleIncomingMessage({
           pedidoId:     pedidoTarget.id,
           ferreteriaId: ferreteria.id,
           esProforma,
-          ycloudApiKey,
+          sender,
         })
 
         if (resultadoNV.ok) {
@@ -1251,7 +1244,7 @@ export async function handleIncomingMessage({
           pedidoId:     pedidoTarget.id,
           ferreteriaId: ferreteria.id,
           esProforma:   false,
-          ycloudApiKey,
+          sender,
         })
         if (resultadoNV.ok) {
           mensajeFinal =
@@ -1338,7 +1331,7 @@ export async function handleIncomingMessage({
         })
       } else if (resultBol.tokenInvalido) {
         // Token Nubefact inválido — fallback a nota de venta
-        const resultNV = await generarYEnviarComprobante({ pedidoId: pedidoTarget.id, ferreteriaId: ferreteria.id, ycloudApiKey })
+        const resultNV = await generarYEnviarComprobante({ pedidoId: pedidoTarget.id, ferreteriaId: ferreteria.id, sender })
         mensajeFinal = resultNV.ok
           ? `🧾 Tu *nota de venta ${resultNV.numero_comprobante}* del pedido *${pedidoTarget.numero_pedido}*. (La boleta electrónica está temporalmente no disponible, el encargado te la envía 🙏)`
           : 'Tuve un problema generando el comprobante. El encargado te lo enviará directamente 🙏'

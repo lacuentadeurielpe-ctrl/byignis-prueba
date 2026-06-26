@@ -3,9 +3,8 @@ import { orderMachine, OrderContext } from '../machines/order.machine'
 import { VentasRepository } from '../db/repositories/ventas'
 import { DeliveryRepository } from '../db/repositories/logistica'
 import { FacturacionRepository } from '../db/repositories/facturacion'
-import { enviarMensaje } from '../whatsapp/ycloud'
 import { generarYEnviarComprobante } from '../pdf/generar-comprobante'
-import { getYCloudApiKey } from '../tenant'
+import { resolverSender } from '../whatsapp/provider'
 import { logAccion, AccionAuditada } from '../audit'
 import { SupabaseClient } from '@supabase/supabase-js'
 
@@ -134,15 +133,9 @@ export class OrderStateService {
             const msg = this.getMensaje(params.mensajeKey, pedidoActual.numero_pedido, ferreteria.nombre)
             
             if (msg && telefono) {
-              const apiKey = await getYCloudApiKey(this.ferreteriaId)
-              if (apiKey) {
-                await enviarMensaje({
-                  from: ferreteria.telefono_whatsapp.replace(/^\+/, ''),
-                  to: telefono,
-                  texto: msg,
-                  apiKey
-                })
-              }
+              const telefWA = ferreteria.telefono_whatsapp.replace(/^\+/, '')
+              const sender = await resolverSender(this.supabase, this.ferreteriaId, telefWA)
+              await sender?.enviarMensaje({ to: telefono, texto: msg })
             }
           } catch (e) { console.error('Error notificando cliente', e) }
         },
@@ -154,17 +147,13 @@ export class OrderStateService {
                 const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
                 const zona = (pedidoActual as any).zonas_delivery?.nombre ?? null
                 const nombre = (pedidoActual.clientes as any)?.nombre ?? pedidoActual.nombre_cliente ?? 'Cliente'
-                const apiKey = await getYCloudApiKey(this.ferreteriaId)
-                if (!apiKey) return
+                const telefWA2 = ferreteria.telefono_whatsapp.replace(/^\+/, '')
+                const senderRep = await resolverSender(this.supabase, this.ferreteriaId, telefWA2)
+                if (!senderRep) return
 
                 for (const rep of repartidores) {
                   const msg = `🚚 *Nuevo pedido disponible — ${ferreteria.nombre}*\n\nPedido: *${pedidoActual.numero_pedido}*\nCliente: ${nombre}${zona ? `\nZona: ${zona}` : ''}\nTotal: S/ ${pedidoActual.total.toFixed(2)}\n\n👉 Entra a tu app para aceptarlo:\n${baseUrl}/delivery/${rep.token}`
-                  enviarMensaje({
-                    from: ferreteria.telefono_whatsapp.replace(/^\+/, ''),
-                    to: rep.telefono!,
-                    texto: msg,
-                    apiKey
-                  }).catch(() => {})
+                  senderRep.enviarMensaje({ to: rep.telefono!, texto: msg }).catch(() => {})
                 }
               }
             }
@@ -172,14 +161,13 @@ export class OrderStateService {
         },
         emitirComprobante: async () => {
           try {
-            const apiKey = await getYCloudApiKey(this.ferreteriaId)
-            if (apiKey) {
-              await generarYEnviarComprobante({
-                pedidoId,
-                ferreteriaId: this.ferreteriaId,
-                ycloudApiKey: apiKey
-              })
-            }
+            const telefWA3 = ferreteria.telefono_whatsapp.replace(/^\+/, '')
+            const senderComp = await resolverSender(this.supabase, this.ferreteriaId, telefWA3)
+            await generarYEnviarComprobante({
+              pedidoId,
+              ferreteriaId: this.ferreteriaId,
+              sender: senderComp ?? undefined,
+            })
           } catch (e) { console.error('Error emitiendo comprobante', e) }
         },
         descontarStock: async () => {
