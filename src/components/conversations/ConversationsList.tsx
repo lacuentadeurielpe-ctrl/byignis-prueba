@@ -381,15 +381,24 @@ export default function ConversationsList({ inicial, ferreteriaId, initialFiltro
             const sinLeer  = conv.no_leido_count > 0
             const isMenuOpen = menuOpen === conv.id
 
+            const abrirConv = () => {
+              router.push(`/dashboard/conversations/${conv.id}`)
+              if (sinLeer) fetch(`/api/bandeja/${conv.id}/leer`, { method: 'POST' })
+                .then(() => setConversaciones(prev => prev.map(c => c.id === conv.id ? { ...c, no_leido_count: 0 } : c)))
+            }
+
             return (
               <div key={conv.id} className="relative">
-                <button
-                  onClick={() => {
-                    router.push(`/dashboard/conversations/${conv.id}`)
-                    if (sinLeer) fetch(`/api/bandeja/${conv.id}/leer`, { method: 'POST' })
-                      .then(() => setConversaciones(prev => prev.map(c => c.id === conv.id ? { ...c, no_leido_count: 0 } : c)))
-                  }}
-                  className="w-full text-left transition-colors"
+                {/* Fila como div (no <button>): contiene los <button> del toggle y
+                    el menú. Un <button> dentro de otro es HTML inválido — el parser
+                    forzaba el cierre de los <div> internos y, en cascada, expulsaba
+                    el ChatView fuera del layout (el bug del "chat duplicado"). */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={abrirConv}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirConv() } }}
+                  className="w-full text-left transition-colors cursor-pointer outline-none"
                   style={{
                     backgroundColor: isActive ? '#f0f2f5' : undefined,
                     borderBottom: '1px solid #e9edef',
@@ -522,7 +531,7 @@ export default function ConversationsList({ inicial, ferreteriaId, initialFiltro
                     </div>
 
                   </div>
-                </button>
+                </div>
 
                 {/* Menú contextual */}
                 {isMenuOpen && (
