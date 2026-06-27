@@ -135,11 +135,22 @@ export default function ConversationsList({ inicial, ferreteriaId, initialFiltro
       )
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'mensajes' },
-        () => { router.refresh() }
+        // Actualiza la preview local sin un router.refresh() completo.
+        // Un refresh en cada mensaje de cualquier conversación puede dejar
+        // contenido duplicado en el DOM durante transiciones de navegación.
+        (payload) => {
+          const msg = payload.new as { conversacion_id: string; contenido: string; role: string }
+          setConversaciones(prev => prev.map(c =>
+            c.id === msg.conversacion_id
+              ? { ...c, ultimo_mensaje: msg.contenido, rol_ultimo: msg.role, ultima_actividad: new Date().toISOString() }
+              : c
+          ))
+        }
       )
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [ferreteriaId, router])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ferreteriaId])
 
   function getNombreCliente(conv: ConversacionItem) {
     return conv.clientes?.nombre ?? conv.clientes?.telefono ?? 'Cliente'
