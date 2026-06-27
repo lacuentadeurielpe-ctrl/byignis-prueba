@@ -2,6 +2,7 @@
 // Solo activo si OPENAI_API_KEY está configurado
 
 import { GoogleGenerativeAI, SchemaType, type Schema } from '@google/generative-ai'
+import { reintentarIA } from '@/lib/ai/retry'
 
 const OPENAI_BASE = 'https://api.openai.com/v1'
 
@@ -173,10 +174,14 @@ Si es comprobante_pago, extrae monto, destinatario, operacion_id y fecha en "pag
       },
     })
 
-    const result = await model.generateContent([
-      prompt,
-      { inlineData: { data: base64, mimeType: mime } },
-    ])
+    // Reintento con backoff: Gemini devuelve 503 "high demand" con frecuencia.
+    const result = await reintentarIA(
+      () => model.generateContent([
+        prompt,
+        { inlineData: { data: base64, mimeType: mime } },
+      ]),
+      { etiqueta: 'Gemini/vision' },
+    )
 
     const textResponse = result.response.text()
     const meta = result.response.usageMetadata

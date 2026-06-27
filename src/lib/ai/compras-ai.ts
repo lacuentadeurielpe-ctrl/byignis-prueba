@@ -8,6 +8,7 @@
  */
 
 import { normalizarUnidad } from '@/lib/constantes/unidades'
+import { reintentarIA } from '@/lib/ai/retry'
 
 import { GoogleGenerativeAI, SchemaType, Schema } from '@google/generative-ai'
 
@@ -139,13 +140,22 @@ export async function extraerCompraDeImagenes(
   let jsonResult: any = null
 
   try {
-    const result = await model.generateContent([prompt, ...imageParts])
+    // Reintento con backoff: Gemini devuelve 503 "high demand" con frecuencia.
+    const result = await reintentarIA(
+      () => model.generateContent([prompt, ...imageParts]),
+      { etiqueta: 'Gemini/compras' },
+    )
     const textResponse = result.response.text()
     const cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim()
     jsonResult = JSON.parse(cleanJson)
   } catch (error: any) {
     console.error('[Gemini] Error al comunicarse con Gemini:', error)
-    throw new Error('Error al analizar la imagen con IA: ' + error.message)
+    const transitorio = /503|overloaded|high demand|service unavailable|unavailable|429|rate limit/i.test(String(error?.message ?? ''))
+    throw new Error(
+      transitorio
+        ? 'El servicio de IA de Google está temporalmente saturado. Espera unos segundos y vuelve a intentar.'
+        : 'Error al analizar la imagen con IA: ' + error.message,
+    )
   }
 
   let rucEmisor = jsonResult.ruc_proveedor
