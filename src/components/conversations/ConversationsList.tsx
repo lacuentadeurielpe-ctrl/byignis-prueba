@@ -129,9 +129,33 @@ export default function ConversationsList({ inicial, ferreteriaId, initialFiltro
     const supabase = createClient()
     const channel  = supabase
       .channel(`conversaciones-${ferreteriaId}`)
+      // UPDATE de una conversación (marcar leído, pausar bot, archivar, estado…):
+      // se fusiona en el estado local. Un router.refresh() aquí corre una
+      // condición de carrera con la navegación entre chats y duplica el render
+      // de la página (el bug del "chat duplicado"): marcar-como-leído al abrir
+      // un chat dispara este UPDATE justo mientras Next.js transiciona de ruta.
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'conversaciones', filter: `ferreteria_id=eq.${ferreteriaId}` },
+        { event: 'UPDATE', schema: 'public', table: 'conversaciones', filter: `ferreteria_id=eq.${ferreteriaId}` },
+        (payload) => {
+          const row = payload.new as Partial<ConversacionItem> & { id: string }
+          setConversaciones(prev => prev.map(c =>
+            c.id === row.id ? { ...c, ...row, clientes: c.clientes, etiquetas: c.etiquetas } : c
+          ))
+        }
+      )
+      // INSERT de una conversación nueva: necesita los datos del cliente unidos
+      // desde el servidor, así que aquí sí refrescamos (evento poco frecuente y
+      // no ligado a una navegación en curso).
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'conversaciones', filter: `ferreteria_id=eq.${ferreteriaId}` },
         () => { router.refresh() }
+      )
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'conversaciones', filter: `ferreteria_id=eq.${ferreteriaId}` },
+        (payload) => {
+          const oldId = (payload.old as { id?: string })?.id
+          if (oldId) setConversaciones(prev => prev.filter(c => c.id !== oldId))
+        }
       )
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'mensajes' },
@@ -192,7 +216,11 @@ export default function ConversationsList({ inicial, ferreteriaId, initialFiltro
             : { paused: true, motivo: 'owner_dashboard' }
         ),
       })
-      router.refresh()
+      // Actualización optimista; el UPDATE también llega vía realtime.
+      // (Evitamos router.refresh() para no duplicar el render.)
+      setConversaciones(prev => prev.map(c =>
+        c.id === conv.id ? { ...c, bot_pausado: !conv.bot_pausado } : c
+      ))
     } finally {
       setBotControlLoading(null)
     }

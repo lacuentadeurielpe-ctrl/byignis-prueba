@@ -243,12 +243,17 @@ export default function ChatView({
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ texto: contenido, responde_a: citando?.id ?? null }),
         })
+        const body = await res.json()
         if (!res.ok) {
-          const body = await res.json()
           throw new Error(body.error ?? 'Error al enviar')
         }
+        // Agregar el mensaje localmente (la subscripción realtime lo deduplica
+        // por id). Evitamos router.refresh(), que en carrera con la navegación
+        // duplicaba el render de la página.
+        if (body?.id) {
+          setMensajes(prev => prev.some(m => m.id === body.id) ? prev : [...prev, body as Mensaje])
+        }
         setBotPausado(true)
-        router.refresh()
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido')
@@ -266,7 +271,6 @@ export default function ChatView({
       const res = await fetch(`/api/conversations/${conversacion.id}/resume`, { method: 'POST' })
       if (!res.ok) throw new Error('Error al reactivar el bot')
       setBotPausado(false)
-      router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
     } finally {
@@ -285,7 +289,6 @@ export default function ChatView({
       })
       if (!res.ok) throw new Error('Error al pausar el bot')
       setBotPausado(true)
-      router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
     } finally {
