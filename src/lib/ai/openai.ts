@@ -74,6 +74,76 @@ function getGeminiKey(): string | null {
   return process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? null
 }
 
+/**
+ * Fallback de visión con OpenAI GPT-4o cuando Gemini falla (503 "high demand", etc.).
+ *
+ * Reutiliza el MISMO prompt que se le pasó a Gemini (que ya pide el JSON con la
+ * estructura exacta), así que el JSON resultante es compatible con el parseo del
+ * caller. Devuelve `null` si no hay `OPENAI_API_KEY` o si no hay imágenes válidas.
+ *
+ * Nota: GPT-4o Vision NO acepta PDFs (solo imágenes); los PDFs se descartan.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function visionJSONOpenAI(opts: {
+  imagenes: { base64: string; mimeType: string }[]
+  prompt: string
+  maxTokens?: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+}): Promise<{ json: any; tokensEntrada: number; tokensSalida: number } | null> {
+  const key = getKey()
+  if (!key) return null
+
+  // GPT-4o Vision solo acepta imágenes (no PDF)
+  const imagenesValidas = opts.imagenes.filter((i) => !i.mimeType.toLowerCase().includes('pdf'))
+  if (imagenesValidas.length === 0) return null
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const content: any[] = [
+    { type: 'text', text: opts.prompt + '\n\nResponde ÚNICAMENTE con el JSON pedido, sin texto adicional ni markdown.' },
+  ]
+  for (const img of imagenesValidas) {
+    const base64Data = img.base64.replace(/^data:[^;]+;base64,/, '')
+    const mime = img.mimeType.includes('png') ? 'image/png'
+      : img.mimeType.includes('webp') ? 'image/webp'
+      : 'image/jpeg'
+    content.push({ type: 'image_url', image_url: { url: `data:${mime};base64,${base64Data}` } })
+  }
+
+  const data = await reintentarIA(
+    async () => {
+      const r = await fetch(`${OPENAI_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content }],
+          response_format: { type: 'json_object' },
+          max_tokens: opts.maxTokens ?? 4000,
+          temperature: 0.1,
+        }),
+      })
+      if (!r.ok) {
+        const txt = await r.text()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const err: any = new Error(`OpenAI vision ${r.status}: ${txt.slice(0, 200)}`)
+        err.status = r.status
+        throw err
+      }
+      return r.json()
+    },
+    { etiqueta: 'OpenAI/vision' },
+  )
+
+  const texto = data?.choices?.[0]?.message?.content ?? ''
+  const cleanJson = String(texto).replace(/```json/gi, '').replace(/```/g, '').trim()
+  const json = JSON.parse(cleanJson)
+  return {
+    json,
+    tokensEntrada: data?.usage?.prompt_tokens ?? 0,
+    tokensSalida: data?.usage?.completion_tokens ?? 0,
+  }
+}
+
 export interface AnalisisImagen {
   tipo: 'lista_productos' | 'producto_individual' | 'comprobante_pago' | 'consulta' | 'otro'
   descripcion: string
@@ -193,6 +263,20 @@ Si es comprobante_pago, extrae monto, destinatario, operacion_id y fecha en "pag
     return { analisis: JSON.parse(cleanJson) as AnalisisImagen, tokensEntrada, tokensSalida }
   } catch (e) {
     console.error('[Gemini] Error en analizarImagen:', e instanceof Error ? e.message : e)
+    // Fallback a OpenAI GPT-4o Vision cuando Gemini falla (503, etc.)
+    try {
+      const fb = await visionJSONOpenAI({
+        imagenes: [{ base64, mimeType: mime }],
+        prompt,
+        maxTokens: 1000,
+      })
+      if (fb?.json) {
+        console.log('[IA] Vision resuelta con fallback OpenAI GPT-4o')
+        return { analisis: fb.json as AnalisisImagen, tokensEntrada: fb.tokensEntrada, tokensSalida: fb.tokensSalida }
+      }
+    } catch (fbErr) {
+      console.error('[OpenAI] Fallback de visión también falló:', fbErr instanceof Error ? fbErr.message : fbErr)
+    }
     return { analisis: null, tokensEntrada: 0, tokensSalida: 0 }
   }
 }

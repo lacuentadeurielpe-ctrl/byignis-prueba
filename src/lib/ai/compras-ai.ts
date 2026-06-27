@@ -9,6 +9,7 @@
 
 import { normalizarUnidad } from '@/lib/constantes/unidades'
 import { reintentarIA } from '@/lib/ai/retry'
+import { visionJSONOpenAI } from '@/lib/ai/openai'
 
 import { GoogleGenerativeAI, SchemaType, Schema } from '@google/generative-ai'
 
@@ -150,12 +151,27 @@ export async function extraerCompraDeImagenes(
     jsonResult = JSON.parse(cleanJson)
   } catch (error: any) {
     console.error('[Gemini] Error al comunicarse con Gemini:', error)
-    const transitorio = /503|overloaded|high demand|service unavailable|unavailable|429|rate limit/i.test(String(error?.message ?? ''))
-    throw new Error(
-      transitorio
-        ? 'El servicio de IA de Google está temporalmente saturado. Espera unos segundos y vuelve a intentar.'
-        : 'Error al analizar la imagen con IA: ' + error.message,
-    )
+
+    // Fallback a OpenAI GPT-4o Vision (mismo prompt → mismo JSON).
+    // No aplica a PDFs (GPT-4o Vision no los acepta): visionJSONOpenAI devuelve null.
+    try {
+      const fb = await visionJSONOpenAI({ imagenes, prompt, maxTokens: 4000 })
+      if (fb?.json) {
+        console.log('[IA] Extracción de factura resuelta con fallback OpenAI GPT-4o')
+        jsonResult = fb.json
+      }
+    } catch (fbErr: any) {
+      console.error('[OpenAI] Fallback de visión también falló:', fbErr?.message ?? fbErr)
+    }
+
+    if (!jsonResult) {
+      const transitorio = /503|overloaded|high demand|service unavailable|unavailable|429|rate limit/i.test(String(error?.message ?? ''))
+      throw new Error(
+        transitorio
+          ? 'El servicio de IA está temporalmente saturado. Espera unos segundos y vuelve a intentar.'
+          : 'Error al analizar la imagen con IA: ' + error.message,
+      )
+    }
   }
 
   let rucEmisor = jsonResult.ruc_proveedor

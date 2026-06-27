@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { procesarComprobanteUniversal } from '@/lib/ai/extractor/core'
 
+// Encadena Gemini (con reintentos) → fallback OpenAI GPT-4o si falla.
+export const maxDuration = 60
+
 export async function POST(request: Request) {
   const session = await getSessionInfo()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
