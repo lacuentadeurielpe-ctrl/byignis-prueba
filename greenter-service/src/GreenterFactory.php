@@ -35,9 +35,12 @@ class GreenterFactory
             throw new \RuntimeException('No se pudo leer el certificado PFX. Error OpenSSL: ' . $opensslErr);
         }
 
+        // Greenter 4.x espera un PEM combinado: certificado + clave privada
+        $certPem = $pfxData['cert'];
+        openssl_pkey_export($pfxData['pkey'], $keyPem);
+
         $see = new See();
-        $see->setCertificate($pfxData['cert']);
-        $see->setPrivateKey($pfxData['pkey']);
+        $see->setCertificate($certPem . $keyPem);
 
         // Credenciales SOL
         $ruc     = $payload['ruc'] ?? ($payload['emisor']['ruc'] ?? '');
