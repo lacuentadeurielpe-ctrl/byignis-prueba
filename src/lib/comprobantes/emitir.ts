@@ -6,6 +6,7 @@
 //   - El correlativo usa pg_advisory_xact_lock para evitar duplicados concurrentes
 
 import { enviarANubefact }   from '@/lib/nubefact'
+import { crearNotaVentaInterna } from './nota-venta'
 import {
   NUBEFACT_TIPO,
   NUBEFACT_TIPO_DOC_CLIENTE,
@@ -123,51 +124,21 @@ function esErrorDuplicadoNubefact(errorMsg?: string): boolean {
 }
 
 // ── Helper para Nota de Venta (Split Billing) ────────────────────────────────
+// Delega al helper compartido `crearNotaVentaInterna` (agnóstico al proveedor).
 async function procesarItemsInformales(
   supabase: any,
   ferreteriaId: string,
   pedidoId: string,
   itemsInformales: any[],
-  todosLosItems: any[], // Agregado para que el ticket interno tenga el total completo
+  todosLosItems: any[], // Para que el ticket interno tenga el total completo
   clienteNombre: string,
   clienteDoc: string,
   emitidoPor: string
 ) {
   if (itemsInformales.length === 0) return undefined
-
-  const { data: corrDataNV } = await supabase
-    .rpc('generar_numero_comprobante', {
-      p_ferreteria_id: ferreteriaId,
-      p_tipo:          'nota_venta',
-      p_serie:         'NV01'
-    })
-  
-  if (!corrDataNV) return undefined
-
-  const { numero, numero_completo } = corrDataNV
-  
-  // La nota de venta (ticket interno) mostrará TODOS los productos del pedido
-  // para que el cajero/almacén sepa todo lo que el cliente lleva,
-  // y el total cuadre con lo que el cliente pagó en caja.
-  const subtotalNV = todosLosItems.reduce((sum: number, i: any) => sum + i.subtotal, 0)
-
-  const { data: nv } = await supabase.from('comprobantes').insert({
-    ferreteria_id: ferreteriaId,
-    pedido_id: pedidoId,
-    tipo: 'nota_venta',
-    serie: 'NV01',
-    numero,
-    numero_completo,
-    estado: 'emitido',
-    subtotal: subtotalNV,
-    igv: 0,
-    total: subtotalNV,
-    cliente_nombre: clienteNombre || 'CLIENTE VARIOS',
-    cliente_ruc_dni: clienteDoc || '',
-    emitido_por: emitidoPor
-  }).select('id').single()
-
-  return nv?.id
+  return crearNotaVentaInterna({
+    supabase, ferreteriaId, pedidoId, todosLosItems, clienteNombre, clienteDoc, emitidoPor,
+  })
 }
 
 // ── Función principal ─────────────────────────────────────────────────────────

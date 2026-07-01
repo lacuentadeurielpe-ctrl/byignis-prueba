@@ -6,6 +6,7 @@
 //   - Parseo del CDR de respuesta
 
 import { desencriptar } from '@/lib/encryption'
+import { crearNotaVentaInterna } from '@/lib/comprobantes/nota-venta'
 import type {
   ProveedorFacturacion,
   OpcionesEmisionBoleta,
@@ -139,10 +140,12 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       })
     if (!corrData) return { ok: false, error: 'Error generando correlativo' }
 
-    const items = await mapearItems(opts.supabase, opts.pedidoId)
-    // Solo los productos explícitamente marcados facturable=true van al XML SUNAT
-    const itemsFormales = items.filter((i: any) => i.productos?.facturable === true)
-    if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables en este pedido (todos tienen facturable=false o no están en catálogo)' }
+    const todosLosItems = await mapearItems(opts.supabase, opts.pedidoId)
+    // Formales (van al XML SUNAT) = todo salvo lo marcado explícitamente facturable=false.
+    // Mismo criterio que el flujo Nubefact para comportamiento consistente entre proveedores.
+    const itemsFormales   = todosLosItems.filter((i: any) => i.productos?.facturable !== false)
+    const itemsInformales = todosLosItems.filter((i: any) => i.productos?.facturable === false)
+    if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables en este pedido (todos tienen facturable=false).' }
 
     const respuesta = await llamarGreenter(creds.greenterUrl, 'boleta/emitir', {
       modo:         creds.modo,
@@ -198,12 +201,26 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       .select('id')
       .single()
 
+    // Split billing: si hay ítems no facturables, generar nota de venta interna
+    const comprobanteSecundarioId = itemsInformales.length > 0
+      ? await crearNotaVentaInterna({
+          supabase:      opts.supabase,
+          ferreteriaId:  opts.ferreteriaId,
+          pedidoId:      opts.pedidoId,
+          todosLosItems,
+          clienteNombre: opts.clienteNombre,
+          clienteDoc:    opts.clienteDni.replace(/\D/g, ''),
+          emitidoPor:    opts.emitidoPor,
+        })
+      : undefined
+
     return {
       ok:            true,
       comprobanteId: comp?.id,
       numeroCompleto: respuesta.numero_completo,
       pdfUrl:        respuesta.pdf_url,
       xmlUrl:        respuesta.xml_url,
+      comprobanteSecundarioId,
     }
   }
 
@@ -227,8 +244,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       return { ok: false, error: `RUC inválido: debe tener 11 dígitos (recibido: "${clienteRucLimpio}")` }
     }
 
-    const items = await mapearItems(opts.supabase, opts.pedidoId)
-    const itemsFormales = items.filter((i: any) => i.productos?.facturable === true)
+    const todosLosItems = await mapearItems(opts.supabase, opts.pedidoId)
+    const itemsFormales   = todosLosItems.filter((i: any) => i.productos?.facturable !== false)
+    const itemsInformales = todosLosItems.filter((i: any) => i.productos?.facturable === false)
     if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables en este pedido' }
 
     const respuesta = await llamarGreenter(creds.greenterUrl, 'factura/emitir', {
@@ -284,12 +302,26 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       .select('id')
       .single()
 
+    // Split billing: nota de venta interna para los ítems no facturables
+    const comprobanteSecundarioId = itemsInformales.length > 0
+      ? await crearNotaVentaInterna({
+          supabase:      opts.supabase,
+          ferreteriaId:  opts.ferreteriaId,
+          pedidoId:      opts.pedidoId,
+          todosLosItems,
+          clienteNombre: opts.clienteNombre,
+          clienteDoc:    clienteRucLimpio,
+          emitidoPor:    opts.emitidoPor,
+        })
+      : undefined
+
     return {
       ok:            true,
       comprobanteId: comp?.id,
       numeroCompleto: respuesta.numero_completo,
       pdfUrl:        respuesta.pdf_url,
       xmlUrl:        respuesta.xml_url,
+      comprobanteSecundarioId,
     }
   }
 
