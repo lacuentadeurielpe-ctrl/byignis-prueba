@@ -31,7 +31,8 @@ class GreenterFactory
         // Parsear el PFX para obtener clave privada y certificado público
         $pfxData = [];
         if (!openssl_pkcs12_read($pfxBytes, $pfxData, $cert['clave'] ?? '')) {
-            throw new \RuntimeException('No se pudo leer el certificado PFX. Verifica la contraseña.');
+            $opensslErr = openssl_error_string() ?: 'sin detalle';
+            throw new \RuntimeException('No se pudo leer el certificado PFX. Error OpenSSL: ' . $opensslErr);
         }
 
         $see = new See();
