@@ -493,28 +493,39 @@ export default function SunatDirectoPage() {
           </div>
         </FormSection>
 
-        {/* Guía de homologación */}
-        <FormSection title="Homologación SUNAT" description="Pasos para habilitar la emisión en producción" icon={<Info className="w-5 h-5" />}>
+        {/* Guía de activación */}
+        <FormSection title="Cómo activar SUNAT Directo" description="Sigue estos pasos en orden — el paso 2 es obligatorio o SUNAT rechazará tus comprobantes" icon={<Info className="w-5 h-5" />}>
           <ol className="space-y-3 text-sm text-zinc-700">
             <li className="flex gap-3">
               <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">1</span>
-              <span><strong>Tramita tu CDT gratuito</strong> en SUNAT (portal SOL → Certificados → CDT MYPE). Es un archivo .pfx con contraseña. Válido 3 años.</span>
+              <span><strong>Consigue tu certificado digital.</strong> Puede ser el CDT gratuito para MYPE (SUNAT SOL → Certificado Digital Tributario) o uno de una entidad autorizada. Es un archivo <em>.pfx</em> con contraseña.</span>
             </li>
             <li className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">2</span>
-              <span><strong>Ingresa tus datos</strong> en este formulario, sube el .pfx y guarda. Selecciona modo <em>Beta</em>.</span>
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">2</span>
+              <span>
+                <strong>Habilita tu perfil de emisor electrónico en SUNAT SOL</strong> (paso obligatorio — sin esto SUNAT rechaza con error <em>0111 “no tiene el perfil”</em>). Entra a <em>Empresas → Comprobantes de pago → SEE – Del Contribuyente → Certificado Digital → Registro y Mantenimiento de Correo y Certificados Digitales</em> y ahí:
+                <ul className="mt-1 ml-1 list-disc list-inside space-y-0.5 text-zinc-600">
+                  <li>Marca <strong>“Deseo emitir a través del SEE – Del Contribuyente”</strong>.</li>
+                  <li><strong>Registra y confirma tu correo electrónico</strong> — SUNAT te envía un código de verificación al email; ingrésalo para confirmarlo.</li>
+                  <li><strong>Registra tu certificado digital</strong> (el mismo .pfx que subirás aquí).</li>
+                </ul>
+              </span>
             </li>
             <li className="flex gap-3">
               <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">3</span>
-              <span><strong>Prueba la conexión</strong> con el botón "Probar credenciales". Debe decir "Verificadas correctamente".</span>
+              <span><strong>Ingresa tus datos aquí</strong>, sube el .pfx con su contraseña y guarda.</span>
             </li>
             <li className="flex gap-3">
               <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">4</span>
-              <span><strong>Emite 10 comprobantes de prueba</strong> desde el módulo de Ventas — SUNAT los recibe en modo beta y te confirma que el formato es correcto.</span>
+              <span><strong>Prueba la conexión</strong> con “Probar credenciales”. Debe decir “Verificadas correctamente”.</span>
             </li>
             <li className="flex gap-3">
               <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">5</span>
-              <span><strong>Cambia a modo Producción</strong> aquí y haz clic en "Activar SUNAT Directo". Desde ese momento tus comprobantes son válidos legalmente.</span>
+              <span><strong>Clic en “Emitir 10 boletas de prueba ahora”.</strong> El sistema completa la validación con SUNAT automáticamente y tu cuenta pasa sola a modo Producción.</span>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">6</span>
+              <span><strong>Haz clic en “Activar SUNAT Directo”.</strong> Desde ese momento tus boletas y facturas se emiten con tu certificado, válidas ante SUNAT, desde Ventas, POS y el bot de WhatsApp.</span>
             </li>
           </ol>
         </FormSection>
