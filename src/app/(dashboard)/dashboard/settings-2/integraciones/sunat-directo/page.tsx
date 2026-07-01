@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { FileText, AlertCircle, CheckCircle, Loader2, Eye, EyeOff, Upload, Info, ExternalLink } from 'lucide-react'
+import { FileText, AlertCircle, CheckCircle, Loader2, Eye, EyeOff, Upload, Info, ExternalLink, Zap } from 'lucide-react'
 import SettingsHeader from '../../components/SettingsHeader'
 import FormSection from '../../components/FormSection'
 
@@ -40,6 +40,8 @@ export default function SunatDirectoPage() {
   const [showCertClave, setShowCertClave] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
+  const [isHomologando, setIsHomologando] = useState(false)
+  const [homoResultados, setHomoResultados] = useState<Array<{ok:boolean;numero?:number;numero_completo?:string;cdr_codigo?:string;error?:string}>>([])
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -139,6 +141,27 @@ export default function SunatDirectoPage() {
       setSuccess('Revertido a Nubefact como proveedor de facturación')
       setEstado(prev => prev ? { ...prev, proveedor_activo: 'nubefact' } : prev)
     }
+  }
+
+  const handleHomologar = async () => {
+    setIsHomologando(true)
+    setHomoResultados([])
+    setError('')
+    setSuccess('')
+    try {
+      const res = await fetch('/api/settings-2/integraciones/sunat-directo/homologar', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) { setError(json.error ?? 'Error al iniciar homologación'); return }
+      setHomoResultados(json.resultados ?? [])
+      if (json.completado) {
+        setSuccess(`¡Homologación completada! ${json.exitosos}/10 boletas aceptadas por SUNAT. Ya puedes cambiar a modo Producción.`)
+        const r2 = await fetch('/api/settings-2/integraciones/sunat-directo')
+        setEstado(await r2.json())
+      } else {
+        setError(`Solo ${json.exitosos}/10 boletas fueron aceptadas. Revisa los errores abajo.`)
+      }
+    } catch { setError('Error de conexión') }
+    finally { setIsHomologando(false) }
   }
 
   const handleEliminar = async () => {
@@ -256,6 +279,88 @@ export default function SunatDirectoPage() {
             )}
           </div>
         </FormSection>
+
+        {/* Panel de homologación automática */}
+        {creds && creds.estado === 'activo' && creds.modo === 'beta' && (
+          <FormSection
+            title="Homologación automática"
+            description="Emite los 10 comprobantes de prueba requeridos por SUNAT antes de activar producción"
+            icon={<Zap className="w-5 h-5" />}
+          >
+            {creds.homologacion_completada_at ? (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-emerald-900">Homologación completada</p>
+                  <p className="text-sm text-emerald-700">
+                    Las 10 boletas fueron aceptadas por SUNAT el{' '}
+                    {new Date(creds.homologacion_completada_at).toLocaleString('es-PE', { timeZone: 'America/Lima' })}.
+                    Cambia el modo a <strong>Producción</strong> y activa SUNAT Directo.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Barra de progreso */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm text-zinc-600">Comprobantes enviados a SUNAT</span>
+                    <span className="text-sm font-medium text-zinc-800">{creds.homologacion_casos_completados}/10</span>
+                  </div>
+                  <div className="w-full bg-zinc-100 rounded-full h-2">
+                    <div
+                      className="bg-indigo-500 h-2 rounded-full transition-all"
+                      style={{ width: `${(creds.homologacion_casos_completados / 10) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                <p className="text-sm text-zinc-600">
+                  El sistema emitirá <strong>10 boletas de prueba</strong> en modo Beta con un producto de test (S/10.00).
+                  SUNAT las recibe para validar el formato XML — no tienen validez legal ni generan deuda tributaria.
+                </p>
+
+                {/* Resultados */}
+                {homoResultados.length > 0 && (
+                  <div className="space-y-1 max-h-52 overflow-y-auto border border-zinc-100 rounded-lg p-2">
+                    {homoResultados.map((r, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex items-center gap-2 text-xs p-1.5 rounded ${
+                          r.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                        }`}
+                      >
+                        {r.ok
+                          ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                          : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                        <span>
+                          {r.ok
+                            ? `✓ ${r.numero_completo} — CDR ${r.cdr_codigo ?? '?'}`
+                            : `✗ Boleta ${r.numero}: ${r.error}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={handleHomologar}
+                  disabled={isHomologando}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 transition-colors"
+                >
+                  {isHomologando
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Zap className="w-4 h-4" />}
+                  {isHomologando ? 'Emitiendo comprobantes de prueba... (puede tardar ~2 min)' : 'Emitir 10 boletas de prueba ahora'}
+                </button>
+
+                <p className="text-xs text-zinc-400">
+                  El proceso tarda ~1-2 minutos. No cierres la página. Las boletas en modo Beta no tienen validez legal.
+                </p>
+              </div>
+            )}
+          </FormSection>
+        )}
 
         {/* Formulario de credenciales */}
         <FormSection
