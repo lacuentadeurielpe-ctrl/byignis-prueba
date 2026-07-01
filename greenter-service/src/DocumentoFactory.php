@@ -69,7 +69,6 @@ class DocumentoFactory
 
             $mtoValorVenta = round($valorUnitario * $cantidad, 2);
             $igvItem       = round($mtoValorVenta * $igvRate, 2);
-            $mtoTotal      = round($mtoValorVenta + $igvItem, 2);
 
             $detalle = new SaleDetail();
             $detalle
@@ -80,11 +79,11 @@ class DocumentoFactory
                 ->setMtoValorUnitario($valorUnitario)
                 ->setMtoValorVenta($mtoValorVenta)
                 ->setMtoBaseIgv($mtoValorVenta)
+                ->setPorcentajeIgv(18.0)
                 ->setIgv($igvItem)
                 ->setTipAfeIgv('10')  // Gravado - Operación Onerosa
                 ->setTotalImpuestos($igvItem)
-                ->setMtoPrecioUnitario(round($precioUnitario, 2))
-                ->setMtoTotal($mtoTotal);
+                ->setMtoPrecioUnitario(round($precioUnitario, 2));
 
             $detalles[] = $detalle;
         }
