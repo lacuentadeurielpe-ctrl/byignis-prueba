@@ -140,8 +140,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     if (!corrData) return { ok: false, error: 'Error generando correlativo' }
 
     const items = await mapearItems(opts.supabase, opts.pedidoId)
-    const itemsFormales = items.filter((i: any) => i.productos?.facturable !== false)
-    if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables' }
+    // Solo los productos explícitamente marcados facturable=true van al XML SUNAT
+    const itemsFormales = items.filter((i: any) => i.productos?.facturable === true)
+    if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables en este pedido (todos tienen facturable=false o no están en catálogo)' }
 
     const respuesta = await llamarGreenter(creds.greenterUrl, 'boleta/emitir', {
       modo:         creds.modo,
@@ -227,8 +228,8 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     }
 
     const items = await mapearItems(opts.supabase, opts.pedidoId)
-    const itemsFormales = items.filter((i: any) => i.productos?.facturable !== false)
-    if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables' }
+    const itemsFormales = items.filter((i: any) => i.productos?.facturable === true)
+    if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables en este pedido' }
 
     const respuesta = await llamarGreenter(creds.greenterUrl, 'factura/emitir', {
       modo:         creds.modo,

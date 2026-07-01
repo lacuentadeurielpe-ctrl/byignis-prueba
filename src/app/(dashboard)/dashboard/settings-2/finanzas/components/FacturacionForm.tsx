@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Search, Loader2, CheckCircle2, AlertCircle, Info } from 'lucide-react'
+import { FileText, Search, Loader2, CheckCircle2, AlertCircle, Info, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 import FormSection from '../../components/FormSection'
 import { useSettingsSave } from '../../utils/settingsHooks'
 
@@ -555,6 +556,24 @@ export default function FacturacionForm() {
             </div>
           </div>
         )}
+
+        {/* ── SUNAT Directo ──────────────────────────────────── */}
+        <div className="border-t border-zinc-100 pt-4">
+          <div className="flex items-start justify-between gap-4 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-indigo-900">Facturación directa a SUNAT</p>
+              <p className="text-xs text-indigo-700 mt-0.5">
+                Emite boletas y facturas con tus propias credenciales CDT/SOL, sin intermediarios ni costos adicionales por documento.
+              </p>
+            </div>
+            <Link
+              href="/dashboard/settings-2/integraciones/sunat-directo"
+              className="shrink-0 flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition whitespace-nowrap"
+            >
+              Configurar <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
 
         {/* ── Modo Nubefact ──────────────────────────────────── */}
         <div className="border-t border-zinc-100 pt-4">

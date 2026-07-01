@@ -1,13 +1,35 @@
-'use client'
-
 import {
   Cloud, MessageCircle, FileText, MapPin, Zap, Banknote,
   BookOpen, Code, Send, Mail, Globe2, Calendar, HardDrive,
 } from 'lucide-react'
 import SettingsHeader from '../components/SettingsHeader'
 import IntegrationCard from './components/IntegrationCard'
+import { createClient } from '@/lib/supabase/server'
+import { getSessionInfo } from '@/lib/auth/roles'
 
-const INTEGRACIONES_CORE = [
+type IntStatus = 'conectado' | 'error' | 'expirado' | 'desconectado' | 'pruebas'
+
+async function getSunatDirectoStatus(): Promise<{ status?: IntStatus; statusMessage?: string }> {
+  try {
+    const session = await getSessionInfo()
+    if (!session) return {}
+    const supabase = await createClient()
+    const { data } = await supabase
+      .from('sunat_credenciales')
+      .select('estado, modo')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .single()
+    if (!data) return {}
+    if (data.estado === 'activo') return { status: 'conectado', statusMessage: data.modo === 'produccion' ? 'Producción' : 'Beta' }
+    if (data.estado === 'homologando') return { status: 'pruebas', statusMessage: 'Homologando (beta)' }
+    if (data.estado === 'error') return { status: 'error', statusMessage: 'Error de conexión' }
+    return { status: 'desconectado', statusMessage: 'Credenciales guardadas' }
+  } catch {
+    return {}
+  }
+}
+
+const INTEGRACIONES_CORE_BASE = [
   {
     id: 'meta',
     name: 'Meta WhatsApp',
@@ -25,9 +47,16 @@ const INTEGRACIONES_CORE = [
   {
     id: 'nubefact',
     name: 'Nubefact',
-    description: 'Facturación electrónica SUNAT',
+    description: 'Facturación electrónica SUNAT vía plataforma Nubefact',
     icon: FileText,
     href: '/dashboard/settings-2/integraciones/nubefact',
+  },
+  {
+    id: 'sunat_directo',
+    name: 'SUNAT Directo',
+    description: 'Emisión electrónica directa con tus propias credenciales CDT/SOL (sin intermediarios)',
+    icon: FileText,
+    href: '/dashboard/settings-2/integraciones/sunat-directo',
   },
   {
     id: 'mercadopago',
@@ -114,7 +143,15 @@ const INTEGRACIONES_ROADMAP = [
   },
 ]
 
-export default function IntegracionesPage() {
+export default async function IntegracionesPage() {
+  const sunatStatus = await getSunatDirectoStatus()
+
+  const INTEGRACIONES_CORE = INTEGRACIONES_CORE_BASE.map(item =>
+    item.id === 'sunat_directo'
+      ? { ...item, ...sunatStatus }
+      : item
+  )
+
   return (
     <div>
       <SettingsHeader
