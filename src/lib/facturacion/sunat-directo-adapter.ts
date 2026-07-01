@@ -115,7 +115,7 @@ function mapearItems(supabase: any, pedidoId: string): Promise<any[]> {
 async function obtenerFerreteria(supabase: any, ferreteriaId: string): Promise<any> {
   const { data } = await supabase
     .from('ferreterias')
-    .select('id, ruc, razon_social, serie_boletas, serie_facturas, igv_incluido_en_precios')
+    .select('id, ruc, razon_social, serie_boletas, serie_facturas, igv_incluido_en_precios, direccion, ubigeo, departamento, provincia, distrito')
     .eq('id', ferreteriaId)
     .single()
   return data
@@ -150,6 +150,11 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         razon_social: creds.razonSocial,
         serie:        ferreteria.serie_boletas ?? 'B001',
         numero:       corrData,
+        direccion:    ferreteria.direccion ?? '-',
+        ubigeo:       ferreteria.ubigeo ?? '150101',
+        departamento: ferreteria.departamento ?? 'LIMA',
+        provincia:    ferreteria.provincia ?? 'LIMA',
+        distrito:     ferreteria.distrito ?? 'LIMA',
       },
       sol: { usuario: creds.solUsuario, clave: creds.solClave },
       certificado: { pfx_base64: creds.certPfxB64, clave: creds.certClave },
@@ -216,6 +221,11 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       })
     if (!corrData) return { ok: false, error: 'Error generando correlativo' }
 
+    const clienteRucLimpio = opts.clienteRuc.replace(/\D/g, '')
+    if (clienteRucLimpio.length !== 11) {
+      return { ok: false, error: `RUC inválido: debe tener 11 dígitos (recibido: "${clienteRucLimpio}")` }
+    }
+
     const items = await mapearItems(opts.supabase, opts.pedidoId)
     const itemsFormales = items.filter((i: any) => i.productos?.facturable !== false)
     if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables' }
@@ -227,12 +237,17 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         razon_social: creds.razonSocial,
         serie:        ferreteria.serie_facturas ?? 'F001',
         numero:       corrData,
+        direccion:    ferreteria.direccion ?? '-',
+        ubigeo:       ferreteria.ubigeo ?? '150101',
+        departamento: ferreteria.departamento ?? 'LIMA',
+        provincia:    ferreteria.provincia ?? 'LIMA',
+        distrito:     ferreteria.distrito ?? 'LIMA',
       },
       sol: { usuario: creds.solUsuario, clave: creds.solClave },
       certificado: { pfx_base64: creds.certPfxB64, clave: creds.certClave },
       cliente: {
         tipo_doc:   '6',  // RUC
-        numero_doc: opts.clienteRuc.replace(/\D/g, ''),
+        numero_doc: clienteRucLimpio,
         nombre:     opts.clienteNombre,
       },
       igv_incluido: ferreteria.igv_incluido_en_precios ?? false,
@@ -262,7 +277,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         pdf_url:          respuesta.pdf_url ?? null,
         xml_url:          respuesta.xml_url ?? null,
         cliente_nombre:   opts.clienteNombre,
-        cliente_ruc_dni:  opts.clienteRuc.replace(/\D/g, ''),
+        cliente_ruc_dni:  clienteRucLimpio,
         emitido_por:      opts.emitidoPor,
       }, { onConflict: 'pedido_id,tipo' })
       .select('id')

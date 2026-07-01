@@ -19,7 +19,15 @@ class DocumentoFactory
         $company->setRuc($emisorData['ruc']);
         $company->setRazonSocial($emisorData['razon_social'] ?? '');
         $company->setNombreComercial($emisorData['nombre_comercial'] ?? $emisorData['razon_social'] ?? '');
-        $company->setAddress((new Address())->setUbigueo('150101')->setDepartamento('LIMA')->setProvincia('LIMA')->setDistrito('LIMA')->setUrbanizacion('-')->setDireccion($emisorData['direccion'] ?? '-'));
+        $company->setAddress(
+            (new Address())
+                ->setUbigueo($emisorData['ubigeo'] ?? '150101')
+                ->setDepartamento(strtoupper($emisorData['departamento'] ?? 'LIMA'))
+                ->setProvincia(strtoupper($emisorData['provincia'] ?? 'LIMA'))
+                ->setDistrito(strtoupper($emisorData['distrito'] ?? 'LIMA'))
+                ->setUrbanizacion('-')
+                ->setDireccion($emisorData['direccion'] ?? '-')
+        );
         return $company;
     }
 
@@ -201,9 +209,51 @@ class DocumentoFactory
 
     private static function numeroALetras(float $monto): string
     {
-        // Simplificado — en producción usar una librería como NumberToWords
-        $entero    = (int)floor($monto);
-        $centavos  = round(($monto - $entero) * 100);
-        return "SON {$entero} CON {$centavos}/100 SOLES";
+        $entero   = (int)floor($monto);
+        $centavos = (int)round(($monto - $entero) * 100);
+        $palabras = self::enteroALetras($entero);
+        return 'SON ' . strtoupper($palabras) . ' CON ' . str_pad((string)$centavos, 2, '0', STR_PAD_LEFT) . '/100 SOLES';
+    }
+
+    private static function enteroALetras(int $n): string
+    {
+        if ($n === 0) return 'CERO';
+
+        $unidades  = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
+        $especiales = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
+        $decenas   = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+        $centenas  = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+
+        $resultado = '';
+
+        if ($n >= 1000000) {
+            $m = intdiv($n, 1000000);
+            $resultado .= ($m === 1 ? 'UN MILLÓN' : self::enteroALetras($m) . ' MILLONES') . ' ';
+            $n %= 1000000;
+        }
+
+        if ($n >= 1000) {
+            $m = intdiv($n, 1000);
+            $resultado .= ($m === 1 ? 'MIL' : self::enteroALetras($m) . ' MIL') . ' ';
+            $n %= 1000;
+        }
+
+        if ($n >= 100) {
+            $c = intdiv($n, 100);
+            $resultado .= ($n === 100 ? 'CIEN' : $centenas[$c]) . ' ';
+            $n %= 100;
+        }
+
+        if ($n >= 20) {
+            $d = intdiv($n, 10);
+            $u = $n % 10;
+            $resultado .= $decenas[$d] . ($u > 0 ? ' Y ' . $unidades[$u] : '') . ' ';
+        } elseif ($n >= 10) {
+            $resultado .= $especiales[$n - 10] . ' ';
+        } elseif ($n > 0) {
+            $resultado .= ($n === 1 ? 'UNO' : $unidades[$n]) . ' ';
+        }
+
+        return trim($resultado);
     }
 }
