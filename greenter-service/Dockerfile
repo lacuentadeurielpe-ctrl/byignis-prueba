@@ -7,7 +7,7 @@ RUN apk add --no-cache \
 
 # Habilitar OpenSSL legacy provider para certificados SUNAT/RENIEC
 # que usan algoritmos RC2/3DES (bloqueados por defecto en OpenSSL 3.x)
-RUN printf '[openssl_init]\nproviders = provider_sect\n\n[provider_sect]\ndefault = default_sect\nlegacy = legacy_sect\n\n[default_sect]\nactivate = 1\n\n[legacy_sect]\nactivate = 1\n' \
+RUN printf 'openssl_conf = openssl_init\n\n[openssl_init]\nproviders = provider_sect\n\n[provider_sect]\ndefault = default_sect\nlegacy = legacy_sect\n\n[default_sect]\nactivate = 1\n\n[legacy_sect]\nactivate = 1\n' \
     > /etc/ssl/openssl_legacy.cnf
 ENV OPENSSL_CONF=/etc/ssl/openssl_legacy.cnf
 
