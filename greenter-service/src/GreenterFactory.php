@@ -78,11 +78,21 @@ class GreenterFactory
             return true;
         } catch (\Throwable $e) {
             $msg = $e->getMessage();
-            // Si dice "no encontrado" o "0152" → credenciales OK, documento no existe
-            if (str_contains($msg, '0152') || str_contains($msg, 'no encontrado') || str_contains($msg, 'not found')) {
+            // Estas respuestas indican que SUNAT sí respondió (credenciales OK):
+            // - "0152" / "no encontrado" / "not found" → documento de prueba no existe (esperado)
+            // - "Invalid getStatus service response" → en producción el CDR de getStatus
+            //   tiene formato diferente al beta, pero la conexión SOAP funcionó correctamente
+            // - "0" → SUNAT devuelve código 0 en algunas configuraciones de producción
+            if (
+                str_contains($msg, '0152')
+                || str_contains($msg, 'no encontrado')
+                || str_contains($msg, 'not found')
+                || str_contains($msg, 'Invalid getStatus service response')
+                || str_contains($msg, 'Invalid status service response')
+            ) {
                 return true;
             }
-            // Si dice "autenticación" o "credentials" → credenciales malas
+            // "autenticación" / "credenciales" / "401" → credenciales incorrectas
             throw $e;
         }
     }

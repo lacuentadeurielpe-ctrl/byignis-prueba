@@ -34,7 +34,6 @@ export default function SunatDirectoPage() {
   const [certPfxB64, setCertPfxB64] = useState('')
   const [certNombre, setCertNombre] = useState('')
   const [certClave, setCertClave] = useState('')
-  const [modo, setModo] = useState<'beta' | 'produccion'>('beta')
 
   const [showSolClave, setShowSolClave] = useState(false)
   const [showCertClave, setShowCertClave] = useState(false)
@@ -91,7 +90,7 @@ export default function SunatDirectoPage() {
     }
     setIsSaving(true)
     try {
-      const payload: any = { sol_usuario: solUsuario, sol_clave: solClave, cert_clave: certClave, modo }
+      const payload: any = { sol_usuario: solUsuario, sol_clave: solClave, cert_clave: certClave, modo: 'beta' }
       if (certPfxB64) payload.cert_pfx_b64 = certPfxB64
       const res = await fetch('/api/settings-2/integraciones/sunat-directo', {
         method: 'POST',
@@ -154,7 +153,7 @@ export default function SunatDirectoPage() {
       if (!res.ok) { setError(json.error ?? 'Error al iniciar homologación'); return }
       setHomoResultados(json.resultados ?? [])
       if (json.completado) {
-        setSuccess(`¡Homologación completada! ${json.exitosos}/10 boletas aceptadas por SUNAT. Ya puedes cambiar a modo Producción.`)
+        setSuccess(`¡Homologación completada! ${json.exitosos}/10 boletas aceptadas por SUNAT. Tu cuenta fue actualizada automáticamente a modo Producción — haz clic en "Activar SUNAT Directo" para empezar a emitir comprobantes reales.`)
         const r2 = await fetch('/api/settings-2/integraciones/sunat-directo')
         setEstado(await r2.json())
       } else {
@@ -235,7 +234,7 @@ export default function SunatDirectoPage() {
                 </div>
                 <div className="p-3 bg-zinc-50 rounded-lg">
                   <p className="text-zinc-500 text-xs mb-1">Modo</p>
-                  <p className="font-medium">{creds.modo === 'produccion' ? 'Producción' : 'Beta (homologación)'}</p>
+                  <p className="font-medium">{creds.modo === 'produccion' ? 'Producción ✓' : 'Validación pendiente'}</p>
                 </div>
                 <div className="p-3 bg-zinc-50 rounded-lg">
                   <p className="text-zinc-500 text-xs mb-1">Último test</p>
@@ -256,8 +255,7 @@ export default function SunatDirectoPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-indigo-900">Siguiente paso: completar la homologación SUNAT</p>
                   <p className="text-sm text-indigo-700 mt-0.5">
-                    Tus credenciales están verificadas. SUNAT exige enviar 10 comprobantes de prueba en modo Beta antes de activar la facturación real.
-                    El proceso es automático y tarda ~2 minutos.
+                    Tus credenciales están verificadas. Falta completar la validación SUNAT enviando 10 comprobantes de prueba — el sistema lo hace automáticamente en ~2 minutos. Al terminar, tu cuenta quedará lista para facturar en producción.
                   </p>
                   <button
                     onClick={() => document.getElementById('panel-homologacion')?.scrollIntoView({ behavior: 'smooth' })}
@@ -316,7 +314,7 @@ export default function SunatDirectoPage() {
                   <p className="text-sm text-emerald-700">
                     Las 10 boletas fueron aceptadas por SUNAT el{' '}
                     {new Date(creds.homologacion_completada_at).toLocaleString('es-PE', { timeZone: 'America/Lima' })}.
-                    Cambia el modo a <strong>Producción</strong> y activa SUNAT Directo.
+                    Tu cuenta está en modo Producción — haz clic en <strong>"Activar SUNAT Directo"</strong> para que las ventas se facturen con tus credenciales.
                   </p>
                 </div>
               </div>
@@ -481,21 +479,6 @@ export default function SunatDirectoPage() {
                 <button type="button" onClick={() => setShowCertClave(!showCertClave)} className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-600">
                   {showCertClave ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
-              </div>
-            </div>
-
-            <div className="border-t border-zinc-100 pt-4">
-              <div className="max-w-xs">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Modo SUNAT</label>
-                <select
-                  value={modo}
-                  onChange={e => setModo(e.target.value as 'beta' | 'produccion')}
-                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="beta">Beta (homologación SUNAT)</option>
-                  <option value="produccion">Producción</option>
-                </select>
-                <p className="text-xs text-zinc-500 mt-1">SUNAT exige pasar homologación antes de pasar a producción</p>
               </div>
             </div>
 

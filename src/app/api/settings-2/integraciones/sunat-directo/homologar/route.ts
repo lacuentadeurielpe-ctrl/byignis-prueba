@@ -178,7 +178,10 @@ export async function POST() {
     .update({
       homologacion_casos_completados: exitosos,
       ...(exitosos >= CANTIDAD_HOMOLOGACION
-        ? { homologacion_completada_at: ahora }
+        ? {
+            homologacion_completada_at: ahora,
+            modo: 'produccion',   // promover automáticamente a producción
+          }
         : {}),
     })
     .eq('ferreteria_id', session.ferreteriaId)
