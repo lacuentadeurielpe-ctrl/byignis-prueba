@@ -34,11 +34,10 @@ import {
   estimarCostoUsd,
 } from '@/lib/credits'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
-import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
+import { resolverProveedor } from '@/lib/facturacion/resolver'
 import { geocodificarDireccion } from '@/lib/delivery/geocoding'
 import { calcularETA } from '@/lib/delivery/eta'
 import { crearEntrega } from '@/lib/delivery/assignment'
-import { desencriptar } from '@/lib/encryption'
 
 // ── Mapeo intent → tipo de tarea IA ──────────────────────────────────────────
 // Determina cuántos créditos cuesta y qué modelo corresponde usar.
@@ -1283,10 +1282,9 @@ export async function handleIncomingMessage({
         break
       }
 
-      // ── Caso 3: pagado + Nubefact configurado → boleta o factura ──────────
-      const tokenPlano = (ferreteria as any).nubefact_token_enc
-        ? await desencriptar((ferreteria as any).nubefact_token_enc)
-        : ''
+      // ── Caso 3: pagado → emitir comprobante con el proveedor del tenant ────
+      // El proveedor (Nubefact o SUNAT Directo) se resuelve más abajo; cada
+      // adapter carga sus propias credenciales y devuelve error si faltan.
 
       // Si pide factura, verificar que tengamos RUC del cliente
       if (pidioFactura) {
@@ -1307,14 +1305,14 @@ export async function handleIncomingMessage({
         } else {
           // Tenemos RUC → emitir factura
           console.log(`[Bot F6] Emitiendo factura para pedido=${pedidoTarget.id} ruc=${rucParaFactura}`)
-          const resultFact = await emitirFactura({
+          const proveedorFact = await resolverProveedor(admin, ferreteria.id)
+          const resultFact = await proveedorFact.emitirFactura({
             supabase:      admin,
             pedidoId:      pedidoTarget.id,
             ferreteriaId:  ferreteria.id,  // FERRETERÍA AISLADA
             clienteNombre: (pedidoTarget as any).nombre_cliente || 'CLIENTE',
             clienteRuc:    rucParaFactura,
             emitidoPor:    'bot',
-            tokenPlano,
           })
 
           if (resultFact.ok && resultFact.pdfUrl) {
@@ -1337,15 +1335,14 @@ export async function handleIncomingMessage({
 
       // Emitir BOLETA (caso default o fallback de factura sin RUC)
       console.log(`[Bot F6] Emitiendo boleta para pedido=${pedidoTarget.id}`)
-      const resultBol = await emitirBoleta({
+      const proveedorBol = await resolverProveedor(admin, ferreteria.id)
+      const resultBol = await proveedorBol.emitirBoleta({
         supabase:      admin,
         pedidoId:      pedidoTarget.id,
         ferreteriaId:  ferreteria.id,  // FERRETERÍA AISLADA
-        tipoBoleta:    'boleta',
         clienteNombre: (pedidoTarget as any).nombre_cliente || 'CLIENTES VARIOS',
         clienteDni:    '',
         emitidoPor:    'bot',
-        tokenPlano,
       })
 
       if (resultBol.ok && resultBol.pdfUrl) {

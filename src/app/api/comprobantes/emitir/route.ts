@@ -8,9 +8,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
-import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
-import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
-import { desencriptar } from '@/lib/encryption'
+import { resolverProveedor } from '@/lib/facturacion/resolver'
 
 export async function POST(request: Request) {
   const session = await getSessionInfo()
@@ -36,16 +34,10 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient()
-  const facturacionRepo = new FacturacionRepository(supabase)
-  
-  let config
-  try {
-    config = await facturacionRepo.obtenerConfiguracionFacturacion(session.ferreteriaId)
-  } catch (errConfig) {
-    return NextResponse.json({ error: 'Configuración de facturación no encontrada' }, { status: 400 })
-  }
 
-  const tokenPlano = config.nubefact_token_enc ? await desencriptar(config.nubefact_token_enc) : ''
+  // Resuelve el proveedor de facturación del tenant (Nubefact o SUNAT Directo).
+  // El adapter internamente carga credenciales/token — el endpoint es agnóstico.
+  const proveedor = await resolverProveedor(supabase, session.ferreteriaId)
 
   const tipo = body.tipo ?? 'boleta'
 
@@ -65,14 +57,13 @@ export async function POST(request: Request) {
       )
     }
 
-    const resultado = await emitirFactura({
+    const resultado = await proveedor.emitirFactura({
       supabase,
       pedidoId:      body.pedido_id,
       ferreteriaId:  session.ferreteriaId,  // FERRETERÍA AISLADA — desde la sesión, nunca del body
       clienteNombre: body.cliente_nombre.trim(),
       clienteRuc:    rucLimpio,
       emitidoPor:    'dashboard',
-      tokenPlano,
     })
 
     if (!resultado.ok) {
@@ -98,15 +89,13 @@ export async function POST(request: Request) {
   }
 
   // tipo === 'boleta' (default)
-  const resultado = await emitirBoleta({
+  const resultado = await proveedor.emitirBoleta({
     supabase,
     pedidoId:      body.pedido_id,
     ferreteriaId:  session.ferreteriaId,  // FERRETERÍA AISLADA — desde la sesión, nunca del body
-    tipoBoleta:    'boleta',
     clienteNombre: (body.cliente_nombre ?? '').trim() || 'CLIENTE VARIOS',
     clienteDni:    (body.cliente_dni    ?? '').trim(),
     emitidoPor:    'dashboard',
-    tokenPlano,
   })
 
   if (!resultado.ok) {

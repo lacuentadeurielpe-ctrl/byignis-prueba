@@ -11,7 +11,7 @@ import { AGENT_REGISTRY, CORE_TOOL_NAMES } from '@/lib/ai/agents/registry'
 import { procesarItemsSolicitados, buscarProducto, formatearCotizacion } from '@/lib/bot/catalog-search'
 import { pausarBot } from '@/lib/bot/session'
 import { generarYEnviarComprobante, generarYEnviarCotizacionPDF, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
-import { emitirBoleta, emitirFactura } from '@/lib/comprobantes/emitir'
+import { resolverProveedor } from '@/lib/facturacion/resolver'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import type { WASender } from '@/lib/whatsapp/types'
 import { enviarMensajeTelegram } from '@/lib/integrations/telegram'
@@ -1821,14 +1821,14 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
         }
       }
 
-      const resultFact = await emitirFactura({
+      const proveedorFact = await resolverProveedor(ctx.supabase, ctx.ferreteriaId)
+      const resultFact = await proveedorFact.emitirFactura({
         supabase:      ctx.supabase,
         pedidoId:      ped.id,
         ferreteriaId:  ctx.ferreteriaId,
         clienteNombre: ped.nombre_cliente || 'CLIENTE',
         clienteRuc:    rucParaFactura,
         emitidoPor:    'bot',
-        tokenPlano:    ctx.nubefactTokenPlano || '',
       })
 
       if (resultFact.ok && resultFact.pdfUrl && ctx.sender) {
@@ -1856,15 +1856,14 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     }
 
     // Emitir boleta electrónica (caso default)
-    const resultBol = await emitirBoleta({
+    const proveedorBol = await resolverProveedor(ctx.supabase, ctx.ferreteriaId)
+    const resultBol = await proveedorBol.emitirBoleta({
       supabase:      ctx.supabase,
       pedidoId:      ped.id,
       ferreteriaId:  ctx.ferreteriaId,
-      tipoBoleta:    'boleta',
       clienteNombre: ped.nombre_cliente || 'CLIENTES VARIOS',
       clienteDni:    '',
       emitidoPor:    'bot',
-      tokenPlano:    ctx.nubefactTokenPlano || '',
     })
 
     if (resultBol.ok && resultBol.pdfUrl && ctx.sender) {

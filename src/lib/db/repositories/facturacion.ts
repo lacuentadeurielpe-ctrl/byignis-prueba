@@ -113,7 +113,7 @@ export class FacturacionRepository {
   async obtenerDatosFerreteriaDashboard(ferreteriaId: string) {
     const { data, error } = await this.supabase
       .from('ferreterias')
-      .select('id, nubefact_token_enc, tipo_ruc')
+      .select('id, nubefact_token_enc, tipo_ruc, proveedor_facturacion')
       .eq('id', ferreteriaId)
       .single()
 

@@ -81,7 +81,10 @@ export default async function VentasPage({
         rol={session.rol}
         repartidores={repartidores as any[] ?? []}
         permisos={session.permisos as PermisoMap}
-        nubefactConfigurado={!!ferreteriaData?.nubefact_token_enc}
+        nubefactConfigurado={
+          !!ferreteriaData?.nubefact_token_enc ||
+          ferreteriaData?.proveedor_facturacion === 'sunat_directo'
+        }
         tieneRuc={ferreteriaData?.tipo_ruc !== 'sin_ruc'}
         initEstado={initEstado}
         initPedidoId={initPedidoId}
