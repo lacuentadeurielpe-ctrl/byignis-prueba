@@ -51,9 +51,6 @@ export default function SunatDirectoPage() {
       .then(r => r.json())
       .then(d => {
         setEstado(d)
-        if (d.credenciales) {
-          setModo(d.credenciales.modo)
-        }
       })
       .finally(() => setLoading(false))
   }, [])
