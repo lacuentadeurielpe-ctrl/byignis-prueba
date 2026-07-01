@@ -77,8 +77,21 @@ export async function POST() {
   const igvIncluido = ferr.igv_incluido_en_precios ?? false
   const resultados: ResultadoBoleta[] = []
 
-  // ── Emitir 10 boletas secuencialmente ─────────────────────────────────────
-  for (let i = 0; i < CANTIDAD_HOMOLOGACION; i++) {
+  // ── Cuántas boletas de homologación ya fueron aceptadas ────────────────────
+  // Fuente de verdad: comprobantes realmente emitidos. Permite acumular entre
+  // corridas y completar solo las que faltan si una corrida fue parcial.
+  const { count: yaAceptadas } = await supabase
+    .from('comprobantes')
+    .select('*', { count: 'exact', head: true })
+    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('emitido_por', 'homologacion_sunat')
+    .eq('estado', 'emitido')
+
+  const completadasPrevias = yaAceptadas ?? 0
+  const faltantes = Math.max(0, CANTIDAD_HOMOLOGACION - completadasPrevias)
+
+  // ── Emitir solo las boletas que faltan ─────────────────────────────────────
+  for (let i = 0; i < faltantes; i++) {
     // Generar correlativo desde la función SQL (atómica, sin gaps)
     const { data: numero, error: corrErr } = await supabase.rpc('generar_numero_comprobante', {
       p_ferreteria_id: session.ferreteriaId,
@@ -122,18 +135,30 @@ export async function POST() {
     }
 
     try {
-      const res = await fetch(`${GREENTER_URL}/boleta/emitir`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-        signal:  AbortSignal.timeout(30_000),
-      })
-
-      const gr = await res.json() as {
+      // Reintenta una vez si el microservicio devuelve HTML en vez de JSON
+      // (p.ej. justo durante un redeploy de Railway el contenedor viejo responde).
+      let gr: {
         ok: boolean; numero_completo?: string
         pdf_url?: string; xml_url?: string
         cdr_codigo?: string; error?: string
+      } | null = null
+
+      for (let intento = 0; intento < 2 && !gr; intento++) {
+        const res = await fetch(`${GREENTER_URL}/boleta/emitir`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(payload),
+          signal:  AbortSignal.timeout(30_000),
+        })
+        const texto = await res.text()
+        try {
+          gr = JSON.parse(texto)
+        } catch {
+          if (intento === 0) { await new Promise(r => setTimeout(r, 2500)); continue }
+          throw new Error('El servicio de facturación no respondió correctamente. Reintenta en unos segundos.')
+        }
       }
+      if (!gr) throw new Error('Sin respuesta del servicio de facturación')
 
       if (gr.ok) {
         // Guardar en comprobantes (sin pedido_id — comprobante de homologación)
@@ -169,15 +194,23 @@ export async function POST() {
     }
   }
 
-  // ── Actualizar contador de homologación ────────────────────────────────────
-  const exitosos = resultados.filter(r => r.ok).length
-  const ahora    = new Date().toISOString()
+  // ── Recontar el total real aceptado en BD (acumulado, fuente de verdad) ─────
+  const { count: totalAceptadas } = await supabase
+    .from('comprobantes')
+    .select('*', { count: 'exact', head: true })
+    .eq('ferreteria_id', session.ferreteriaId)
+    .eq('emitido_por', 'homologacion_sunat')
+    .eq('estado', 'emitido')
+
+  const completadas = totalAceptadas ?? 0
+  const completado  = completadas >= CANTIDAD_HOMOLOGACION
+  const ahora       = new Date().toISOString()
 
   await supabase
     .from('sunat_credenciales')
     .update({
-      homologacion_casos_completados: exitosos,
-      ...(exitosos >= CANTIDAD_HOMOLOGACION
+      homologacion_casos_completados: completadas,
+      ...(completado
         ? {
             homologacion_completada_at: ahora,
             modo: 'produccion',   // promover automáticamente a producción
@@ -187,9 +220,10 @@ export async function POST() {
     .eq('ferreteria_id', session.ferreteriaId)
 
   return NextResponse.json({
-    exitosos,
+    exitosos:   completadas,               // acumulado, no solo esta corrida
+    nuevas:     resultados.filter(r => r.ok).length,
     total:      CANTIDAD_HOMOLOGACION,
-    completado: exitosos >= CANTIDAD_HOMOLOGACION,
+    completado,
     resultados,
   })
 }

@@ -149,12 +149,13 @@ export default function SunatDirectoPage() {
       const json = await res.json()
       if (!res.ok) { setError(json.error ?? 'Error al iniciar homologación'); return }
       setHomoResultados(json.resultados ?? [])
+      // Siempre refresca el estado: el contador refleja el total acumulado en BD
+      const r2 = await fetch('/api/settings-2/integraciones/sunat-directo')
+      setEstado(await r2.json())
       if (json.completado) {
         setSuccess(`¡Homologación completada! ${json.exitosos}/10 boletas aceptadas por SUNAT. Tu cuenta fue actualizada automáticamente a modo Producción — haz clic en "Activar SUNAT Directo" para empezar a emitir comprobantes reales.`)
-        const r2 = await fetch('/api/settings-2/integraciones/sunat-directo')
-        setEstado(await r2.json())
       } else {
-        setError(`Solo ${json.exitosos}/10 boletas fueron aceptadas. Revisa los errores abajo.`)
+        setError(`${json.exitosos}/10 boletas aceptadas. Vuelve a pulsar el botón para completar las ${10 - json.exitosos} restantes.`)
       }
     } catch { setError('Error de conexión') }
     finally { setIsHomologando(false) }
