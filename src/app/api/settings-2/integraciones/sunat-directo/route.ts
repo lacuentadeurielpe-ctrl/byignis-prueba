@@ -42,49 +42,71 @@ export async function POST(request: Request) {
   const supabase = await createClient()
 
   const body = await request.json() as {
-    ruc:          string
-    razon_social: string
     sol_usuario:  string
     sol_clave:    string
-    cert_pfx_b64: string  // base64 del archivo .pfx/.p12
+    cert_pfx_b64?: string
     cert_clave:   string
-    greenter_url?: string
     modo:         'beta' | 'produccion'
   }
 
-  const { ruc, razon_social, sol_usuario, sol_clave, cert_pfx_b64, cert_clave, modo } = body
+  const { sol_usuario, sol_clave, cert_pfx_b64, cert_clave, modo } = body
 
-  if (!ruc || !razon_social || !sol_usuario || !sol_clave || !cert_pfx_b64 || !cert_clave) {
+  if (!sol_usuario || !sol_clave || !cert_clave) {
     return NextResponse.json({ error: 'Todos los campos son requeridos' }, { status: 400 })
   }
 
-  const rucLimpio = ruc.replace(/\D/g, '')
+  // RUC y Razón Social vienen de ferreterias — fuente única de verdad
+  const { data: ferr } = await supabase
+    .from('ferreterias')
+    .select('ruc, razon_social')
+    .eq('id', session.ferreteriaId)
+    .single()
+
+  if (!ferr?.ruc || !ferr?.razon_social) {
+    return NextResponse.json({ error: 'Configura el RUC y razón social en Configuración → Negocio primero' }, { status: 400 })
+  }
+
+  const rucLimpio = ferr.ruc.replace(/\D/g, '')
   if (rucLimpio.length !== 11) {
-    return NextResponse.json({ error: 'El RUC debe tener 11 dígitos' }, { status: 400 })
+    return NextResponse.json({ error: 'El RUC en Negocio no tiene 11 dígitos — corrígelo allí primero' }, { status: 400 })
+  }
+
+  // Verificar si ya hay credenciales (para actualización sin re-subir el certificado)
+  const { data: existing } = await supabase
+    .from('sunat_credenciales')
+    .select('cert_pfx_enc')
+    .eq('ferreteria_id', session.ferreteriaId)
+    .single()
+
+  if (!cert_pfx_b64 && !existing) {
+    return NextResponse.json({ error: 'Debes subir el certificado digital (.pfx/.p12)' }, { status: 400 })
   }
 
   try {
-    const [solUsuarioEnc, solClaveEnc, certPfxEnc, certClaveEnc] = await Promise.all([
+    const encPromises: Promise<string>[] = [
       encriptar(sol_usuario),
       encriptar(sol_clave),
-      encriptar(cert_pfx_b64),
       encriptar(cert_clave),
-    ])
+    ]
+    if (cert_pfx_b64) encPromises.push(encriptar(cert_pfx_b64))
+    const [solUsuarioEnc, solClaveEnc, certClaveEnc, certPfxEnc] = await Promise.all(encPromises)
+
+    const upsertPayload: any = {
+      ferreteria_id:   session.ferreteriaId,
+      ruc:             rucLimpio,
+      razon_social:    ferr.razon_social.trim(),
+      sol_usuario_enc: solUsuarioEnc,
+      sol_clave_enc:   solClaveEnc,
+      cert_clave_enc:  certClaveEnc,
+      greenter_url:    'https://greenter-api-production.up.railway.app',
+      modo:            modo ?? 'beta',
+      estado:          'pendiente',
+    }
+    if (certPfxEnc) upsertPayload.cert_pfx_enc = certPfxEnc
 
     const { data, error } = await supabase
       .from('sunat_credenciales')
-      .upsert({
-        ferreteria_id:  session.ferreteriaId,
-        ruc:            rucLimpio,
-        razon_social:   razon_social.trim(),
-        sol_usuario_enc: solUsuarioEnc,
-        sol_clave_enc:  solClaveEnc,
-        cert_pfx_enc:   certPfxEnc,
-        cert_clave_enc: certClaveEnc,
-        greenter_url:   body.greenter_url?.trim() || 'https://greenter-api.byignis.com',
-        modo:           modo ?? 'beta',
-        estado:         'pendiente',
-      }, { onConflict: 'ferreteria_id' })
+      .upsert(upsertPayload, { onConflict: 'ferreteria_id' })
       .select('id, ruc, razon_social, modo, estado')
       .single()
 

@@ -29,15 +29,12 @@ export default function SunatDirectoPage() {
   const [loading, setLoading] = useState(true)
 
   // Formulario
-  const [ruc, setRuc] = useState('')
-  const [razonSocial, setRazonSocial] = useState('')
   const [solUsuario, setSolUsuario] = useState('')
   const [solClave, setSolClave] = useState('')
   const [certPfxB64, setCertPfxB64] = useState('')
   const [certNombre, setCertNombre] = useState('')
   const [certClave, setCertClave] = useState('')
   const [modo, setModo] = useState<'beta' | 'produccion'>('beta')
-  const [greenterUrl, setGreenterUrl] = useState('')
 
   const [showSolClave, setShowSolClave] = useState(false)
   const [showCertClave, setShowCertClave] = useState(false)
@@ -54,15 +51,7 @@ export default function SunatDirectoPage() {
       .then(d => {
         setEstado(d)
         if (d.credenciales) {
-          // Credenciales SUNAT ya guardadas → usar esos valores
-          setRuc(d.credenciales.ruc)
-          setRazonSocial(d.credenciales.razon_social)
           setModo(d.credenciales.modo)
-          setGreenterUrl(d.credenciales.greenter_url)
-        } else {
-          // Primera vez → pre-llenar con los datos del negocio ya configurados
-          if (d.negocio_ruc)          setRuc(d.negocio_ruc)
-          if (d.negocio_razon_social) setRazonSocial(d.negocio_razon_social)
         }
       })
       .finally(() => setLoading(false))
@@ -90,7 +79,7 @@ export default function SunatDirectoPage() {
   const handleGuardar = async () => {
     setError('')
     setSuccess('')
-    if (!ruc || !razonSocial || !solUsuario || !solClave || !certClave) {
+    if (!solUsuario || !solClave || !certClave) {
       setError('Completa todos los campos requeridos')
       return
     }
@@ -100,7 +89,7 @@ export default function SunatDirectoPage() {
     }
     setIsSaving(true)
     try {
-      const payload: any = { ruc, razon_social: razonSocial, sol_usuario: solUsuario, sol_clave: solClave, cert_clave: certClave, modo, greenter_url: greenterUrl }
+      const payload: any = { sol_usuario: solUsuario, sol_clave: solClave, cert_clave: certClave, modo }
       if (certPfxB64) payload.cert_pfx_b64 = certPfxB64
       const res = await fetch('/api/settings-2/integraciones/sunat-directo', {
         method: 'POST',
@@ -110,7 +99,7 @@ export default function SunatDirectoPage() {
       const json = await res.json()
       if (!res.ok) { setError(json.error || 'Error al guardar'); return }
       setSuccess('Credenciales guardadas correctamente')
-      setEstado(prev => prev ? { ...prev, configurado: true, credenciales: { ...json.credenciales, greenter_url: greenterUrl, homologacion_casos_completados: 0 } } : prev)
+      setEstado(prev => prev ? { ...prev, configurado: true, credenciales: { ...json.credenciales, greenter_url: 'https://greenter-api-production.up.railway.app', homologacion_casos_completados: 0 } } : prev)
     } catch { setError('Error de conexión') }
     finally { setIsSaving(false) }
   }
@@ -275,29 +264,26 @@ export default function SunatDirectoPage() {
           icon={<FileText className="w-5 h-5" />}
         >
           <div className="space-y-4">
+            {/* RUC y Razón Social — solo lectura, vienen de Negocio */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">RUC del emisor *</label>
-                <input
-                  type="text"
-                  value={ruc}
-                  onChange={e => setRuc(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                  placeholder="20123456789"
-                  maxLength={11}
-                />
+                <label className="block text-sm font-medium text-zinc-500 mb-1">RUC del emisor</label>
+                <div className="px-3 py-2 border border-zinc-200 bg-zinc-50 rounded-lg font-mono text-sm text-zinc-800">
+                  {estado?.negocio_ruc || estado?.credenciales?.ruc || <span className="text-zinc-400 italic">No configurado</span>}
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Razón social *</label>
-                <input
-                  type="text"
-                  value={razonSocial}
-                  onChange={e => setRazonSocial(e.target.value)}
-                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Mi Ferretería S.A.C."
-                />
+                <label className="block text-sm font-medium text-zinc-500 mb-1">Razón social</label>
+                <div className="px-3 py-2 border border-zinc-200 bg-zinc-50 rounded-lg text-sm text-zinc-800 truncate">
+                  {estado?.negocio_razon_social || estado?.credenciales?.razon_social || <span className="text-zinc-400 italic">No configurada</span>}
+                </div>
               </div>
             </div>
+            <p className="text-xs text-zinc-500">
+              Estos datos se toman de{' '}
+              <a href="/dashboard/settings-2/negocio" className="text-indigo-600 hover:underline">Configuración → Negocio</a>.
+              Edítalos allí si necesitas cambiarlos.
+            </p>
 
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
               <p className="font-medium mb-1">¿Dónde obtener el usuario y clave SOL?</p>
@@ -371,8 +357,8 @@ export default function SunatDirectoPage() {
               </div>
             </div>
 
-            <div className="border-t border-zinc-100 pt-4 grid grid-cols-2 gap-4">
-              <div>
+            <div className="border-t border-zinc-100 pt-4">
+              <div className="max-w-xs">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Modo SUNAT</label>
                 <select
                   value={modo}
@@ -383,17 +369,6 @@ export default function SunatDirectoPage() {
                   <option value="produccion">Producción</option>
                 </select>
                 <p className="text-xs text-zinc-500 mt-1">SUNAT exige pasar homologación antes de pasar a producción</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">URL del microservicio</label>
-                <input
-                  type="url"
-                  value={greenterUrl}
-                  onChange={e => setGreenterUrl(e.target.value)}
-                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
-                  placeholder="https://greenter-api.byignis.com"
-                />
-                <p className="text-xs text-zinc-500 mt-1">URL del microservicio Greenter (compartido por la plataforma)</p>
               </div>
             </div>
 

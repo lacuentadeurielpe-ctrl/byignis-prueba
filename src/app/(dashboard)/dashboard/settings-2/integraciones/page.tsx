@@ -1,35 +1,16 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import {
   Cloud, MessageCircle, FileText, MapPin, Zap, Banknote,
   BookOpen, Code, Send, Mail, Globe2, Calendar, HardDrive,
 } from 'lucide-react'
 import SettingsHeader from '../components/SettingsHeader'
 import IntegrationCard from './components/IntegrationCard'
-import { createClient } from '@/lib/supabase/server'
-import { getSessionInfo } from '@/lib/auth/roles'
 
 type IntStatus = 'conectado' | 'error' | 'expirado' | 'desconectado' | 'pruebas'
 
-async function getSunatDirectoStatus(): Promise<{ status?: IntStatus; statusMessage?: string }> {
-  try {
-    const session = await getSessionInfo()
-    if (!session) return {}
-    const supabase = await createClient()
-    const { data } = await supabase
-      .from('sunat_credenciales')
-      .select('estado, modo')
-      .eq('ferreteria_id', session.ferreteriaId)
-      .single()
-    if (!data) return {}
-    if (data.estado === 'activo') return { status: 'conectado', statusMessage: data.modo === 'produccion' ? 'Producción' : 'Beta' }
-    if (data.estado === 'homologando') return { status: 'pruebas', statusMessage: 'Homologando (beta)' }
-    if (data.estado === 'error') return { status: 'error', statusMessage: 'Error de conexión' }
-    return { status: 'desconectado', statusMessage: 'Credenciales guardadas' }
-  } catch {
-    return {}
-  }
-}
-
-const INTEGRACIONES_CORE_BASE = [
+const INTEGRACIONES_CORE = [
   {
     id: 'meta',
     name: 'Meta WhatsApp',
@@ -54,7 +35,7 @@ const INTEGRACIONES_CORE_BASE = [
   {
     id: 'sunat_directo',
     name: 'SUNAT Directo',
-    description: 'Emisión electrónica directa con tus propias credenciales CDT/SOL (sin intermediarios)',
+    description: 'Emisión electrónica directa con tus credenciales CDT/SOL — sin intermediarios',
     icon: FileText,
     href: '/dashboard/settings-2/integraciones/sunat-directo',
   },
@@ -99,58 +80,30 @@ const INTEGRACIONES_COMUNICACIONES = [
 ]
 
 const INTEGRACIONES_ROADMAP = [
-  {
-    id: 'shopify',
-    name: 'Shopify',
-    description: 'Sincronización de catálogo y stock',
-    icon: Cloud,
-    comingSoon: true,
-  },
-  {
-    id: 'stripe',
-    name: 'Stripe',
-    description: 'Pagos internacionales con tarjeta',
-    icon: Zap,
-    comingSoon: true,
-  },
-  {
-    id: 'quickbooks',
-    name: 'QuickBooks',
-    description: 'Contabilidad e impuestos',
-    icon: BookOpen,
-    comingSoon: true,
-  },
-  {
-    id: 'webhooks',
-    name: 'Custom Webhooks',
-    description: 'Integraciones personalizadas vía HTTP',
-    icon: Code,
-    comingSoon: true,
-  },
-  {
-    id: 'gcalendar_ext',
-    name: 'Google Calendar público',
-    description: 'Mostrar agenda en tu web',
-    icon: Calendar,
-    comingSoon: true,
-  },
-  {
-    id: 'gdrive_ext',
-    name: 'Google Drive Compartido',
-    description: 'Carpeta compartida con clientes',
-    icon: HardDrive,
-    comingSoon: true,
-  },
+  { id: 'shopify',      name: 'Shopify',               description: 'Sincronización de catálogo y stock',     icon: Cloud,     comingSoon: true },
+  { id: 'stripe',       name: 'Stripe',                description: 'Pagos internacionales con tarjeta',      icon: Zap,       comingSoon: true },
+  { id: 'quickbooks',   name: 'QuickBooks',            description: 'Contabilidad e impuestos',               icon: BookOpen,  comingSoon: true },
+  { id: 'webhooks',     name: 'Custom Webhooks',       description: 'Integraciones personalizadas vía HTTP',  icon: Code,      comingSoon: true },
+  { id: 'gcalendar_ext',name: 'Google Calendar público',description: 'Mostrar agenda en tu web',             icon: Calendar,  comingSoon: true },
+  { id: 'gdrive_ext',   name: 'Google Drive Compartido',description: 'Carpeta compartida con clientes',      icon: HardDrive, comingSoon: true },
 ]
 
-export default async function IntegracionesPage() {
-  const sunatStatus = await getSunatDirectoStatus()
+export default function IntegracionesPage() {
+  const [sunatStatus, setSunatStatus] = useState<{ status?: IntStatus; statusMessage?: string }>({})
 
-  const INTEGRACIONES_CORE = INTEGRACIONES_CORE_BASE.map(item =>
-    item.id === 'sunat_directo'
-      ? { ...item, ...sunatStatus }
-      : item
-  )
+  useEffect(() => {
+    fetch('/api/settings-2/integraciones/sunat-directo')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.credenciales) return
+        const c = d.credenciales
+        if (c.estado === 'activo')       setSunatStatus({ status: 'conectado',    statusMessage: c.modo === 'produccion' ? 'Producción' : 'Beta' })
+        else if (c.estado === 'homologando') setSunatStatus({ status: 'pruebas',  statusMessage: 'Homologando (beta)' })
+        else if (c.estado === 'error')   setSunatStatus({ status: 'error',        statusMessage: 'Error de conexión' })
+        else                             setSunatStatus({ status: 'desconectado', statusMessage: 'Credenciales guardadas' })
+      })
+      .catch(() => {})
+  }, [])
 
   return (
     <div>
@@ -167,7 +120,12 @@ export default async function IntegracionesPage() {
           <p className="text-xs text-zinc-500 mb-4">WhatsApp (Meta + YCloud), pagos, facturación y mapas</p>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {INTEGRACIONES_CORE.map(integration => (
-              <IntegrationCard key={integration.id} {...integration} actionLabel="Configurar" />
+              <IntegrationCard
+                key={integration.id}
+                {...integration}
+                {...(integration.id === 'sunat_directo' ? sunatStatus : {})}
+                actionLabel="Configurar"
+              />
             ))}
           </div>
         </div>
