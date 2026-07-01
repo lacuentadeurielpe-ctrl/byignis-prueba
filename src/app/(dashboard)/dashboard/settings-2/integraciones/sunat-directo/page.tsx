@@ -249,6 +249,26 @@ export default function SunatDirectoPage() {
               </div>
             )}
 
+            {/* Banner "siguiente paso" cuando las credenciales están verificadas pero falta homologar */}
+            {creds?.estado === 'activo' && creds.modo === 'beta' && !creds.homologacion_completada_at && (
+              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg flex items-start gap-3">
+                <Zap className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-indigo-900">Siguiente paso: completar la homologación SUNAT</p>
+                  <p className="text-sm text-indigo-700 mt-0.5">
+                    Tus credenciales están verificadas. SUNAT exige enviar 10 comprobantes de prueba en modo Beta antes de activar la facturación real.
+                    El proceso es automático y tarda ~2 minutos.
+                  </p>
+                  <button
+                    onClick={() => document.getElementById('panel-homologacion')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="mt-2 text-sm font-medium text-indigo-700 underline"
+                  >
+                    Ir al panel de homologación ↓
+                  </button>
+                </div>
+              </div>
+            )}
+
             {creds && (
               <div className="flex gap-2 pt-2">
                 <button
@@ -282,6 +302,7 @@ export default function SunatDirectoPage() {
 
         {/* Panel de homologación automática */}
         {creds && creds.estado === 'activo' && creds.modo === 'beta' && (
+          <div id="panel-homologacion">
           <FormSection
             title="Homologación automática"
             description="Emite los 10 comprobantes de prueba requeridos por SUNAT antes de activar producción"
@@ -360,6 +381,7 @@ export default function SunatDirectoPage() {
               </div>
             )}
           </FormSection>
+          </div>
         )}
 
         {/* Formulario de credenciales */}
