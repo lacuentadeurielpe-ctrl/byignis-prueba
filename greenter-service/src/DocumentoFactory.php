@@ -109,6 +109,7 @@ class DocumentoFactory
             ->setUblVersion('2.1')
             ->setTipoOperacion('0101')
             ->setTipoDoc('03')  // Boleta
+            ->setTipoMoneda('PEN')
             ->setSerie($emisorData['serie'] ?? 'B001')
             ->setCorrelativo((string)($emisorData['numero'] ?? 1))
             ->setFechaEmision(new \DateTime('now', new \DateTimeZone('America/Lima')))
@@ -147,6 +148,7 @@ class DocumentoFactory
             ->setUblVersion('2.1')
             ->setTipoOperacion('0101')
             ->setTipoDoc('01')  // Factura
+            ->setTipoMoneda('PEN')
             ->setSerie($emisorData['serie'] ?? 'F001')
             ->setCorrelativo((string)($emisorData['numero'] ?? 1))
             ->setFechaEmision(new \DateTime('now', new \DateTimeZone('America/Lima')))
@@ -186,6 +188,7 @@ class DocumentoFactory
         $note
             ->setUblVersion('2.1')
             ->setTipoDoc($tipoDoc)
+            ->setTipoMoneda('PEN')
             ->setSerie($emisorData['serie'] ?? 'BC01')
             ->setCorrelativo((string)($emisorData['numero'] ?? 1))
             ->setFechaEmision(new \DateTime('now', new \DateTimeZone('America/Lima')))
