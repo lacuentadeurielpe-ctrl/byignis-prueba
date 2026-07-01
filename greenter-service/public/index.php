@@ -44,7 +44,10 @@ $app->post('/boleta/emitir', function (Request $request, Response $response): Re
         $resultado = $see->send($boleta);
 
         if (!$resultado->isSuccess()) {
-            throw new \RuntimeException($resultado->getError() ?? 'Error al enviar a SUNAT');
+            $err = $resultado->getError();
+            throw new \RuntimeException(
+                $err ? ('[' . $err->getCode() . '] ' . $err->getMessage()) : 'Error al enviar a SUNAT'
+            );
         }
 
         $cdr = $resultado->getCdrResponse();
@@ -82,7 +85,10 @@ $app->post('/factura/emitir', function (Request $request, Response $response): R
         $resultado = $see->send($factura);
 
         if (!$resultado->isSuccess()) {
-            throw new \RuntimeException($resultado->getError() ?? 'Error al enviar a SUNAT');
+            $err = $resultado->getError();
+            throw new \RuntimeException(
+                $err ? ('[' . $err->getCode() . '] ' . $err->getMessage()) : 'Error al enviar a SUNAT'
+            );
         }
 
         $cdr = $resultado->getCdrResponse();
@@ -120,7 +126,10 @@ $app->post('/nota-credito/emitir', function (Request $request, Response $respons
         $resultado = $see->send($nota);
 
         if (!$resultado->isSuccess()) {
-            throw new \RuntimeException($resultado->getError() ?? 'Error al enviar a SUNAT');
+            $err = $resultado->getError();
+            throw new \RuntimeException(
+                $err ? ('[' . $err->getCode() . '] ' . $err->getMessage()) : 'Error al enviar a SUNAT'
+            );
         }
 
         $cdr = $resultado->getCdrResponse();
