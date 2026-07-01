@@ -89,12 +89,18 @@ async function llamarGreenter(
     })
     clearTimeout(timer)
 
+    const texto = await res.text().catch(() => '')
+
     if (!res.ok) {
-      const txt = await res.text().catch(() => '')
-      return { ok: false, error: `Greenter ${res.status}: ${txt.slice(0, 200)}` }
+      return { ok: false, error: `Greenter ${res.status}: ${texto.slice(0, 200)}` }
     }
 
-    return await res.json()
+    // Toleramos respuestas no-JSON (p.ej. HTML del contenedor durante un redeploy)
+    try {
+      return JSON.parse(texto) as GreenterRespuesta
+    } catch {
+      return { ok: false, error: 'El servicio de facturación no respondió JSON válido (reintenta en unos segundos).' }
+    }
   } catch (e) {
     clearTimeout(timer)
     const msg = e instanceof Error && e.name === 'AbortError'
@@ -402,5 +408,82 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       .single()
 
     return { ok: true, comprobanteId: comp?.id, numeroCompleto: respuesta.numero_completo, pdfUrl: respuesta.pdf_url, xmlUrl: respuesta.xml_url }
+  }
+
+  /**
+   * Emite UNA boleta de prueba (homologación SUNAT) sin necesidad de un pedido real.
+   * Reutiliza las mismas credenciales, emisor y llamada a Greenter que la emisión
+   * real — el único cambio es un ítem de prueba fijo (S/10.00) y que se guarda con
+   * emitido_por='homologacion_sunat' y pedido_id=null.
+   *
+   * La orquestación (cuántas faltan, acumulado, auto-promoción) vive en la ruta
+   * /homologar; este método solo sabe emitir una.
+   */
+  async emitirBoletaPrueba(opts: {
+    supabase:     any
+    ferreteriaId: string
+    indice:       number   // 1..N, solo para la descripción del ítem
+  }): Promise<ResultadoEmisionUnificado & { cdrCodigo?: string }> {
+    const creds = await cargarCredenciales(opts.supabase, opts.ferreteriaId)
+    if (!creds) return { ok: false, error: 'SUNAT Directo no configurado o inactivo.', tokenInvalido: true }
+
+    const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
+    if (!ferreteria) return { ok: false, error: 'Negocio no encontrado' }
+
+    const serie = ferreteria.serie_boletas ?? 'B001'
+
+    const { data: corrData } = await opts.supabase
+      .rpc('generar_numero_comprobante', {
+        p_ferreteria_id: opts.ferreteriaId,
+        p_tipo:          'boleta',
+        p_serie:         serie,
+      })
+    if (!corrData) return { ok: false, error: 'Error generando correlativo' }
+
+    const respuesta = await llamarGreenter(creds.greenterUrl, 'boleta/emitir', {
+      modo: creds.modo,
+      emisor: {
+        ruc:          creds.ruc,
+        razon_social: creds.razonSocial,
+        serie,
+        numero:       corrData,
+        direccion:    ferreteria.direccion ?? '-',
+        ubigeo:       ferreteria.ubigeo ?? '150101',
+        departamento: ferreteria.departamento ?? 'LIMA',
+        provincia:    ferreteria.provincia ?? 'LIMA',
+        distrito:     ferreteria.distrito ?? 'LIMA',
+      },
+      sol:         { usuario: creds.solUsuario, clave: creds.solClave },
+      certificado: { pfx_base64: creds.certPfxB64, clave: creds.certClave },
+      cliente: { tipo_doc: '0', numero_doc: '00000000', nombre: 'CLIENTES VARIOS' },
+      igv_incluido: ferreteria.igv_incluido_en_precios ?? false,
+      items: [{
+        descripcion:     `MATERIAL DE CONSTRUCCION TEST HOMOLOGACION ${opts.indice}`,
+        cantidad:        1,
+        precio_unitario: 10.00,
+        unidad:          'NIU',
+      }],
+    })
+
+    if (!respuesta.ok) return { ok: false, error: respuesta.error }
+
+    const numero = corrData as number
+    const numeroCompleto = respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`
+    await opts.supabase.from('comprobantes').insert({
+      ferreteria_id:      opts.ferreteriaId,
+      pedido_id:          null,
+      tipo:               'boleta',
+      serie,
+      numero,
+      numero_completo:    numeroCompleto,
+      numero_comprobante: numeroCompleto,
+      estado:             'emitido',
+      pdf_url:            respuesta.pdf_url ?? null,
+      xml_url:            respuesta.xml_url ?? null,
+      cliente_nombre:     'CLIENTES VARIOS',
+      emitido_por:        'homologacion_sunat',
+    })
+
+    return { ok: true, numeroCompleto, pdfUrl: respuesta.pdf_url, xmlUrl: respuesta.xml_url, cdrCodigo: respuesta.cdr_codigo }
   }
 }
