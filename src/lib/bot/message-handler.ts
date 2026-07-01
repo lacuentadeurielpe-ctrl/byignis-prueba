@@ -136,6 +136,33 @@ export async function handleIncomingMessage({
     return { respuesta: null, conversacionId: '' }
   }
 
+  // ── 1b. Modo mantenimiento global (superadmin) ────────────────────────────
+  // Si config_plataforma.modo_mantenimiento = true, responder con el mensaje
+  // configurado y salir. Se chequea antes de crear sesión para mínimo overhead.
+  try {
+    const adminForMaint = createAdminClient()
+    const { data: maintRow } = await adminForMaint
+      .from('config_plataforma')
+      .select('valor')
+      .eq('clave', 'modo_mantenimiento')
+      .maybeSingle()
+
+    if (maintRow?.valor === true) {
+      const { data: msgRow } = await adminForMaint
+        .from('config_plataforma')
+        .select('valor')
+        .eq('clave', 'mensaje_mantenimiento')
+        .maybeSingle()
+      const msg = (msgRow?.valor as string) ??
+        'El servicio se encuentra en mantenimiento. Por favor intenta nuevamente en unos minutos.'
+      console.log(`[Bot] MODO MANTENIMIENTO activo — ferreteria=${ferreteria.id}`)
+      return { respuesta: msg, conversacionId: '' }
+    }
+  } catch (e) {
+    // No bloquear el bot si config_plataforma falla
+    console.error('[Bot] Error leyendo modo_mantenimiento:', e)
+  }
+
   // ── 2. Config del bot ─────────────────────────────────────────────────────
   const catalogRepo = new CatalogRepository(supabase)
   const chatRepo = new ChatRepository(supabase)

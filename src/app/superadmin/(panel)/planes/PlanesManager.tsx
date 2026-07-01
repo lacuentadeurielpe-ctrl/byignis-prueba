@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import PlanFuncionesMatrix from './PlanFuncionesMatrix'
 
 interface Plan {
   id:                  string
@@ -39,12 +40,13 @@ const FORM_DEFAULT: FormState = {
 
 export default function PlanesManager({ planes, conteo = {} }: Props) {
   const router = useRouter()
-  const [editando, setEditando] = useState<string | null>(null)
-  const [creando,  setCreando]  = useState(false)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState<string | null>(null)
-  const [success,  setSuccess]  = useState<string | null>(null)
-  const [form,     setForm]     = useState<FormState>(FORM_DEFAULT)
+  const [editando,       setEditando]       = useState<string | null>(null)
+  const [creando,        setCreando]        = useState(false)
+  const [loading,        setLoading]        = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
+  const [success,        setSuccess]        = useState<string | null>(null)
+  const [form,           setForm]           = useState<FormState>(FORM_DEFAULT)
+  const [verFunciones,   setVerFunciones]   = useState<string | null>(null)
 
   function abrirEditar(plan: Plan) {
     setEditando(plan.id)
@@ -116,7 +118,7 @@ export default function PlanesManager({ planes, conteo = {} }: Props) {
             className={`bg-gray-900 border rounded-xl p-5 ${!plan.activo ? 'opacity-40 border-gray-800' : plan.creditos_ilimitados ? 'border-yellow-700/60' : 'border-gray-700'}`}>
 
             {editando === plan.id ? (
-              <FormPlan form={form} setForm={setForm} onGuardar={guardar} onCancelar={() => setEditando(null)} loading={loading} />
+              <FormPlan form={form} setForm={setForm} onGuardar={guardar} onCancelar={() => { setEditando(null); }} loading={loading} />
             ) : (
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -158,6 +160,10 @@ export default function PlanesManager({ planes, conteo = {} }: Props) {
 
                 {plan.activo && (
                   <div className="flex gap-2 shrink-0">
+                    <button onClick={() => setVerFunciones(verFunciones === plan.id ? null : plan.id)}
+                      className={`px-3 py-1.5 text-xs border rounded-lg transition-colors ${verFunciones === plan.id ? 'border-indigo-500 text-indigo-300 bg-indigo-950/40' : 'border-gray-600 text-gray-300 hover:bg-gray-800'}`}>
+                      Funciones
+                    </button>
                     <button onClick={() => abrirEditar(plan)}
                       className="px-3 py-1.5 text-xs border border-gray-600 text-gray-300 hover:bg-gray-800 rounded-lg transition-colors">
                       Editar
@@ -169,6 +175,10 @@ export default function PlanesManager({ planes, conteo = {} }: Props) {
                   </div>
                 )}
               </div>
+            )}
+
+            {verFunciones === plan.id && editando !== plan.id && (
+              <PlanFuncionesMatrix planId={plan.id} planNombre={plan.nombre} />
             )}
           </div>
         ))}
