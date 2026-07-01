@@ -120,9 +120,12 @@ function mapearItems(supabase: any, pedidoId: string): Promise<any[]> {
 }
 
 async function obtenerFerreteria(supabase: any, ferreteriaId: string): Promise<any> {
+  // Nota: ferreterias no tiene columnas ubigeo/departamento/provincia/distrito.
+  // El emisor usa fallbacks a Lima (150101) — SUNAT acepta este ubigeo en la
+  // homologación. Si se agrega esa config al negocio, incluirla aquí.
   const { data } = await supabase
     .from('ferreterias')
-    .select('id, ruc, razon_social, serie_boletas, serie_facturas, igv_incluido_en_precios, direccion, ubigeo, departamento, provincia, distrito')
+    .select('id, ruc, razon_social, serie_boletas, serie_facturas, igv_incluido_en_precios, direccion')
     .eq('id', ferreteriaId)
     .single()
   return data
