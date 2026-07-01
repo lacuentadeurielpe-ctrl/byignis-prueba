@@ -17,10 +17,10 @@ export async function GET() {
     .eq('ferreteria_id', session.ferreteriaId)
     .single()
 
-  // También leer proveedor_facturacion activo
+  // Leer proveedor_facturacion activo + datos del negocio como fallback
   const { data: ferr } = await supabase
     .from('ferreterias')
-    .select('proveedor_facturacion')
+    .select('proveedor_facturacion, ruc, razon_social')
     .eq('id', session.ferreteriaId)
     .single()
 
@@ -28,6 +28,9 @@ export async function GET() {
     configurado: !!data,
     proveedor_activo: ferr?.proveedor_facturacion ?? 'nubefact',
     credenciales: data ?? null,
+    // Datos pre-existentes del negocio para pre-llenar cuando no hay credenciales SUNAT aún
+    negocio_ruc:          ferr?.ruc ?? null,
+    negocio_razon_social: ferr?.razon_social ?? null,
   })
 }
 

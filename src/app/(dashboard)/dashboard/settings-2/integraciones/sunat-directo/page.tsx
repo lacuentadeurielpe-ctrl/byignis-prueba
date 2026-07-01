@@ -6,8 +6,10 @@ import SettingsHeader from '../../components/SettingsHeader'
 import FormSection from '../../components/FormSection'
 
 interface EstadoSunat {
-  configurado:     boolean
-  proveedor_activo: string
+  configurado:          boolean
+  proveedor_activo:     string
+  negocio_ruc?:         string | null
+  negocio_razon_social?: string | null
   credenciales?: {
     id:                            string
     ruc:                           string
@@ -52,10 +54,15 @@ export default function SunatDirectoPage() {
       .then(d => {
         setEstado(d)
         if (d.credenciales) {
+          // Credenciales SUNAT ya guardadas → usar esos valores
           setRuc(d.credenciales.ruc)
           setRazonSocial(d.credenciales.razon_social)
           setModo(d.credenciales.modo)
           setGreenterUrl(d.credenciales.greenter_url)
+        } else {
+          // Primera vez → pre-llenar con los datos del negocio ya configurados
+          if (d.negocio_ruc)          setRuc(d.negocio_ruc)
+          if (d.negocio_razon_social) setRazonSocial(d.negocio_razon_social)
         }
       })
       .finally(() => setLoading(false))
