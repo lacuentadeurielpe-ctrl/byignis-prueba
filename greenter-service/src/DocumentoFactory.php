@@ -80,7 +80,6 @@ class DocumentoFactory
                 ->setMtoValorUnitario($valorUnitario)
                 ->setMtoValorVenta($mtoValorVenta)
                 ->setMtoBaseIgv($mtoValorVenta)
-                ->setPorIgv(18.0)
                 ->setIgv($igvItem)
                 ->setTipAfeIgv('10')  // Gravado - Operación Onerosa
                 ->setTotalImpuestos($igvItem)
