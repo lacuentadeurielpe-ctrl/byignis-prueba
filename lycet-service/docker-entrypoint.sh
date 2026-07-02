@@ -1,10 +1,13 @@
 #!/bin/sh
+set -e
+
 PORT=${PORT:-80}
 
-# Sobrescribir ports.conf con el puerto correcto (más robusto que sed)
-echo "Listen $PORT" > /etc/apache2/ports.conf
+# Actualizar el puerto en nginx config
+sed -i "s/listen PORT;/listen $PORT;/" /etc/nginx/sites-available/lycet
 
-# Actualizar el VirtualHost con el puerto correcto
-sed -i "s/<VirtualHost \*:[0-9]*>/<VirtualHost *:$PORT>/" /etc/apache2/sites-available/000-default.conf
+# Arrancar php-fpm en segundo plano
+php-fpm -D
 
-exec "$@"
+# Arrancar nginx en primer plano (proceso principal del contenedor)
+exec nginx -g 'daemon off;'
