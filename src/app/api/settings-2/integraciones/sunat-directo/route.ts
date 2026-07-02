@@ -13,7 +13,7 @@ export async function GET() {
   const supabase = await createClient()
   const { data } = await supabase
     .from('sunat_credenciales')
-    .select('id, ruc, razon_social, modo, estado, greenter_url, ultimo_test_at, ultimo_error, homologacion_casos_completados, homologacion_completada_at')
+    .select('id, ruc, razon_social, modo, estado, greenter_url, ultimo_test_at, ultimo_error, homologacion_casos_completados, homologacion_completada_at, sol_usuario_enc')
     .eq('ferreteria_id', session.ferreteriaId)
     .single()
 
@@ -24,10 +24,20 @@ export async function GET() {
     .eq('id', session.ferreteriaId)
     .single()
 
+  // Descifrar usuario SOL para mostrarlo en el formulario (no es dato secreto — la clave SOL sí lo es)
+  let solUsuario: string | null = null
+  if (data?.sol_usuario_enc) {
+    try { solUsuario = await desencriptar(data.sol_usuario_enc) } catch { /* ignorar */ }
+  }
+
+  // Excluir sol_usuario_enc del objeto de respuesta
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { sol_usuario_enc: _omit, ...credsSinEnc } = data ?? {}
+
   return NextResponse.json({
     configurado: !!data,
     proveedor_activo: ferr?.proveedor_facturacion ?? 'nubefact',
-    credenciales: data ?? null,
+    credenciales: data ? { ...credsSinEnc, sol_usuario: solUsuario } : null,
     // Datos pre-existentes del negocio para pre-llenar cuando no hay credenciales SUNAT aún
     negocio_ruc:          ferr?.ruc ?? null,
     negocio_razon_social: ferr?.razon_social ?? null,

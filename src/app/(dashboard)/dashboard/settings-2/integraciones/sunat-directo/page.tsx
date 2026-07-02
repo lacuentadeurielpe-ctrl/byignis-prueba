@@ -21,6 +21,7 @@ interface EstadoSunat {
     ultimo_error?:                 string
     homologacion_casos_completados: number
     homologacion_completada_at?:   string
+    sol_usuario?:                  string | null
   }
 }
 
@@ -51,6 +52,8 @@ export default function SunatDirectoPage() {
       .then(r => r.json())
       .then(d => {
         setEstado(d)
+        // Pre-llenar usuario SOL con el valor guardado (descifrado por el servidor)
+        if (d?.credenciales?.sol_usuario) setSolUsuario(d.credenciales.sol_usuario)
       })
       .finally(() => setLoading(false))
   }, [])
@@ -437,6 +440,9 @@ export default function SunatDirectoPage() {
                   className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="MODDATOS"
                 />
+                {creds?.sol_usuario && solUsuario === creds.sol_usuario && (
+                  <p className="text-xs text-emerald-600 mt-1">✓ Guardado: {creds.sol_usuario}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Clave SOL *</label>
