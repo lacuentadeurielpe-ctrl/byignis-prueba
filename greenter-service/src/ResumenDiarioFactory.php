@@ -5,7 +5,6 @@ namespace App;
 
 use Greenter\Model\Summary\Summary;
 use Greenter\Model\Summary\SummaryDetail;
-use Greenter\Model\Summary\BillingPayment;
 use Greenter\Model\Company\Company;
 use Greenter\Model\Company\Address;
 
@@ -19,9 +18,14 @@ class ResumenDiarioFactory
      *   emisor:      { ruc, razon_social, direccion, ubigeo, departamento, provincia, distrito }
      *   sol:         { usuario, clave }
      *   certificado: { pfx_base64, clave }
-     *   fecha:       'YYYY-MM-DD' — fecha de emisión de las boletas
-     *   correlativo: int — número de secuencia del RC del día (1, 2, 3...)
-     *   boletas:     [{ serie, numero, subtotal, igv, total }]
+     *   fecha:       'YYYY-MM-DD' — fecha de EMISIÓN de las boletas (FecGeneracion)
+     *   correlativo: int — número de secuencia del RC de ese día (1, 2, 3...)
+     *   boletas:     [{ serie, numero, subtotal, igv, total, cliente_tipo, cliente_nro }]
+     *
+     * API Greenter verificada (thegreenter/core):
+     *   Summary:       setCorrelativo, setFecGeneracion, setFecResumen, setMoneda, setCompany, setDetails
+     *   SummaryDetail: setTipoDoc, setSerieNro, setEstado, setClienteTipo, setClienteNro,
+     *                  setTotal, setMtoOperGravadas, setMtoIGV, setMtoOperInafectas, setMtoOperExoneradas
      */
     public static function crear(array $body): Summary
     {
@@ -29,6 +33,7 @@ class ResumenDiarioFactory
         $boletasData = $body['boletas']  ?? [];
         $fecha       = $body['fecha']    ?? date('Y-m-d');
         $correlativo = (int)($body['correlativo'] ?? 1);
+        $tz          = new \DateTimeZone('America/Lima');
 
         $company = new Company();
         $company
@@ -47,39 +52,37 @@ class ResumenDiarioFactory
 
         $detalles = [];
         foreach ($boletasData as $boleta) {
-            $subtotal = round((float)($boleta['subtotal'] ?? 0), 2);
-            $igv      = round((float)($boleta['igv']      ?? 0), 2);
-            $total    = round((float)($boleta['total']    ?? 0), 2);
-            $numero   = (int)($boleta['numero'] ?? 1);
-            $serie    = $boleta['serie'] ?? 'B001';
+            $subtotal    = round((float)($boleta['subtotal'] ?? 0), 2);
+            $igv         = round((float)($boleta['igv']      ?? 0), 2);
+            $total       = round((float)($boleta['total']    ?? 0), 2);
+            $serie       = $boleta['serie'] ?? 'B001';
+            $numero      = (int)($boleta['numero'] ?? 1);
+            $clienteTipo = (string)($boleta['cliente_tipo'] ?? '1');
+            $clienteNro  = (string)($boleta['cliente_nro']  ?? '00000000');
 
             $detail = new SummaryDetail();
             $detail
-                ->setTipoDoc('03')              // Boleta de Venta
-                ->setSerie($serie)
-                ->setCorrelativoInicio($numero)  // un comprobante por detalle
-                ->setCorrelativoFin($numero)
-                ->setTipoOperacion('0101')       // Venta interna
-                ->setTotalOperGravadas($subtotal)
-                ->setTotalIgv($igv)
-                ->setMtoOperGravadas($subtotal)
-                ->setMtoIGV($igv)
+                ->setTipoDoc('03')                                  // Boleta de Venta
+                ->setSerieNro($serie . '-' . $numero)               // ej: B001-14
+                ->setEstado('1')                                    // catálogo 19: 1=Adicionar
+                ->setClienteTipo($clienteTipo)
+                ->setClienteNro($clienteNro)
                 ->setTotal($total)
-                ->setBillingPayment(
-                    (new BillingPayment())
-                        ->setMoneda('PEN')
-                        ->setImporte($total)
-                );
+                ->setMtoOperGravadas($subtotal)
+                ->setMtoOperInafectas(0)
+                ->setMtoOperExoneradas(0)
+                ->setMtoIGV($igv);
 
             $detalles[] = $detail;
         }
 
         $summary = new Summary();
         $summary
-            ->setFechaEmision(new \DateTime('now', new \DateTimeZone('America/Lima')))
-            ->setFechaGeneracion(new \DateTime($fecha, new \DateTimeZone('America/Lima')))
+            ->setCorrelativo(str_pad((string)$correlativo, 3, '0', STR_PAD_LEFT))
+            ->setFecGeneracion(new \DateTime($fecha, $tz))          // fecha de emisión de las boletas
+            ->setFecResumen(new \DateTime('now', $tz))             // fecha de envío del resumen
+            ->setMoneda('PEN')
             ->setCompany($company)
-            ->setCorrelativo((string)$correlativo)
             ->setDetails($detalles);
 
         return $summary;

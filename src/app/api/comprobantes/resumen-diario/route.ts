@@ -92,10 +92,10 @@ export async function POST(request: Request) {
     .eq('id', session.ferreteriaId)
     .single()
 
-  // 2. Cargar boletas del día
-  const { data: boletas } = await supabase
+  // 2. Cargar boletas del día — solo las que ya fueron incluidas en un RC quedan excluidas
+  const { data: boletasRaw } = await supabase
     .from('comprobantes')
-    .select('id, numero_completo, serie, numero, total, igv, subtotal')
+    .select('id, numero_completo, serie, numero, total, igv, subtotal, cliente_ruc_dni, sunat_cdr_codigo, rc_id')
     .eq('ferreteria_id', session.ferreteriaId)
     .eq('tipo', 'boleta')
     .eq('estado', 'emitido')
@@ -103,8 +103,21 @@ export async function POST(request: Request) {
     .lt('created_at',  `${fecha}T24:00:00-05:00`)
     .order('numero', { ascending: true })
 
-  if (!boletas || boletas.length === 0) {
-    return NextResponse.json({ error: `No hay boletas emitidas el ${fecha} para incluir en el Resumen Diario.` }, { status: 400 })
+  // Filtro de seguridad: excluir boletas sin total válido (basura/pruebas rotas)
+  // y las que ya fueron declaradas en un RC previo (evita duplicados en SUNAT).
+  const boletas = (boletasRaw ?? []).filter(
+    b => b.rc_id == null && b.total != null && Number(b.total) > 0,
+  )
+
+  if (boletas.length === 0) {
+    const totalRaw = boletasRaw?.length ?? 0
+    const yaDeclaradas = boletasRaw?.filter(b => b.rc_id != null).length ?? 0
+    const msg = totalRaw === 0
+      ? `No hay boletas emitidas el ${fecha} para incluir en el Resumen Diario.`
+      : yaDeclaradas === totalRaw
+        ? `Todas las boletas del ${fecha} ya fueron declaradas en un RC previo.`
+        : `No hay boletas válidas (con importe > 0 y no declaradas) el ${fecha}.`
+    return NextResponse.json({ error: msg }, { status: 400 })
   }
 
   // 3. Calcular correlativo (cuántos RCs ya enviamos hoy + 1)
@@ -141,13 +154,20 @@ export async function POST(request: Request) {
     },
     sol:         { usuario: solUsuario, clave: solClave },
     certificado: { pfx_base64: certPfxB64, clave: certClave },
-    boletas: boletas.map(b => ({
-      serie:    b.serie,
-      numero:   b.numero,
-      subtotal: b.subtotal ?? 0,
-      igv:      b.igv ?? 0,
-      total:    b.total ?? 0,
-    })),
+    boletas: boletas.map(b => {
+      const doc = (b.cliente_ruc_dni ?? '').replace(/\D/g, '')
+      const clienteTipo = doc.length === 11 ? '6' : doc.length === 8 ? '1' : '0'
+      const clienteNro  = doc.length >= 8 ? doc : '00000000'
+      return {
+        serie:        b.serie,
+        numero:       b.numero,
+        subtotal:     b.subtotal ?? 0,
+        igv:          b.igv ?? 0,
+        total:        b.total ?? 0,
+        cliente_tipo: clienteTipo,
+        cliente_nro:  clienteNro,
+      }
+    }),
   })
 
   if (!respuesta.ok) {
@@ -172,6 +192,14 @@ export async function POST(request: Request) {
 
   if (rcError) {
     return NextResponse.json({ error: 'RC enviado a SUNAT pero error al guardarlo: ' + rcError.message }, { status: 500 })
+  }
+
+  // Marcar las boletas incluidas con el rc_id → no podrán volver a declararse (anti-duplicado)
+  if (rc?.id) {
+    await supabase
+      .from('comprobantes')
+      .update({ rc_id: rc.id })
+      .in('id', boletas.map(b => b.id))
   }
 
   return NextResponse.json({
@@ -236,9 +264,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: respuesta.error }, { status: 400 })
   }
 
-  const nuevoEstado = respuesta.cdr_codigo === '0' ? 'aceptado'
-    : respuesta.cdr_codigo === '2' ? 'aceptado'
-    : 'rechazado'
+  // CDR 0 = aceptado; >= 4000 = aceptado con observaciones; resto = rechazo
+  const codigoNum = parseInt(respuesta.cdr_codigo ?? '', 10)
+  const nuevoEstado = respuesta.cdr_codigo === '0' || codigoNum >= 4000 ? 'aceptado' : 'rechazado'
 
   await supabase
     .from('sunat_resumenes_diarios')
@@ -249,6 +277,14 @@ export async function PATCH(request: Request) {
       consultado_at:   new Date().toISOString(),
     })
     .eq('id', body.rc_id)
+
+  // Si SUNAT rechazó el RC, liberar las boletas para poder re-declararlas en otro RC
+  if (nuevoEstado === 'rechazado') {
+    await supabase
+      .from('comprobantes')
+      .update({ rc_id: null })
+      .eq('rc_id', body.rc_id)
+  }
 
   return NextResponse.json({
     ok:              true,
