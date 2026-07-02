@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { FileText, Download, RefreshCw, CheckCircle, BookOpen, Send, Search, AlertCircle } from 'lucide-react'
+import { FileText, Download, RefreshCw, CheckCircle, BookOpen, Send, Search, AlertCircle, Bell } from 'lucide-react'
+import { toast } from 'sonner'
 import type { LibroContable } from '@/types/database'
 
 interface Props {
@@ -47,6 +48,13 @@ export default function ContabilidadPanel({ libros: librosIniciales, ferreteriaI
   const [rcExito,    setRcExito]   = useState<string | null>(null)
   const [consultandoId, setConsultandoId] = useState<string | null>(null)
 
+  // Auto-cargar estado del RC del día al abrir la página — el dueño ve de inmediato
+  // cuántas boletas están pendientes de declarar, sin tener que hacer clic.
+  useEffect(() => {
+    cargarRC(fechaHoyLima())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function cargarRC(fecha: string) {
     setRcCargando(true)
     setRcError(null)
@@ -86,11 +94,19 @@ export default function ContabilidadPanel({ libros: librosIniciales, ferreteriaI
         body: JSON.stringify({ rc_id: rcId }),
       })
       const d = await res.json()
-      if (!res.ok) { alert(d.error ?? 'Error al consultar'); return }
-      setRcExito(`CDR recibido: ${d.cdr_descripcion ?? d.cdr_codigo} (${d.estado})`)
+      if (!res.ok) {
+        toast.error(d.error ?? 'Error al consultar el CDR')
+        return
+      }
+      const estadoLabel = d.estado === 'aceptado' ? '✅ Aceptado' : '❌ Rechazado'
+      toast.success(`CDR recibido: ${estadoLabel}`)
+      if (d.cdr_descripcion) setRcExito(`CDR: ${d.cdr_descripcion}`)
       await cargarRC(rcFecha)
-    } catch { alert('Error de red') }
-    finally { setConsultandoId(null) }
+    } catch {
+      toast.error('Error de red al consultar el CDR')
+    } finally {
+      setConsultandoId(null)
+    }
   }
 
   const periodo = `${year}${String(month).padStart(2, '0')}`
@@ -336,13 +352,30 @@ export default function ContabilidadPanel({ libros: librosIniciales, ferreteriaI
 
       {/* ── Resumen Diario de Boletas (RC) ──────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
-          <Send className="w-4 h-4 text-blue-600" />
-          Resumen Diario de Boletas (RC) — SUNAT Directo
-        </h2>
-        <p className="text-xs text-gray-500 mb-4">
-          Las boletas aceptadas por SUNAT deben declararse mediante un Resumen Diario para que aparezcan en el portal de consultas de SUNAT. Envíalo dentro de los 7 días siguientes a la emisión.
-        </p>
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Send className="w-4 h-4 text-blue-600" />
+              Resumen Diario de Boletas (RC) — SUNAT Directo
+            </h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Las boletas aceptadas deben declararse en SUNAT dentro de los 7 días siguientes a la emisión.
+            </p>
+          </div>
+          {/* Indicador de urgencia: boletas de HOY sin RC */}
+          {rcEstado && rcEstado.boletas_count > 0 && rcEstado.resumenes.filter(r => r.estado !== 'aceptado').length === 0 && (
+            <div className="shrink-0 flex items-center gap-1.5 bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-xl border border-amber-200">
+              <Bell className="w-3.5 h-3.5" />
+              {rcEstado.boletas_count} boleta(s) hoy sin RC
+            </div>
+          )}
+          {rcEstado && rcEstado.resumenes.some(r => r.estado === 'enviado') && (
+            <div className="shrink-0 flex items-center gap-1.5 bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1.5 rounded-xl border border-blue-200">
+              <RefreshCw className="w-3.5 h-3.5" />
+              RC pendiente de consultar
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-wrap gap-3 items-end mb-4">
           <div>

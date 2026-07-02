@@ -203,6 +203,14 @@ export interface Comprobante {
   xml_url: string | null             // F3
   emitido_por: string | null         // 'bot' | 'dashboard'
   comprobante_referencia_id: string | null // Referencia a boleta/factura original
+  // Lycet / SUNAT Directo (migración 095)
+  estado_sunat: string | null        // 'borrador'|'enviado'|'aceptado'|'aceptado_obs'|'rechazado'|'anulado'|'baja'
+  fecha_emision: string | null       // DATE fiscal Lima (YYYY-MM-DD)
+  rc_id: string | null               // FK a sunat_resumenes_diarios
+  cdr_notas: unknown | null          // JSON metadata del CDR
+  moneda: string | null              // 'PEN' | 'USD'
+  sunat_cdr_codigo: string | null    // Código numérico del CDR SUNAT
+  sunat_cdr_descripcion: string | null
   created_at: string
 }
 
