@@ -34,9 +34,10 @@ ENV OPENSSL_CONF=/etc/ssl/openssl_lycet.cnf
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Clonar Lycet — clonar en /var/www y renombrar para evitar conflictos de cache
+# Clonar Lycet — limpiar primero para evitar conflictos de build cache de Railway
 WORKDIR /var/www
-RUN git clone --depth=1 https://github.com/giansalex/lycet.git html \
+RUN rm -rf html /var/www/html \
+    && git clone --depth=1 https://github.com/giansalex/lycet.git html \
     && cd html && composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
 WORKDIR /var/www/html
