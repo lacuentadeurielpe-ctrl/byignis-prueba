@@ -105,18 +105,25 @@ export async function POST(request: Request) {
     // El modo solo puede retrodecer manualmente vía PATCH, no al actualizar credenciales.
     const modoFinal = existing?.homologacion_completada_at ? 'produccion' : (modo ?? 'beta')
 
+    // cert_pfx_enc es NOT NULL — siempre debe estar presente.
+    // Si no se subió un nuevo certificado, se reutiliza el existente ya encriptado.
+    const certPfxFinal = certPfxEnc ?? existing?.cert_pfx_enc
+    if (!certPfxFinal) {
+      return NextResponse.json({ error: 'Debes subir el certificado digital (.pfx/.p12)' }, { status: 400 })
+    }
+
     const upsertPayload: any = {
       ferreteria_id:   session.ferreteriaId,
       ruc:             rucLimpio,
       razon_social:    ferr.razon_social.trim(),
       sol_usuario_enc: solUsuarioEnc,
       sol_clave_enc:   solClaveEnc,
+      cert_pfx_enc:    certPfxFinal,
       cert_clave_enc:  certClaveEnc,
       greenter_url:    'https://greenter-api-production.up.railway.app',
       modo:            modoFinal,
       estado:          'pendiente',
     }
-    if (certPfxEnc) upsertPayload.cert_pfx_enc = certPfxEnc
 
     const { data, error } = await supabase
       .from('sunat_credenciales')
