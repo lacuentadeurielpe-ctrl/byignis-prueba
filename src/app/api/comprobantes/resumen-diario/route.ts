@@ -7,6 +7,15 @@ export const dynamic = 'force-dynamic'
 
 const TIMEOUT_MS = 60_000
 
+// Rango [inicio, fin) del día en Lima (UTC-5). Evita 'T24:00:00' (hora ISO inválida):
+// usa el día siguiente a las 00:00 como límite superior exclusivo.
+function rangoDiaLima(fecha: string): { desde: string; hasta: string } {
+  const [y, m, d] = fecha.split('-').map(Number)
+  const siguiente = new Date(Date.UTC(y, m - 1, d + 1))
+  const fechaSig = siguiente.toISOString().slice(0, 10) // YYYY-MM-DD del día siguiente
+  return { desde: `${fecha}T00:00:00-05:00`, hasta: `${fechaSig}T00:00:00-05:00` }
+}
+
 async function llamarGreenter(greenterUrl: string, endpoint: string, payload: object) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
@@ -50,8 +59,8 @@ export async function GET(request: Request) {
       .eq('ferreteria_id', session.ferreteriaId)
       .eq('tipo', 'boleta')
       .eq('estado', 'emitido')
-      .gte('created_at', `${fecha}T00:00:00-05:00`)
-      .lt('created_at',  `${fecha}T24:00:00-05:00`)
+      .gte('created_at', rangoDiaLima(fecha).desde)
+      .lt('created_at',  rangoDiaLima(fecha).hasta)
       .order('numero', { ascending: true }),
   ])
 
@@ -99,8 +108,8 @@ export async function POST(request: Request) {
     .eq('ferreteria_id', session.ferreteriaId)
     .eq('tipo', 'boleta')
     .eq('estado', 'emitido')
-    .gte('created_at', `${fecha}T00:00:00-05:00`)
-    .lt('created_at',  `${fecha}T24:00:00-05:00`)
+    .gte('created_at', rangoDiaLima(fecha).desde)
+    .lt('created_at',  rangoDiaLima(fecha).hasta)
     .order('numero', { ascending: true })
 
   // Filtro de seguridad: excluir boletas sin total válido (basura/pruebas rotas)
