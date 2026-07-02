@@ -34,10 +34,12 @@ ENV OPENSSL_CONF=/etc/ssl/openssl_lycet.cnf
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Clonar Lycet
+# Clonar Lycet — clonar en /var/www y renombrar para evitar conflictos de cache
+WORKDIR /var/www
+RUN git clone --depth=1 https://github.com/giansalex/lycet.git html \
+    && cd html && composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
 WORKDIR /var/www/html
-RUN git clone --depth=1 https://github.com/giansalex/lycet.git . \
-    && composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
 # Permisos para var/ (Symfony cache, logs y configs de empresa)
 RUN mkdir -p var && chown -R www-data:www-data /var/www/html/var
