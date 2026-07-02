@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { FileText, Download, RefreshCw, CheckCircle, BookOpen } from 'lucide-react'
+import { FileText, Download, RefreshCw, CheckCircle, BookOpen, Send, Search, AlertCircle } from 'lucide-react'
 import type { LibroContable } from '@/types/database'
 
 interface Props {
@@ -18,6 +18,17 @@ function periodoLabel(periodo: string): string {
   return `${MESES[month]} ${year}`
 }
 
+interface ResumenDiarioEstado {
+  fecha:           string
+  boletas_count:   number
+  boletas_total:   number
+  resumenes:       Array<{ id: string; correlativo: number; ticket: string | null; estado: string; cdr_codigo: string | null; cdr_descripcion: string | null; boletas_count: number; boletas_total: number; created_at: string }>
+}
+
+function fechaHoyLima() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+}
+
 export default function ContabilidadPanel({ libros: librosIniciales, ferreteriaId: _ferreteriaId }: Props) {
   const hoy    = new Date()
   const [year,  setYear]  = useState(hoy.getFullYear())
@@ -26,6 +37,61 @@ export default function ContabilidadPanel({ libros: librosIniciales, ferreteriaI
   const [generando, setGenerando] = useState(false)
   const [error,     setError]     = useState<string | null>(null)
   const [exito,     setExito]     = useState<string | null>(null)
+
+  // Estado del Resumen Diario
+  const [rcFecha,    setRcFecha]   = useState(fechaHoyLima())
+  const [rcEstado,   setRcEstado]  = useState<ResumenDiarioEstado | null>(null)
+  const [rcCargando, setRcCargando] = useState(false)
+  const [rcEnviando, setRcEnviando] = useState(false)
+  const [rcError,    setRcError]   = useState<string | null>(null)
+  const [rcExito,    setRcExito]   = useState<string | null>(null)
+  const [consultandoId, setConsultandoId] = useState<string | null>(null)
+
+  async function cargarRC(fecha: string) {
+    setRcCargando(true)
+    setRcError(null)
+    try {
+      const res = await fetch(`/api/comprobantes/resumen-diario?fecha=${fecha}`)
+      const d = await res.json()
+      if (!res.ok) { setRcError(d.error ?? 'Error al cargar'); return }
+      setRcEstado(d)
+    } catch { setRcError('Error de red') }
+    finally { setRcCargando(false) }
+  }
+
+  async function enviarRC() {
+    setRcEnviando(true)
+    setRcError(null)
+    setRcExito(null)
+    try {
+      const res = await fetch('/api/comprobantes/resumen-diario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha: rcFecha }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setRcError(d.error ?? 'Error al enviar'); return }
+      setRcExito(`RC-${d.correlativo} enviado a SUNAT. Ticket: ${d.ticket ?? 'sin ticket'}. ${d.boletas_count} boleta(s), S/ ${Number(d.boletas_total).toFixed(2)}`)
+      await cargarRC(rcFecha)
+    } catch { setRcError('Error de red al enviar el RC') }
+    finally { setRcEnviando(false) }
+  }
+
+  async function consultarTicket(rcId: string) {
+    setConsultandoId(rcId)
+    try {
+      const res = await fetch('/api/comprobantes/resumen-diario', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rc_id: rcId }),
+      })
+      const d = await res.json()
+      if (!res.ok) { alert(d.error ?? 'Error al consultar'); return }
+      setRcExito(`CDR recibido: ${d.cdr_descripcion ?? d.cdr_codigo} (${d.estado})`)
+      await cargarRC(rcFecha)
+    } catch { alert('Error de red') }
+    finally { setConsultandoId(null) }
+  }
 
   const periodo = `${year}${String(month).padStart(2, '0')}`
   const libroActual = libros.find(l => l.periodo === periodo && l.tipo_libro === 'ventas')
@@ -265,6 +331,118 @@ export default function ContabilidadPanel({ libros: librosIniciales, ferreteriaI
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* ── Resumen Diario de Boletas (RC) ──────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h2 className="text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2">
+          <Send className="w-4 h-4 text-blue-600" />
+          Resumen Diario de Boletas (RC) — SUNAT Directo
+        </h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Las boletas aceptadas por SUNAT deben declararse mediante un Resumen Diario para que aparezcan en el portal de consultas de SUNAT. Envíalo dentro de los 7 días siguientes a la emisión.
+        </p>
+
+        <div className="flex flex-wrap gap-3 items-end mb-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Fecha de las boletas</label>
+            <input
+              type="date"
+              value={rcFecha}
+              onChange={e => { setRcFecha(e.target.value); setRcEstado(null) }}
+              className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          <button
+            onClick={() => cargarRC(rcFecha)}
+            disabled={rcCargando}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 text-sm rounded-lg transition"
+          >
+            <Search className={`w-4 h-4 ${rcCargando ? 'animate-spin' : ''}`} />
+            Ver boletas
+          </button>
+        </div>
+
+        {rcError && (
+          <div className="mb-3 flex items-start gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            {rcError}
+          </div>
+        )}
+        {rcExito && (
+          <p className="mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">✅ {rcExito}</p>
+        )}
+
+        {rcEstado && (
+          <>
+            {/* Boletas del día */}
+            <div className="mb-4 bg-gray-50 rounded-xl p-4">
+              <p className="text-xs text-gray-500 font-semibold mb-2">
+                Boletas emitidas el {rcEstado.fecha}: <span className="text-gray-900 font-bold">{rcEstado.boletas_count}</span>
+                {' — '}
+                Total: <span className="text-gray-900 font-bold">S/ {Number(rcEstado.boletas_total).toFixed(2)}</span>
+              </p>
+              {rcEstado.boletas_count > 0 ? (
+                <button
+                  onClick={enviarRC}
+                  disabled={rcEnviando}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition"
+                >
+                  <Send className={`w-4 h-4 ${rcEnviando ? 'animate-pulse' : ''}`} />
+                  {rcEnviando ? 'Enviando a SUNAT...' : `Enviar RC para el ${rcEstado.fecha}`}
+                </button>
+              ) : (
+                <p className="text-xs text-gray-400">No hay boletas emitidas ese día para declarar.</p>
+              )}
+            </div>
+
+            {/* Historial de RCs del día */}
+            {rcEstado.resumenes.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 font-semibold mb-2">RCs enviados para {rcEstado.fecha}:</p>
+                <div className="space-y-2">
+                  {rcEstado.resumenes.map(rc => (
+                    <div key={rc.id} className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-4 py-3 gap-3">
+                      <div>
+                        <span className="text-sm font-bold text-gray-900">
+                          RC-{String(rc.correlativo).padStart(3, '0')}
+                        </span>
+                        <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                          rc.estado === 'aceptado'   ? 'bg-green-100 text-green-700' :
+                          rc.estado === 'rechazado'  ? 'bg-red-100 text-red-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {rc.estado === 'aceptado' ? '✓ Aceptado' : rc.estado === 'rechazado' ? '✗ Rechazado' : 'Enviado'}
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          {rc.boletas_count} boleta(s) · S/ {Number(rc.boletas_total).toFixed(2)}
+                          {rc.ticket && <> · Ticket: <span className="font-mono">{rc.ticket}</span></>}
+                        </p>
+                        {rc.cdr_descripcion && (
+                          <p className="text-[11px] text-gray-500 mt-0.5">{rc.cdr_descripcion}</p>
+                        )}
+                      </div>
+                      {rc.estado === 'enviado' && rc.ticket && (
+                        <button
+                          onClick={() => consultarTicket(rc.id)}
+                          disabled={consultandoId === rc.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs rounded-lg transition shrink-0"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${consultandoId === rc.id ? 'animate-spin' : ''}`} />
+                          Consultar CDR
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {!rcEstado && !rcCargando && (
+          <p className="text-xs text-gray-400">Selecciona una fecha y haz clic en &quot;Ver boletas&quot; para verificar antes de enviar.</p>
         )}
       </div>
 

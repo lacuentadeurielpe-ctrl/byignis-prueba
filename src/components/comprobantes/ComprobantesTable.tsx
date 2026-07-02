@@ -119,13 +119,14 @@ export default function ComprobantesTable({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
                   <div className="flex items-center justify-end gap-2">
-                    {comp.pdf_url && (
+                    {/* PDF: siempre disponible — usa la URL de Nubefact si existe, o genera on-demand */}
+                    {(comp.estado === 'emitido' || comp.pdf_url) && (
                       <a
-                        href={comp.pdf_url}
+                        href={comp.pdf_url ?? `/api/comprobantes/${comp.id}/pdf`}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-blue-600 hover:bg-blue-50 transition"
-                        title="Ver PDF"
+                        title="Descargar PDF"
                       >
                         <FileText className="w-4 h-4" />
                       </a>

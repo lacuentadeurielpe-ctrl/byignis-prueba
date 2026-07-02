@@ -156,4 +156,74 @@ $app->post('/nota-credito/emitir', function (Request $request, Response $respons
     return $response->withHeader('Content-Type', 'application/json');
 });
 
+// ── Resumen Diario de Boletas (RC) — Enviar ──────────────────────────────────
+$app->post('/resumen-diario/emitir', function (Request $request, Response $response): Response {
+    $body = (array) $request->getParsedBody();
+
+    try {
+        if (empty($body['boletas'])) {
+            throw new \InvalidArgumentException('Se requiere al menos una boleta en el resumen diario');
+        }
+
+        $see     = \App\GreenterFactory::crearSee($body);
+        $resumen = \App\ResumenDiarioFactory::crear($body);
+        $resultado = $see->send($resumen);
+
+        if (!$resultado->isSuccess()) {
+            $err = $resultado->getError();
+            throw new \RuntimeException(
+                $err ? ('[' . $err->getCode() . '] ' . $err->getMessage()) : 'Error al enviar el Resumen Diario a SUNAT'
+            );
+        }
+
+        // RC es procesamiento asíncrono — SUNAT devuelve un ticket para consultar después
+        $ticket = $resultado->getTicket();
+
+        $response->getBody()->write(json_encode([
+            'ok'     => true,
+            'ticket' => $ticket,
+        ]));
+    } catch (\Throwable $e) {
+        $response->getBody()->write(json_encode(['ok' => false, 'error' => $e->getMessage()]));
+        return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
+    }
+
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+// ── Resumen Diario — Consultar estado de ticket ───────────────────────────────
+$app->post('/resumen-diario/consultar', function (Request $request, Response $response): Response {
+    $body = (array) $request->getParsedBody();
+
+    try {
+        $ticket = $body['ticket'] ?? '';
+        if (!$ticket) {
+            throw new \InvalidArgumentException('Se requiere el ticket a consultar');
+        }
+
+        $see       = \App\GreenterFactory::crearSee($body);
+        $resultado = $see->getStatus($ticket);
+
+        if (!$resultado->isSuccess()) {
+            $err = $resultado->getError();
+            throw new \RuntimeException(
+                $err ? ('[' . $err->getCode() . '] ' . $err->getMessage()) : 'Error al consultar el estado del ticket'
+            );
+        }
+
+        $cdr = $resultado->getCdrResponse();
+
+        $response->getBody()->write(json_encode([
+            'ok'              => true,
+            'cdr_codigo'      => $cdr?->getCode(),
+            'cdr_descripcion' => $cdr?->getDescription(),
+        ]));
+    } catch (\Throwable $e) {
+        $response->getBody()->write(json_encode(['ok' => false, 'error' => $e->getMessage()]));
+        return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
+    }
+
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
 $app->run();
