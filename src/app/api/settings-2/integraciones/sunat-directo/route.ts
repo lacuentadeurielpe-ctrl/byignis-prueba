@@ -74,7 +74,7 @@ export async function POST(request: Request) {
   // Verificar si ya hay credenciales (para actualización sin re-subir el certificado)
   const { data: existing } = await supabase
     .from('sunat_credenciales')
-    .select('cert_pfx_enc')
+    .select('cert_pfx_enc, modo, homologacion_completada_at')
     .eq('ferreteria_id', session.ferreteriaId)
     .single()
 
@@ -91,6 +91,10 @@ export async function POST(request: Request) {
     if (cert_pfx_b64) encPromises.push(encriptar(cert_pfx_b64))
     const [solUsuarioEnc, solClaveEnc, certClaveEnc, certPfxEnc] = await Promise.all(encPromises)
 
+    // Si la homologación ya está completa, preservar modo=produccion aunque el form envíe beta.
+    // El modo solo puede retrodecer manualmente vía PATCH, no al actualizar credenciales.
+    const modoFinal = existing?.homologacion_completada_at ? 'produccion' : (modo ?? 'beta')
+
     const upsertPayload: any = {
       ferreteria_id:   session.ferreteriaId,
       ruc:             rucLimpio,
@@ -99,7 +103,7 @@ export async function POST(request: Request) {
       sol_clave_enc:   solClaveEnc,
       cert_clave_enc:  certClaveEnc,
       greenter_url:    'https://greenter-api-production.up.railway.app',
-      modo:            modo ?? 'beta',
+      modo:            modoFinal,
       estado:          'pendiente',
     }
     if (certPfxEnc) upsertPayload.cert_pfx_enc = certPfxEnc
