@@ -2,8 +2,10 @@
 # https://github.com/giansalex/lycet
 #
 # Variables de entorno requeridas en Railway:
-#   API_KEY   — token de autenticación de la API (?token=... en cada request)
-#   PORT      — Railway lo inyecta automáticamente (default 8080)
+#   API_KEY    — token de autenticación de la API (?token=... en cada request)
+#   APP_SECRET — clave secreta de Symfony (cualquier string aleatorio)
+#   APP_ENV    — "prod" para producción
+#   PORT       — Railway lo inyecta automáticamente
 
 FROM php:8.2-apache
 
@@ -11,11 +13,11 @@ FROM php:8.2-apache
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git unzip libxml2-dev libzip-dev libssl-dev \
         xfonts-75dpi xfonts-base fontconfig libfreetype6 \
-        libjpeg62-turbo libpng-dev libxrender1 libxext6 \
+        libjpeg62-turbo libxrender1 libxext6 gettext-base \
     && docker-php-ext-install soap zip dom \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# wkhtmltopdf para generación de PDF (versión estática con QT parches)
+# wkhtmltopdf para generación de PDF
 RUN apt-get update && apt-get install -y --no-install-recommends wget \
     && wget -q https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_amd64.deb \
     && apt-get install -y ./wkhtmltox_0.12.6.1-3.bookworm_amd64.deb \
@@ -27,28 +29,30 @@ RUN printf '[openssl_init]\nproviders = provider_sect\n\n[provider_sect]\ndefaul
     > /etc/ssl/openssl_lycet.cnf
 ENV OPENSSL_CONF=/etc/ssl/openssl_lycet.cnf
 
+# Habilitar mod_rewrite (necesario para Symfony)
+RUN a2enmod rewrite
+
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Clonar Lycet (Symfony app oficial de Greenter)
+# Clonar Lycet
 WORKDIR /var/www/html
 RUN git clone --depth=1 https://github.com/giansalex/lycet.git . \
     && composer install --no-dev --optimize-autoloader --no-interaction
 
-# Apache: apuntar al /public de Symfony
+# Apuntar Apache al directorio public de Symfony
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
-        /etc/apache2/sites-available/*.conf \
-        /etc/apache2/sites-available/000-default.conf \
-    && a2enmod rewrite
+        /etc/apache2/sites-available/000-default.conf
 
-# Permisos de escritura para var/ (cache, logs, configuraciones de empresa)
-RUN chown -R www-data:www-data /var/www/html/var
+# Permisos para var/ (Symfony cache, logs y configs de empresa)
+RUN mkdir -p var && chown -R www-data:www-data /var/www/html/var
 
-# Railway inyecta PORT; Apache lo escucha
-RUN sed -i 's/Listen 80/Listen ${PORT:-80}/' /etc/apache2/ports.conf \
-    && sed -i 's/<VirtualHost \*:80>/<VirtualHost *:${PORT:-80}>/' /etc/apache2/sites-available/000-default.conf
+# Script de arranque: reemplaza PORT en la config de Apache en runtime
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 80
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["apache2-foreground"]
