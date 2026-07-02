@@ -265,6 +265,20 @@ export default function SunatDirectoPage() {
               </div>
             )}
 
+            {/* Banner "homologación lista — activa SUNAT Directo" */}
+            {creds?.homologacion_completada_at && !estaActivo && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
+                <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-emerald-900">Homologación completada — ya puedes emitir comprobantes reales</p>
+                  <p className="text-sm text-emerald-700 mt-0.5">
+                    Las 10 boletas de prueba fueron aceptadas por SUNAT y tu cuenta está en modo Producción.
+                    Haz clic en <strong>"Activar SUNAT Directo"</strong> para que todas tus ventas usen tu certificado.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {creds && (
               <div className="flex gap-2 pt-2">
                 <button
@@ -296,8 +310,8 @@ export default function SunatDirectoPage() {
           </div>
         </FormSection>
 
-        {/* Panel de homologación automática */}
-        {creds && creds.estado === 'activo' && creds.modo === 'beta' && (
+        {/* Panel de homologación automática — visible en beta (pendiente) y en produccion (completado) */}
+        {creds && creds.estado === 'activo' && (creds.modo === 'beta' || !!creds.homologacion_completada_at) && (
           <div id="panel-homologacion">
           <FormSection
             title="Homologación automática"

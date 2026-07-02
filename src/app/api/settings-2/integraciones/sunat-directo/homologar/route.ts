@@ -95,6 +95,7 @@ export async function POST() {
         : {}),
     })
     .eq('ferreteria_id', session.ferreteriaId)
+    .eq('estado', 'activo')
 
   return NextResponse.json({
     exitosos:   completadas,               // acumulado, no solo esta corrida
