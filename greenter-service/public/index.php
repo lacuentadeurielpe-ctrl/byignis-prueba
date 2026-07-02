@@ -8,23 +8,39 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 require __DIR__ . '/../vendor/autoload.php';
 
 /**
- * Clasifica el código de respuesta CDR de SUNAT.
+ * Clasifica el código de respuesta (ResponseCode) del CDR de SUNAT.
  *
- * SUNAT devuelve dos niveles de código en el CDR:
- *   - Documento principal: '0' = Aceptado, '1' = Rechazado, '2' = Aceptado con observaciones
- *   - Línea de observación: 1xxx (informativo), 2xxx (aviso), 3xxx (obs. aceptada), 4xxx (error grave)
+ * Rangos oficiales del catálogo de SUNAT:
+ *   - '0'          → Aceptado
+ *   - 100-999      → Excepciones del sistema (no aceptado, reintentar)
+ *   - 1000-1999    → Errores del contribuyente que generan RECHAZO
+ *   - 2000-3999    → Errores del comprobante que generan RECHAZO  (aquí cae el 3305)
+ *   - 4000+        → Observaciones: el comprobante SÍ es aceptado, con notas
  *
- * Greenter 4.x a veces devuelve el código de LÍNEA en vez del código de documento,
- * por lo que debemos aceptar cualquier código que no sea un rechazo explícito.
- *
- * Rechazos reales: '1' (código principal) o cualquier 4xxx (error grave en línea)
- * Todo lo demás ('0', '2', 1xxx, 2xxx, 3xxx) = aceptado (con o sin observaciones)
+ * Por lo tanto es ACEPTADO solo si code == '0' o code >= 4000.
+ * Cualquier código entre 100 y 3999 es un rechazo o excepción → no aceptar.
  */
-function esRechazoCDR(string $code): bool
+function esAceptadoCDR(string $code): bool
 {
-    if ($code === '1') return true;                         // rechazo principal SUNAT
-    if (preg_match('/^4\d{3}$/', $code)) return true;      // error grave 4xxx
-    return false;
+    if ($code === '0') return true;              // aceptado
+    if ((int)$code >= 4000) return true;         // aceptado con observaciones
+    return false;                                 // 100-3999 = rechazo/excepción
+}
+
+/**
+ * Obtiene el XML firmado que se envió a SUNAT, para diagnóstico cuando hay rechazo.
+ * Devuelve null si no se puede obtener (nunca debe romper el flujo principal).
+ */
+function xmlFirmadoDiagnostico(\Greenter\See $see, object $documento): ?string
+{
+    try {
+        if (method_exists($see, 'getXmlSigned')) {
+            return $see->getXmlSigned($documento);
+        }
+    } catch (\Throwable $e) {
+        error_log('[xmlFirmadoDiagnostico] ' . $e->getMessage());
+    }
+    return null;
 }
 
 $app = AppFactory::create();
@@ -72,7 +88,7 @@ $app->post('/boleta/emitir', function (Request $request, Response $response): Re
 
         $cdr     = $resultado->getCdrResponse();
         $cdrCode = $cdr?->getCode() ?? '';
-        if ($cdr && esRechazoCDR($cdrCode)) {
+        if ($cdr && !esAceptadoCDR($cdrCode)) {
             throw new \RuntimeException('SUNAT rechazó la boleta (CDR ' . $cdrCode . '): ' . ($cdr->getDescription() ?? 'sin detalle'));
         }
 
@@ -113,8 +129,15 @@ $app->post('/factura/emitir', function (Request $request, Response $response): R
 
         $cdr     = $resultado->getCdrResponse();
         $cdrCode = $cdr?->getCode() ?? '';
-        if ($cdr && esRechazoCDR($cdrCode)) {
-            throw new \RuntimeException('SUNAT rechazó la factura (CDR ' . $cdrCode . '): ' . ($cdr->getDescription() ?? 'sin detalle'));
+        if ($cdr && !esAceptadoCDR($cdrCode)) {
+            $response->getBody()->write(json_encode([
+                'ok'    => false,
+                'error' => 'SUNAT rechazó la factura (CDR ' . $cdrCode . '): ' . ($cdr->getDescription() ?? 'sin detalle'),
+                'cdr_codigo'      => $cdrCode,
+                'cdr_descripcion' => $cdr->getDescription(),
+                'xml_diagnostico' => xmlFirmadoDiagnostico($see, $factura),
+            ]));
+            return $response->withHeader('Content-Type', 'application/json')->withStatus(400);
         }
 
         $pdfUrl = \App\PdfGenerator::generar($factura, 'factura', $body);
@@ -154,7 +177,7 @@ $app->post('/nota-credito/emitir', function (Request $request, Response $respons
 
         $cdr     = $resultado->getCdrResponse();
         $cdrCode = $cdr?->getCode() ?? '';
-        if ($cdr && esRechazoCDR($cdrCode)) {
+        if ($cdr && !esAceptadoCDR($cdrCode)) {
             throw new \RuntimeException('SUNAT rechazó la nota de crédito (CDR ' . $cdrCode . '): ' . ($cdr->getDescription() ?? 'sin detalle'));
         }
 
