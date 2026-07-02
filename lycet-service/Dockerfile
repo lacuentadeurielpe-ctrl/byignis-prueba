@@ -40,10 +40,14 @@ WORKDIR /var/www/html
 RUN git clone --depth=1 https://github.com/giansalex/lycet.git . \
     && composer install --no-dev --optimize-autoloader --no-interaction
 
-# Apuntar Apache al directorio public de Symfony
+# Apuntar Apache al directorio public de Symfony y habilitar AllowOverride All
+# (Symfony usa .htaccess para routing; sin AllowOverride All Apache ignora el archivo
+# y retorna 404 para todas las rutas /api/*)
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
-        /etc/apache2/sites-available/000-default.conf
+        /etc/apache2/sites-available/000-default.conf \
+    && printf '\n<Directory /var/www/html/public>\n    AllowOverride All\n    Options -Indexes +FollowSymLinks\n    Require all granted\n</Directory>\n' \
+        >> /etc/apache2/sites-available/000-default.conf
 
 # Permisos para var/ (Symfony cache, logs y configs de empresa)
 RUN mkdir -p var && chown -R www-data:www-data /var/www/html/var
