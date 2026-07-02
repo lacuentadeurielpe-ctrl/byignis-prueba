@@ -222,30 +222,31 @@ export default function OrderDetailPane({
                     <FileText className="w-4 h-4" /> Ver Nota de Venta
                   </button>
 
-                  {tieneRuc && nubefactConfigurado && (
-                    <>
-                      {/* Lógica de botones de boleta/factura adaptada del original */}
-                      {pedido.comprobantes?.some(c => c.tipo === 'boleta') ? (
-                        <button onClick={() => comprobantesHooks.verComprobante(pedido.id, 'boleta')} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl text-sm font-bold hover:bg-blue-100 transition-all border border-blue-200">
-                          <FileText className="w-4 h-4" /> Ver Boleta SUNAT
-                        </button>
-                      ) : (
+                  {tieneRuc && nubefactConfigurado && (() => {
+                    const tieneBoletaEmitida = pedido.comprobantes?.some(c => c.tipo === 'boleta')
+                    const tieneFacturaEmitida = pedido.comprobantes?.some(c => c.tipo === 'factura')
+
+                    if (tieneBoletaEmitida) return (
+                      <button onClick={() => comprobantesHooks.verComprobante(pedido.id, 'boleta')} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-xl text-sm font-bold hover:bg-blue-100 transition-all border border-blue-200">
+                        <FileText className="w-4 h-4" /> Ver Boleta SUNAT
+                      </button>
+                    )
+                    if (tieneFacturaEmitida) return (
+                      <button onClick={() => comprobantesHooks.verComprobante(pedido.id, 'factura')} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-all border border-indigo-200">
+                        <FileText className="w-4 h-4" /> Ver Factura SUNAT
+                      </button>
+                    )
+                    return (
+                      <>
                         <button onClick={() => comprobantesHooks.setModalBoleta(pedido)} className="flex items-center gap-2 px-4 py-2 bg-white border border-zinc-300 text-zinc-700 rounded-xl text-sm font-medium hover:bg-zinc-50 transition-all">
                           Emitir Boleta
                         </button>
-                      )}
-
-                      {pedido.comprobantes?.some(c => c.tipo === 'factura') ? (
-                        <button onClick={() => comprobantesHooks.verComprobante(pedido.id, 'factura')} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-all border border-indigo-200">
-                          <FileText className="w-4 h-4" /> Ver Factura SUNAT
-                        </button>
-                      ) : (
                         <button onClick={() => comprobantesHooks.setModalFactura(pedido)} className="flex items-center gap-2 px-4 py-2 bg-white border border-zinc-300 text-zinc-700 rounded-xl text-sm font-medium hover:bg-zinc-50 transition-all">
                           Emitir Factura
                         </button>
-                      )}
-                    </>
-                  )}
+                      </>
+                    )
+                  })()}
                 </div>
             </div>
 
