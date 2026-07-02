@@ -38,7 +38,7 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Clonar Lycet
 WORKDIR /var/www/html
 RUN git clone --depth=1 https://github.com/giansalex/lycet.git . \
-    && composer install --no-dev --optimize-autoloader --no-interaction
+    && composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
 # Apuntar Apache al directorio public de Symfony y habilitar AllowOverride All
 # (Symfony usa .htaccess para routing; sin AllowOverride All Apache ignora el archivo
