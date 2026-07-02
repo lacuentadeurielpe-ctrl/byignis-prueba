@@ -187,6 +187,20 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     if (!respuesta.ok) return { ok: false, error: respuesta.error }
 
+    // Calcular montos para guardar en comprobantes (para contabilidad/finanzas)
+    const igvTasa = 0.18
+    const sumaLineas = itemsFormales.reduce((acc: number, i: any) => acc + i.precio_unitario * i.cantidad, 0)
+    let montoSubtotal: number, montoIgv: number, montoTotal: number
+    if (ferreteria.igv_incluido_en_precios) {
+      montoTotal    = sumaLineas
+      montoSubtotal = parseFloat((montoTotal / (1 + igvTasa)).toFixed(2))
+      montoIgv      = parseFloat((montoTotal - montoSubtotal).toFixed(2))
+    } else {
+      montoSubtotal = sumaLineas
+      montoIgv      = parseFloat((montoSubtotal * igvTasa).toFixed(2))
+      montoTotal    = parseFloat((montoSubtotal + montoIgv).toFixed(2))
+    }
+
     // Guardar en comprobantes
     const serie = ferreteria.serie_boletas ?? 'B001'
     const numero = corrData as number
@@ -201,6 +215,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         numero_completo:  respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
         numero_comprobante: respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
         estado:           'emitido',
+        subtotal:         montoSubtotal,
+        igv:              montoIgv,
+        total:            montoTotal,
         pdf_url:          respuesta.pdf_url ?? null,
         xml_url:          respuesta.xml_url ?? null,
         cliente_nombre:   opts.clienteNombre,
@@ -289,6 +306,19 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     if (!respuesta.ok) return { ok: false, error: respuesta.error }
 
+    const igvTasaF = 0.18
+    const sumaLineasF = itemsFormales.reduce((acc: number, i: any) => acc + i.precio_unitario * i.cantidad, 0)
+    let montoSubtotalF: number, montoIgvF: number, montoTotalF: number
+    if (ferreteria.igv_incluido_en_precios) {
+      montoTotalF    = sumaLineasF
+      montoSubtotalF = parseFloat((montoTotalF / (1 + igvTasaF)).toFixed(2))
+      montoIgvF      = parseFloat((montoTotalF - montoSubtotalF).toFixed(2))
+    } else {
+      montoSubtotalF = sumaLineasF
+      montoIgvF      = parseFloat((montoSubtotalF * igvTasaF).toFixed(2))
+      montoTotalF    = parseFloat((montoSubtotalF + montoIgvF).toFixed(2))
+    }
+
     const serie = ferreteria.serie_facturas ?? 'F001'
     const numero = corrData as number
     const { data: comp } = await opts.supabase
@@ -302,6 +332,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         numero_completo:  respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
         numero_comprobante: respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
         estado:           'emitido',
+        subtotal:         montoSubtotalF,
+        igv:              montoIgvF,
+        total:            montoTotalF,
         pdf_url:          respuesta.pdf_url ?? null,
         xml_url:          respuesta.xml_url ?? null,
         cliente_nombre:   opts.clienteNombre,
