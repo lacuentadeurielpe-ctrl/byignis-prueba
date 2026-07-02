@@ -192,12 +192,14 @@ async function rollbackCorrelativo(
   serie: string,
   correlativo: number,
 ) {
-  await supabase.rpc('rollback_correlativo_serie', {
-    p_ferreteria_id: ferreteriaId,
-    p_tipo_doc:      tipoDoc,
-    p_serie:         serie,
-    p_correlativo:   correlativo,
-  }).catch(() => {})
+  try {
+    await supabase.rpc('rollback_correlativo_serie', {
+      p_ferreteria_id: ferreteriaId,
+      p_tipo_doc:      tipoDoc,
+      p_serie:         serie,
+      p_correlativo:   correlativo,
+    })
+  } catch { /* rollback best-effort */ }
 }
 
 // ── Bitácora SUNAT (no crítica — errores son silenciados) ─────────────────────
@@ -210,24 +212,26 @@ async function escribirLog(
   resultado: ResultadoSunat,
   requestResumen?: any,
 ) {
-  await supabase.from('sunat_log').insert({
-    ferreteria_id:   ferreteriaId,
-    comprobante_id:  comprobanteId,
-    direccion,
-    endpoint,
-    request_resumen: requestResumen ?? null,
-    response_resumen: {
-      cdrCodigo:      resultado.cdrCodigo,
-      cdrDescripcion: resultado.cdrDescripcion,
-      cdrNotas:       resultado.cdrNotas,
-      ok:             resultado.ok,
-      aceptado:       resultado.aceptado,
-      error:          resultado.error,
-    },
-    cdr_codigo:  resultado.cdrCodigo,
-    http_status: resultado.ok ? 200 : 500,
-    exito:       resultado.aceptado,
-  }).catch(() => {})
+  try {
+    await supabase.from('sunat_log').insert({
+      ferreteria_id:   ferreteriaId,
+      comprobante_id:  comprobanteId,
+      direccion,
+      endpoint,
+      request_resumen: requestResumen ?? null,
+      response_resumen: {
+        cdrCodigo:      resultado.cdrCodigo,
+        cdrDescripcion: resultado.cdrDescripcion,
+        cdrNotas:       resultado.cdrNotas,
+        ok:             resultado.ok,
+        aceptado:       resultado.aceptado,
+        error:          resultado.error,
+      },
+      cdr_codigo:  resultado.cdrCodigo,
+      http_status: resultado.ok ? 200 : 500,
+      exito:       resultado.aceptado,
+    })
+  } catch { /* log best-effort */ }
 }
 
 function fechaEmisionHoy(): string {
