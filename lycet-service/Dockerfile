@@ -29,8 +29,8 @@ RUN printf '[openssl_init]\nproviders = provider_sect\n\n[provider_sect]\ndefaul
     > /etc/ssl/openssl_lycet.cnf
 ENV OPENSSL_CONF=/etc/ssl/openssl_lycet.cnf
 
-# Habilitar mod_rewrite (necesario para Symfony)
-RUN a2enmod rewrite
+# Forzar mpm_prefork (PHP no es thread-safe; mpm_event y mpm_prefork no pueden coexistir)
+RUN a2dismod mpm_event mpm_worker 2>/dev/null; a2enmod mpm_prefork && a2enmod rewrite
 
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
