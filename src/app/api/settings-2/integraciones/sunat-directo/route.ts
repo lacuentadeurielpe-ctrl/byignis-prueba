@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { encriptar, desencriptar } from '@/lib/encryption'
+import { pfxAPem } from '@/lib/facturacion/lycet/cert'
+import { ensureCompany } from '@/lib/facturacion/lycet/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,15 +103,25 @@ export async function POST(request: Request) {
     if (cert_pfx_b64) encPromises.push(encriptar(cert_pfx_b64))
     const [solUsuarioEnc, solClaveEnc, certClaveEnc, certPfxEnc] = await Promise.all(encPromises)
 
-    // Si la homologación ya está completa, preservar modo=produccion aunque el form envíe beta.
-    // El modo solo puede retrodecer manualmente vía PATCH, no al actualizar credenciales.
     const modoFinal = existing?.homologacion_completada_at ? 'produccion' : (modo ?? 'beta')
 
-    // cert_pfx_enc es NOT NULL — siempre debe estar presente.
-    // Si no se subió un nuevo certificado, se reutiliza el existente ya encriptado.
     const certPfxFinal = certPfxEnc ?? existing?.cert_pfx_enc
     if (!certPfxFinal) {
       return NextResponse.json({ error: 'Debes subir el certificado digital (.pfx/.p12)' }, { status: 400 })
+    }
+
+    // Convertir PFX → PEM para Lycet (solo si se subió un cert nuevo)
+    let certPemEnc: string | undefined
+    let certVenceAt: string | undefined
+    if (cert_pfx_b64) {
+      try {
+        const convertido = pfxAPem(cert_pfx_b64, cert_clave)
+        const [pemEnc] = await Promise.all([encriptar(convertido.pem)])
+        certPemEnc = pemEnc
+        certVenceAt = convertido.venceAt.toISOString()
+      } catch (e: any) {
+        return NextResponse.json({ error: e.message ?? 'Error al procesar el certificado digital' }, { status: 400 })
+      }
     }
 
     const upsertPayload: any = {
@@ -120,10 +132,12 @@ export async function POST(request: Request) {
       sol_clave_enc:   solClaveEnc,
       cert_pfx_enc:    certPfxFinal,
       cert_clave_enc:  certClaveEnc,
-      greenter_url:    'https://greenter-api-production.up.railway.app',
       modo:            modoFinal,
       estado:          'pendiente',
     }
+
+    if (certPemEnc)  upsertPayload.cert_pem_enc  = certPemEnc
+    if (certVenceAt) upsertPayload.cert_vence_at = certVenceAt
 
     const { data, error } = await supabase
       .from('sunat_credenciales')
@@ -133,7 +147,31 @@ export async function POST(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    return NextResponse.json({ ok: true, credenciales: data })
+    // Registrar empresa en Lycet (idempotente — falla en silencio, no bloquea el guardado)
+    const lycetUrl   = process.env.LYCET_BASE_URL
+    const lycetToken = process.env.LYCET_API_TOKEN
+    let lycetOk = false
+    let lycetError: string | undefined
+    if (lycetUrl && lycetToken && certPemEnc) {
+      // Desencriptar el PEM recién guardado para pasarlo a Lycet
+      const certPem = await desencriptar(certPemEnc)
+      const res = await ensureCompany(
+        { baseUrl: lycetUrl, token: lycetToken },
+        {
+          ruc:     rucLimpio,
+          solUser: sol_usuario,
+          solPass: sol_clave,
+          certPem,
+          feUrl:   modoFinal === 'beta'
+            ? 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService'
+            : undefined,
+        },
+      )
+      lycetOk    = res.ok
+      lycetError = res.error
+    }
+
+    return NextResponse.json({ ok: true, credenciales: data, lycet: { ok: lycetOk, error: lycetError } })
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? 'Error al guardar credenciales' }, { status: 500 })
   }

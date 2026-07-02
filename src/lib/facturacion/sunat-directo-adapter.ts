@@ -1,12 +1,24 @@
 // Adaptador SUNAT Directo → interfaz ProveedorFacturacion
-// Llama al microservicio Greenter (PHP dockerizado) que maneja:
-//   - Generación del XML UBL 2.1
-//   - Firma digital XAdES-BES con el certificado del tenant
-//   - Compresión ZIP + envío SOAP a SUNAT
-//   - Parseo del CDR de respuesta
+// Motor: Lycet (REST API oficial de Greenter — github.com/giansalex/lycet)
+//
+// Lycet recibe JSON, construye el XML UBL 2.1, lo firma con el certificado PEM
+// y lo envía a SUNAT vía SOAP. Configura la empresa una vez por emisión (idempotente).
+//
+// Variables de entorno requeridas en Vercel + Railway:
+//   LYCET_BASE_URL — URL del servicio Lycet desplegado en Railway
+//   LYCET_API_TOKEN — token de autenticación del servicio Lycet
 
-import { desencriptar } from '@/lib/encryption'
+import { desencriptar, encriptar } from '@/lib/encryption'
 import { crearNotaVentaInterna } from '@/lib/comprobantes/nota-venta'
+import { pfxAPem } from './lycet/cert'
+import {
+  mapearInvoice, mapearNota,
+  type EmisorLycet, type ClienteLycet, type ItemLycet,
+} from './lycet/mappers'
+import {
+  ensureCompany, enviarInvoice, enviarNota,
+  type LycetConfig, type ResultadoSunat,
+} from './lycet/client'
 import type {
   ProveedorFacturacion,
   OpcionesEmisionBoleta,
@@ -15,35 +27,32 @@ import type {
   ResultadoEmisionUnificado,
 } from './types'
 
-// Estructura de credenciales cargadas desde sunat_credenciales
-interface CredencialesSunat {
-  ruc:          string
-  razonSocial:  string
-  solUsuario:   string   // ya desencriptado
-  solClave:     string   // ya desencriptado
-  certPfxB64:   string   // ya desencriptado (base64 del .pfx)
-  certClave:    string   // ya desencriptado
-  greenterUrl:  string
-  modo:         'beta' | 'produccion'
+// ── Config Lycet desde env ────────────────────────────────────────────────────
+function getLycetConfig(): LycetConfig {
+  const baseUrl = process.env.LYCET_BASE_URL
+  const token   = process.env.LYCET_API_TOKEN
+  if (!baseUrl || !token) {
+    throw new Error(
+      'El servicio de facturación no está disponible (LYCET_BASE_URL / LYCET_API_TOKEN no configurados). Contacta al administrador.',
+    )
+  }
+  return { baseUrl, token }
 }
 
-// Respuesta del microservicio Greenter
-interface GreenterRespuesta {
-  ok:             boolean
-  numero_completo?: string
-  pdf_url?:       string
-  xml_url?:       string
-  cdr_codigo?:    string   // código CDR de SUNAT (0 = aceptado)
-  cdr_descripcion?: string
-  error?:         string
+// ── Credenciales desencriptadas en memoria ────────────────────────────────────
+interface CredencialesCargadas {
+  ruc:         string
+  razonSocial: string
+  solUsuario:  string
+  solClave:    string
+  certPem:     string   // certificado + clave privada PEM (lo que Lycet necesita)
+  modo:        'beta' | 'produccion'
 }
 
-const TIMEOUT_MS = 30_000
-
-async function cargarCredenciales(supabase: any, ferreteriaId: string): Promise<CredencialesSunat | null> {
+async function cargarCredenciales(supabase: any, ferreteriaId: string): Promise<CredencialesCargadas | null> {
   const { data } = await supabase
     .from('sunat_credenciales')
-    .select('ruc, razon_social, sol_usuario_enc, sol_clave_enc, cert_pfx_enc, cert_clave_enc, greenter_url, modo')
+    .select('ruc, razon_social, sol_usuario_enc, sol_clave_enc, cert_pfx_enc, cert_clave_enc, cert_pem_enc, modo')
     .eq('ferreteria_id', ferreteriaId)
     .eq('estado', 'activo')
     .single()
@@ -51,78 +60,51 @@ async function cargarCredenciales(supabase: any, ferreteriaId: string): Promise<
   if (!data) return null
 
   try {
-    const [solUsuario, solClave, certPfxB64, certClave] = await Promise.all([
+    const [solUsuario, solClave] = await Promise.all([
       desencriptar(data.sol_usuario_enc),
       desencriptar(data.sol_clave_enc),
-      desencriptar(data.cert_pfx_enc),
-      desencriptar(data.cert_clave_enc),
     ])
+
+    let certPem: string
+
+    if (data.cert_pem_enc) {
+      // Ruta óptima: PEM ya almacenado (no hay que convertir cada vez)
+      certPem = await desencriptar(data.cert_pem_enc)
+    } else {
+      // Migración en caliente: usuario con credenciales previas sin PEM guardado.
+      // Convierte PFX → PEM y lo persiste para la próxima vez.
+      const [certPfxB64, certClave] = await Promise.all([
+        desencriptar(data.cert_pfx_enc),
+        desencriptar(data.cert_clave_enc),
+      ])
+      const convertido = pfxAPem(certPfxB64, certClave)
+      certPem = convertido.pem
+      // Persiste de forma asíncrona; si falla no bloquea la emisión
+      encriptar(certPem)
+        .then(enc =>
+          supabase.from('sunat_credenciales').update({
+            cert_pem_enc:  enc,
+            cert_vence_at: convertido.venceAt.toISOString(),
+          }).eq('ferreteria_id', ferreteriaId),
+        )
+        .catch(() => {})
+    }
+
     return {
       ruc:         data.ruc,
       razonSocial: data.razon_social,
       solUsuario,
       solClave,
-      certPfxB64,
-      certClave,
-      greenterUrl: data.greenter_url,
-      modo:        data.modo,
+      certPem,
+      modo: data.modo,
     }
   } catch {
     return null
   }
 }
 
-async function llamarGreenter(
-  url: string,
-  endpoint: string,
-  payload: object
-): Promise<GreenterRespuesta> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
-
-  try {
-    const res = await fetch(`${url.replace(/\/$/, '')}/${endpoint}`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-      signal:  controller.signal,
-    })
-    clearTimeout(timer)
-
-    const texto = await res.text().catch(() => '')
-
-    if (!res.ok) {
-      return { ok: false, error: `Greenter ${res.status}: ${texto.slice(0, 200)}` }
-    }
-
-    // Toleramos respuestas no-JSON (p.ej. HTML del contenedor durante un redeploy)
-    try {
-      return JSON.parse(texto) as GreenterRespuesta
-    } catch {
-      return { ok: false, error: 'El servicio de facturación no respondió JSON válido (reintenta en unos segundos).' }
-    }
-  } catch (e) {
-    clearTimeout(timer)
-    const msg = e instanceof Error && e.name === 'AbortError'
-      ? 'Tiempo de espera agotado al conectar con el servicio SUNAT (>30s)'
-      : `Error de red con microservicio SUNAT: ${e instanceof Error ? e.message : String(e)}`
-    return { ok: false, error: msg }
-  }
-}
-
-function mapearItems(supabase: any, pedidoId: string): Promise<any[]> {
-  return supabase
-    .from('pedidos')
-    .select('items_pedido(nombre_producto, cantidad, precio_unitario, unidad, productos(facturable))')
-    .eq('id', pedidoId)
-    .single()
-    .then(({ data }: any) => data?.items_pedido ?? [])
-}
-
-async function obtenerFerreteria(supabase: any, ferreteriaId: string): Promise<any> {
-  // Nota: ferreterias no tiene columnas ubigeo/departamento/provincia/distrito.
-  // El emisor usa fallbacks a Lima (150101) — SUNAT acepta este ubigeo en la
-  // homologación. Si se agrega esa config al negocio, incluirla aquí.
+// ── Helpers de base de datos ──────────────────────────────────────────────────
+async function obtenerFerreteria(supabase: any, ferreteriaId: string) {
   const { data } = await supabase
     .from('ferreterias')
     .select('id, ruc, razon_social, serie_boletas, serie_facturas, igv_incluido_en_precios, direccion')
@@ -131,105 +113,227 @@ async function obtenerFerreteria(supabase: any, ferreteriaId: string): Promise<a
   return data
 }
 
+async function mapearItemsDePedido(supabase: any, pedidoId: string): Promise<any[]> {
+  const { data } = await supabase
+    .from('pedidos')
+    .select('items_pedido(nombre_producto, cantidad, precio_unitario, unidad, productos(facturable))')
+    .eq('id', pedidoId)
+    .single()
+  return data?.items_pedido ?? []
+}
+
+// ── Conversión a formato Lycet ────────────────────────────────────────────────
+function toItemsLycet(items: any[]): ItemLycet[] {
+  return items.map((i: any) => ({
+    descripcion:    i.nombre_producto ?? 'Producto',
+    cantidad:       Number(i.cantidad) || 1,
+    precioUnitario: Number(i.precio_unitario) || 0,
+    unidad:         i.unidad ?? 'NIU',
+  }))
+}
+
+function buildEmisor(ferreteria: any, creds: CredencialesCargadas): EmisorLycet {
+  return {
+    ruc:          creds.ruc,
+    razonSocial:  creds.razonSocial,
+    direccion:    ferreteria.direccion ?? '-',
+    ubigeo:       '150101',
+    departamento: 'LIMA',
+    provincia:    'LIMA',
+    distrito:     'LIMA',
+  }
+}
+
+// URL beta de SUNAT para boletas/facturas (billService)
+const FE_BETA_URL = 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService'
+
+async function registrarEmpresaEnLycet(
+  lycetCfg: LycetConfig,
+  creds: CredencialesCargadas,
+): Promise<{ ok: boolean; error?: string }> {
+  return ensureCompany(lycetCfg, {
+    ruc:     creds.ruc,
+    solUser: creds.solUsuario,
+    solPass: creds.solClave,
+    certPem: creds.certPem,
+    feUrl:   creds.modo === 'beta' ? FE_BETA_URL : undefined,
+  })
+}
+
+// ── Estado SUNAT a partir del resultado normalizado ───────────────────────────
+function estadoSunat(res: ResultadoSunat): 'borrador' | 'aceptado' | 'aceptado_obs' | 'rechazado' {
+  if (!res.ok || !res.aceptado) return 'rechazado'
+  const n = res.cdrCodigo != null && /^\d+$/.test(res.cdrCodigo)
+    ? parseInt(res.cdrCodigo, 10)
+    : 0
+  return n >= 4000 ? 'aceptado_obs' : 'aceptado'
+}
+
+// ── Reserva atómica de correlativo ────────────────────────────────────────────
+async function reservarCorrelativo(
+  supabase: any,
+  ferreteriaId: string,
+  tipoDoc: string,
+  serie: string,
+): Promise<number | null> {
+  const { data, error } = await supabase.rpc('reservar_correlativo_serie', {
+    p_ferreteria_id: ferreteriaId,
+    p_tipo_doc:      tipoDoc,
+    p_serie:         serie,
+  })
+  if (error || data == null) return null
+  return data as number
+}
+
+async function rollbackCorrelativo(
+  supabase: any,
+  ferreteriaId: string,
+  tipoDoc: string,
+  serie: string,
+  correlativo: number,
+) {
+  await supabase.rpc('rollback_correlativo_serie', {
+    p_ferreteria_id: ferreteriaId,
+    p_tipo_doc:      tipoDoc,
+    p_serie:         serie,
+    p_correlativo:   correlativo,
+  }).catch(() => {})
+}
+
+// ── Bitácora SUNAT (no crítica — errores son silenciados) ─────────────────────
+async function escribirLog(
+  supabase: any,
+  ferreteriaId: string,
+  comprobanteId: string | null,
+  direccion: 'envio' | 'consulta' | 'resumen' | 'baja' | 'test',
+  endpoint: string,
+  resultado: ResultadoSunat,
+  requestResumen?: any,
+) {
+  await supabase.from('sunat_log').insert({
+    ferreteria_id:   ferreteriaId,
+    comprobante_id:  comprobanteId,
+    direccion,
+    endpoint,
+    request_resumen: requestResumen ?? null,
+    response_resumen: {
+      cdrCodigo:      resultado.cdrCodigo,
+      cdrDescripcion: resultado.cdrDescripcion,
+      cdrNotas:       resultado.cdrNotas,
+      ok:             resultado.ok,
+      aceptado:       resultado.aceptado,
+      error:          resultado.error,
+    },
+    cdr_codigo:  resultado.cdrCodigo,
+    http_status: resultado.ok ? 200 : 500,
+    exito:       resultado.aceptado,
+  }).catch(() => {})
+}
+
+function fechaEmisionHoy(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+}
+
+function padCorrelativo(n: number) {
+  return String(n).padStart(8, '0')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 export class SunatDirectoAdapter implements ProveedorFacturacion {
   nombre = 'sunat_directo' as const
 
+  // ── Boleta ─────────────────────────────────────────────────────────────────
   async emitirBoleta(opts: OpcionesEmisionBoleta): Promise<ResultadoEmisionUnificado> {
     const creds = await cargarCredenciales(opts.supabase, opts.ferreteriaId)
-    if (!creds) return { ok: false, error: 'SUNAT Directo no configurado o inactivo. Ve a Settings → Integraciones → SUNAT Directo.', tokenInvalido: true }
+    if (!creds) return {
+      ok: false,
+      error: 'SUNAT Directo no configurado o inactivo. Ve a Configuración → Integraciones → SUNAT Directo.',
+      tokenInvalido: true,
+    }
+
+    let lycetCfg: LycetConfig
+    try { lycetCfg = getLycetConfig() }
+    catch (e) { return { ok: false, error: (e as Error).message } }
 
     const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
     if (!ferreteria) return { ok: false, error: 'Negocio no encontrado' }
 
-    const { data: corrData } = await opts.supabase
-      .rpc('generar_numero_comprobante', {
-        p_ferreteria_id: opts.ferreteriaId,
-        p_tipo:          'boleta',
-        p_serie:         ferreteria.serie_boletas ?? 'B001',
-      })
-    if (!corrData) return { ok: false, error: 'Error generando correlativo' }
+    const serie = ferreteria.serie_boletas ?? 'B001'
 
-    const todosLosItems = await mapearItems(opts.supabase, opts.pedidoId)
-    // Formales (van al XML SUNAT) = todo salvo lo marcado explícitamente facturable=false.
-    // Mismo criterio que el flujo Nubefact para comportamiento consistente entre proveedores.
+    const todosLosItems = await mapearItemsDePedido(opts.supabase, opts.pedidoId)
     const itemsFormales   = todosLosItems.filter((i: any) => i.productos?.facturable !== false)
     const itemsInformales = todosLosItems.filter((i: any) => i.productos?.facturable === false)
-    if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables en este pedido (todos tienen facturable=false).' }
-
-    const respuesta = await llamarGreenter(creds.greenterUrl, 'boleta/emitir', {
-      modo:         creds.modo,
-      emisor: {
-        ruc:          creds.ruc,
-        razon_social: creds.razonSocial,
-        serie:        ferreteria.serie_boletas ?? 'B001',
-        numero:       corrData,
-        direccion:    ferreteria.direccion ?? '-',
-        ubigeo:       ferreteria.ubigeo ?? '150101',
-        departamento: ferreteria.departamento ?? 'LIMA',
-        provincia:    ferreteria.provincia ?? 'LIMA',
-        distrito:     ferreteria.distrito ?? 'LIMA',
-      },
-      sol: { usuario: creds.solUsuario, clave: creds.solClave },
-      certificado: { pfx_base64: creds.certPfxB64, clave: creds.certClave },
-      cliente: {
-        tipo_doc:  opts.clienteDni.replace(/\D/g, '').length === 8 ? '1' : '0',
-        numero_doc: opts.clienteDni.replace(/\D/g, '') || '00000000',
-        nombre:    opts.clienteNombre || 'CLIENTES VARIOS',
-      },
-      igv_incluido: ferreteria.igv_incluido_en_precios ?? false,
-      items: itemsFormales.map((i: any) => ({
-        descripcion:    i.nombre_producto,
-        cantidad:       i.cantidad,
-        precio_unitario: i.precio_unitario,
-        unidad:         i.unidad ?? 'NIU',
-      })),
-    })
-
-    if (!respuesta.ok) return { ok: false, error: respuesta.error }
-
-    // Calcular montos para guardar en comprobantes (para contabilidad/finanzas)
-    const igvTasa = 0.18
-    const sumaLineas = itemsFormales.reduce((acc: number, i: any) => acc + i.precio_unitario * i.cantidad, 0)
-    let montoSubtotal: number, montoIgv: number, montoTotal: number
-    if (ferreteria.igv_incluido_en_precios) {
-      montoTotal    = sumaLineas
-      montoSubtotal = parseFloat((montoTotal / (1 + igvTasa)).toFixed(2))
-      montoIgv      = parseFloat((montoTotal - montoSubtotal).toFixed(2))
-    } else {
-      montoSubtotal = sumaLineas
-      montoIgv      = parseFloat((montoSubtotal * igvTasa).toFixed(2))
-      montoTotal    = parseFloat((montoSubtotal + montoIgv).toFixed(2))
+    if (itemsFormales.length === 0) {
+      return { ok: false, error: 'No hay productos facturables en este pedido (todos tienen facturable=false).' }
     }
 
-    // Guardar en comprobantes
-    const serie = ferreteria.serie_boletas ?? 'B001'
-    const numero = corrData as number
+    const correlativo = await reservarCorrelativo(opts.supabase, opts.ferreteriaId, '03', serie)
+    if (!correlativo) return { ok: false, error: 'Error generando número de comprobante' }
+
+    const ensureRes = await registrarEmpresaEnLycet(lycetCfg, creds)
+    if (!ensureRes.ok) {
+      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '03', serie, correlativo)
+      return { ok: false, error: `Error configurando el servicio de facturación: ${ensureRes.error}` }
+    }
+
+    const cliente: ClienteLycet = {
+      tipoDoc:   opts.clienteDni.replace(/\D/g, '').length === 8 ? '1' : '0',
+      numDoc:    opts.clienteDni.replace(/\D/g, '') || '00000000',
+      rznSocial: opts.clienteNombre || 'CLIENTES VARIOS',
+    }
+
+    const { doc, totales } = mapearInvoice('03', {
+      serie, correlativo,
+      emisor:      buildEmisor(ferreteria, creds),
+      cliente,
+      items:       toItemsLycet(itemsFormales),
+      igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
+    })
+
+    const resultado = await enviarInvoice(lycetCfg, doc)
+    const estadoFinal = estadoSunat(resultado)
+    const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
+
+    if (!resultado.aceptado) {
+      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '03', serie, correlativo)
+    }
+
     const { data: comp } = await opts.supabase
       .from('comprobantes')
       .upsert({
-        ferreteria_id:    opts.ferreteriaId,
-        pedido_id:        opts.pedidoId,
-        tipo:             'boleta',
+        ferreteria_id:         opts.ferreteriaId,
+        pedido_id:             opts.pedidoId,
+        tipo:                  'boleta',
         serie,
-        numero,
-        numero_completo:  respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
-        numero_comprobante: respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
-        estado:           'emitido',
-        subtotal:         montoSubtotal,
-        igv:              montoIgv,
-        total:            montoTotal,
-        pdf_url:          respuesta.pdf_url ?? null,
-        xml_url:          respuesta.xml_url ?? null,
-        sunat_cdr_codigo:      respuesta.cdr_codigo ?? null,
-        sunat_cdr_descripcion: respuesta.cdr_descripcion ?? null,
-        cliente_nombre:   opts.clienteNombre,
-        cliente_ruc_dni:  opts.clienteDni.replace(/\D/g, '') || null,
-        emitido_por:      opts.emitidoPor,
+        numero:                correlativo,
+        numero_completo:       numeroCompleto,
+        numero_comprobante:    numeroCompleto,
+        estado:                resultado.aceptado ? 'emitido' : 'error',
+        estado_sunat:          estadoFinal,
+        fecha_emision:         fechaEmisionHoy(),
+        moneda:                'PEN',
+        subtotal:              totales.mtoOperGravadas,
+        igv:                   totales.mtoIGV,
+        total:                 totales.mtoImpVenta,
+        sunat_cdr_codigo:      resultado.cdrCodigo ?? null,
+        sunat_cdr_descripcion: resultado.cdrDescripcion ?? null,
+        cdr_notas:             resultado.cdrNotas ?? null,
+        cliente_nombre:        opts.clienteNombre,
+        cliente_ruc_dni:       opts.clienteDni.replace(/\D/g, '') || null,
+        emitido_por:           opts.emitidoPor,
       }, { onConflict: 'pedido_id,tipo' })
       .select('id')
       .single()
 
-    // Split billing: si hay ítems no facturables, generar nota de venta interna
+    await escribirLog(
+      opts.supabase, opts.ferreteriaId, comp?.id ?? null,
+      'envio', 'invoice/send', resultado,
+      { serie, correlativo, ruc: creds.ruc, tipoDoc: '03' },
+    )
+
+    if (!resultado.ok)       return { ok: false, error: resultado.error ?? 'Error enviando a SUNAT' }
+    if (!resultado.aceptado) return { ok: false, error: resultado.cdrDescripcion ?? `SUNAT rechazó la boleta (código ${resultado.cdrCodigo})` }
+
     const comprobanteSecundarioId = itemsInformales.length > 0
       ? await crearNotaVentaInterna({
           supabase:      opts.supabase,
@@ -242,113 +346,104 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         })
       : undefined
 
-    return {
-      ok:            true,
-      comprobanteId: comp?.id,
-      numeroCompleto: respuesta.numero_completo,
-      pdfUrl:        respuesta.pdf_url,
-      xmlUrl:        respuesta.xml_url,
-      comprobanteSecundarioId,
-    }
+    return { ok: true, comprobanteId: comp?.id, numeroCompleto, comprobanteSecundarioId }
   }
 
+  // ── Factura ────────────────────────────────────────────────────────────────
   async emitirFactura(opts: OpcionesEmisionFactura): Promise<ResultadoEmisionUnificado> {
     const creds = await cargarCredenciales(opts.supabase, opts.ferreteriaId)
-    if (!creds) return { ok: false, error: 'SUNAT Directo no configurado. Ve a Settings → Integraciones → SUNAT Directo.', tokenInvalido: true }
+    if (!creds) return {
+      ok: false,
+      error: 'SUNAT Directo no configurado. Ve a Configuración → Integraciones → SUNAT Directo.',
+      tokenInvalido: true,
+    }
 
-    const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
-    if (!ferreteria) return { ok: false, error: 'Negocio no encontrado' }
-
-    const { data: corrData } = await opts.supabase
-      .rpc('generar_numero_comprobante', {
-        p_ferreteria_id: opts.ferreteriaId,
-        p_tipo:          'factura',
-        p_serie:         ferreteria.serie_facturas ?? 'F001',
-      })
-    if (!corrData) return { ok: false, error: 'Error generando correlativo' }
+    let lycetCfg: LycetConfig
+    try { lycetCfg = getLycetConfig() }
+    catch (e) { return { ok: false, error: (e as Error).message } }
 
     const clienteRucLimpio = opts.clienteRuc.replace(/\D/g, '')
     if (clienteRucLimpio.length !== 11) {
       return { ok: false, error: `RUC inválido: debe tener 11 dígitos (recibido: "${clienteRucLimpio}")` }
     }
 
-    const todosLosItems = await mapearItems(opts.supabase, opts.pedidoId)
-    const itemsFormales   = todosLosItems.filter((i: any) => i.productos?.facturable !== false)
-    const itemsInformales = todosLosItems.filter((i: any) => i.productos?.facturable === false)
-    if (itemsFormales.length === 0) return { ok: false, error: 'No hay productos facturables en este pedido' }
-
-    const respuesta = await llamarGreenter(creds.greenterUrl, 'factura/emitir', {
-      modo:         creds.modo,
-      emisor: {
-        ruc:          creds.ruc,
-        razon_social: creds.razonSocial,
-        serie:        ferreteria.serie_facturas ?? 'F001',
-        numero:       corrData,
-        direccion:    ferreteria.direccion ?? '-',
-        ubigeo:       ferreteria.ubigeo ?? '150101',
-        departamento: ferreteria.departamento ?? 'LIMA',
-        provincia:    ferreteria.provincia ?? 'LIMA',
-        distrito:     ferreteria.distrito ?? 'LIMA',
-      },
-      sol: { usuario: creds.solUsuario, clave: creds.solClave },
-      certificado: { pfx_base64: creds.certPfxB64, clave: creds.certClave },
-      cliente: {
-        tipo_doc:   '6',  // RUC
-        numero_doc: clienteRucLimpio,
-        nombre:     opts.clienteNombre,
-      },
-      igv_incluido: ferreteria.igv_incluido_en_precios ?? false,
-      items: itemsFormales.map((i: any) => ({
-        descripcion:    i.nombre_producto,
-        cantidad:       i.cantidad,
-        precio_unitario: i.precio_unitario,
-        unidad:         i.unidad ?? 'NIU',
-      })),
-    })
-
-    if (!respuesta.ok) return { ok: false, error: respuesta.error }
-
-    const igvTasaF = 0.18
-    const sumaLineasF = itemsFormales.reduce((acc: number, i: any) => acc + i.precio_unitario * i.cantidad, 0)
-    let montoSubtotalF: number, montoIgvF: number, montoTotalF: number
-    if (ferreteria.igv_incluido_en_precios) {
-      montoTotalF    = sumaLineasF
-      montoSubtotalF = parseFloat((montoTotalF / (1 + igvTasaF)).toFixed(2))
-      montoIgvF      = parseFloat((montoTotalF - montoSubtotalF).toFixed(2))
-    } else {
-      montoSubtotalF = sumaLineasF
-      montoIgvF      = parseFloat((montoSubtotalF * igvTasaF).toFixed(2))
-      montoTotalF    = parseFloat((montoSubtotalF + montoIgvF).toFixed(2))
-    }
+    const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
+    if (!ferreteria) return { ok: false, error: 'Negocio no encontrado' }
 
     const serie = ferreteria.serie_facturas ?? 'F001'
-    const numero = corrData as number
+
+    const todosLosItems = await mapearItemsDePedido(opts.supabase, opts.pedidoId)
+    const itemsFormales   = todosLosItems.filter((i: any) => i.productos?.facturable !== false)
+    const itemsInformales = todosLosItems.filter((i: any) => i.productos?.facturable === false)
+    if (itemsFormales.length === 0) {
+      return { ok: false, error: 'No hay productos facturables en este pedido' }
+    }
+
+    const correlativo = await reservarCorrelativo(opts.supabase, opts.ferreteriaId, '01', serie)
+    if (!correlativo) return { ok: false, error: 'Error generando número de comprobante' }
+
+    const ensureRes = await registrarEmpresaEnLycet(lycetCfg, creds)
+    if (!ensureRes.ok) {
+      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '01', serie, correlativo)
+      return { ok: false, error: `Error configurando el servicio de facturación: ${ensureRes.error}` }
+    }
+
+    const cliente: ClienteLycet = {
+      tipoDoc: '6', numDoc: clienteRucLimpio, rznSocial: opts.clienteNombre,
+    }
+
+    const { doc, totales } = mapearInvoice('01', {
+      serie, correlativo,
+      emisor:      buildEmisor(ferreteria, creds),
+      cliente,
+      items:       toItemsLycet(itemsFormales),
+      igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
+    })
+
+    const resultado = await enviarInvoice(lycetCfg, doc)
+    const estadoFinal = estadoSunat(resultado)
+    const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
+
+    if (!resultado.aceptado) {
+      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '01', serie, correlativo)
+    }
+
     const { data: comp } = await opts.supabase
       .from('comprobantes')
       .upsert({
-        ferreteria_id:    opts.ferreteriaId,
-        pedido_id:        opts.pedidoId,
-        tipo:             'factura',
+        ferreteria_id:         opts.ferreteriaId,
+        pedido_id:             opts.pedidoId,
+        tipo:                  'factura',
         serie,
-        numero,
-        numero_completo:  respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
-        numero_comprobante: respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
-        estado:           'emitido',
-        subtotal:         montoSubtotalF,
-        igv:              montoIgvF,
-        total:            montoTotalF,
-        pdf_url:          respuesta.pdf_url ?? null,
-        xml_url:          respuesta.xml_url ?? null,
-        sunat_cdr_codigo:      respuesta.cdr_codigo ?? null,
-        sunat_cdr_descripcion: respuesta.cdr_descripcion ?? null,
-        cliente_nombre:   opts.clienteNombre,
-        cliente_ruc_dni:  clienteRucLimpio,
-        emitido_por:      opts.emitidoPor,
+        numero:                correlativo,
+        numero_completo:       numeroCompleto,
+        numero_comprobante:    numeroCompleto,
+        estado:                resultado.aceptado ? 'emitido' : 'error',
+        estado_sunat:          estadoFinal,
+        fecha_emision:         fechaEmisionHoy(),
+        moneda:                'PEN',
+        subtotal:              totales.mtoOperGravadas,
+        igv:                   totales.mtoIGV,
+        total:                 totales.mtoImpVenta,
+        sunat_cdr_codigo:      resultado.cdrCodigo ?? null,
+        sunat_cdr_descripcion: resultado.cdrDescripcion ?? null,
+        cdr_notas:             resultado.cdrNotas ?? null,
+        cliente_nombre:        opts.clienteNombre,
+        cliente_ruc_dni:       clienteRucLimpio,
+        emitido_por:           opts.emitidoPor,
       }, { onConflict: 'pedido_id,tipo' })
       .select('id')
       .single()
 
-    // Split billing: nota de venta interna para los ítems no facturables
+    await escribirLog(
+      opts.supabase, opts.ferreteriaId, comp?.id ?? null,
+      'envio', 'invoice/send', resultado,
+      { serie, correlativo, ruc: creds.ruc, tipoDoc: '01' },
+    )
+
+    if (!resultado.ok)       return { ok: false, error: resultado.error ?? 'Error enviando a SUNAT' }
+    if (!resultado.aceptado) return { ok: false, error: resultado.cdrDescripcion ?? `SUNAT rechazó la factura (código ${resultado.cdrCodigo})` }
+
     const comprobanteSecundarioId = itemsInformales.length > 0
       ? await crearNotaVentaInterna({
           supabase:      opts.supabase,
@@ -361,21 +456,18 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         })
       : undefined
 
-    return {
-      ok:            true,
-      comprobanteId: comp?.id,
-      numeroCompleto: respuesta.numero_completo,
-      pdfUrl:        respuesta.pdf_url,
-      xmlUrl:        respuesta.xml_url,
-      comprobanteSecundarioId,
-    }
+    return { ok: true, comprobanteId: comp?.id, numeroCompleto, comprobanteSecundarioId }
   }
 
+  // ── Nota de Crédito ────────────────────────────────────────────────────────
   async emitirNotaCredito(opts: OpcionesNotaCredito): Promise<ResultadoEmisionUnificado> {
     const creds = await cargarCredenciales(opts.supabase, opts.ferreteriaId)
     if (!creds) return { ok: false, error: 'SUNAT Directo no configurado.', tokenInvalido: true }
 
-    // Carga el comprobante referenciado
+    let lycetCfg: LycetConfig
+    try { lycetCfg = getLycetConfig() }
+    catch (e) { return { ok: false, error: (e as Error).message } }
+
     const { data: ref } = await opts.supabase
       .from('comprobantes')
       .select('*, pedidos(id, items_pedido(*))')
@@ -383,19 +475,23 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       .eq('ferreteria_id', opts.ferreteriaId)
       .single()
 
-    if (!ref || ref.estado !== 'emitido') return { ok: false, error: 'Comprobante original no encontrado o no emitido' }
+    if (!ref || ref.estado !== 'emitido') {
+      return { ok: false, error: 'Comprobante original no encontrado o no emitido' }
+    }
 
     const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
-    const isBoleta = ref.tipo === 'boleta'
-    const serie = isBoleta ? 'BC01' : 'FC01'
+    const isBoleta       = ref.tipo === 'boleta'
+    const tipoDocAfectado = isBoleta ? '03' : '01'
+    const serie           = isBoleta ? 'BC01' : 'FC01'
 
-    const { data: corrData } = await opts.supabase
-      .rpc('generar_numero_comprobante', {
-        p_ferreteria_id: opts.ferreteriaId,
-        p_tipo:          'nota_credito',
-        p_serie:         serie,
-      })
-    if (!corrData) return { ok: false, error: 'Error generando correlativo NC' }
+    const correlativo = await reservarCorrelativo(opts.supabase, opts.ferreteriaId, '07', serie)
+    if (!correlativo) return { ok: false, error: 'Error generando correlativo NC' }
+
+    const ensureRes = await registrarEmpresaEnLycet(lycetCfg, creds)
+    if (!ensureRes.ok) {
+      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '07', serie, correlativo)
+      return { ok: false, error: `Error configurando el servicio de facturación: ${ensureRes.error}` }
+    }
 
     let originalItems = (ref.pedidos?.items_pedido ?? []) as any[]
     if (opts.itemsDevueltos?.length) {
@@ -407,25 +503,34 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         .filter(Boolean)
     }
 
-    const respuesta = await llamarGreenter(creds.greenterUrl, 'nota-credito/emitir', {
-      modo:         creds.modo,
-      emisor: { ruc: creds.ruc, razon_social: creds.razonSocial, serie, numero: corrData },
-      sol: { usuario: creds.solUsuario, clave: creds.solClave },
-      certificado: { pfx_base64: creds.certPfxB64, clave: creds.certClave },
-      documento_referencia: { tipo: isBoleta ? '03' : '01', serie: ref.serie, numero: String(ref.numero) },
-      motivo_codigo:        opts.motivoCodigo,
-      motivo_descripcion:   opts.motivoDescripcion,
-      cliente: { tipo_doc: isBoleta ? '1' : '6', numero_doc: ref.cliente_ruc_dni || '00000000', nombre: ref.cliente_nombre || 'CLIENTES VARIOS' },
-      igv_incluido: ferreteria?.igv_incluido_en_precios ?? false,
-      items: originalItems.map((i: any) => ({
-        descripcion: i.nombre_producto, cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario, unidad: i.unidad ?? 'NIU',
-      })),
+    const cliente: ClienteLycet = {
+      tipoDoc:   isBoleta ? '1' : '6',
+      numDoc:    ref.cliente_ruc_dni || '00000000',
+      rznSocial: ref.cliente_nombre  || 'CLIENTES VARIOS',
+    }
+
+    const numDocAfectado = `${ref.serie}-${padCorrelativo(ref.numero)}`
+
+    const { doc, totales } = mapearNota({
+      serie, correlativo,
+      emisor:          buildEmisor(ferreteria, creds),
+      cliente,
+      items:           toItemsLycet(originalItems),
+      igvIncluido:     ferreteria?.igv_incluido_en_precios ?? false,
+      tipoDocAfectado,
+      numDocAfectado,
+      codMotivo:       opts.motivoCodigo,
+      desMotivo:       opts.motivoDescripcion,
     })
 
-    if (!respuesta.ok) return { ok: false, error: respuesta.error }
+    const resultado = await enviarNota(lycetCfg, doc)
+    const estadoFinal = estadoSunat(resultado)
+    const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
 
-    const numero = corrData as number
+    if (!resultado.aceptado) {
+      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '07', serie, correlativo)
+    }
+
     const { data: comp } = await opts.supabase
       .from('comprobantes')
       .insert({
@@ -433,14 +538,19 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         pedido_id:                 ref.pedido_id,
         tipo:                      'nota_credito',
         serie,
-        numero,
-        numero_completo:           respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
-        numero_comprobante:        respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`,
-        estado:                    'emitido',
-        pdf_url:                   respuesta.pdf_url ?? null,
-        xml_url:                   respuesta.xml_url ?? null,
-        sunat_cdr_codigo:          respuesta.cdr_codigo ?? null,
-        sunat_cdr_descripcion:     respuesta.cdr_descripcion ?? null,
+        numero:                    correlativo,
+        numero_completo:           numeroCompleto,
+        numero_comprobante:        numeroCompleto,
+        estado:                    resultado.aceptado ? 'emitido' : 'error',
+        estado_sunat:              estadoFinal,
+        fecha_emision:             fechaEmisionHoy(),
+        moneda:                    'PEN',
+        subtotal:                  totales.mtoOperGravadas,
+        igv:                       totales.mtoIGV,
+        total:                     totales.mtoImpVenta,
+        sunat_cdr_codigo:          resultado.cdrCodigo ?? null,
+        sunat_cdr_descripcion:     resultado.cdrDescripcion ?? null,
+        cdr_notas:                 resultado.cdrNotas ?? null,
         cliente_nombre:            ref.cliente_nombre,
         cliente_ruc_dni:           ref.cliente_ruc_dni,
         emitido_por:               opts.emitidoPor,
@@ -449,85 +559,90 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       .select('id')
       .single()
 
-    return { ok: true, comprobanteId: comp?.id, numeroCompleto: respuesta.numero_completo, pdfUrl: respuesta.pdf_url, xmlUrl: respuesta.xml_url }
+    await escribirLog(
+      opts.supabase, opts.ferreteriaId, comp?.id ?? null,
+      'envio', 'note/send', resultado,
+      { serie, correlativo, ruc: creds.ruc, tipoDoc: '07' },
+    )
+
+    if (!resultado.ok)       return { ok: false, error: resultado.error ?? 'Error enviando NC a SUNAT' }
+    if (!resultado.aceptado) return { ok: false, error: resultado.cdrDescripcion ?? `SUNAT rechazó la NC (código ${resultado.cdrCodigo})` }
+
+    return { ok: true, comprobanteId: comp?.id, numeroCompleto }
   }
 
-  /**
-   * Emite UNA boleta de prueba (homologación SUNAT) sin necesidad de un pedido real.
-   * Reutiliza las mismas credenciales, emisor y llamada a Greenter que la emisión
-   * real — el único cambio es un ítem de prueba fijo (S/10.00) y que se guarda con
-   * emitido_por='homologacion_sunat' y pedido_id=null.
-   *
-   * La orquestación (cuántas faltan, acumulado, auto-promoción) vive en la ruta
-   * /homologar; este método solo sabe emitir una.
-   */
+  // ── Boleta de prueba (homologación SUNAT) ──────────────────────────────────
   async emitirBoletaPrueba(opts: {
     supabase:     any
     ferreteriaId: string
-    indice:       number   // 1..N, solo para la descripción del ítem
+    indice:       number
   }): Promise<ResultadoEmisionUnificado & { cdrCodigo?: string }> {
     const creds = await cargarCredenciales(opts.supabase, opts.ferreteriaId)
     if (!creds) return { ok: false, error: 'SUNAT Directo no configurado o inactivo.', tokenInvalido: true }
+
+    let lycetCfg: LycetConfig
+    try { lycetCfg = getLycetConfig() }
+    catch (e) { return { ok: false, error: (e as Error).message } }
 
     const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
     if (!ferreteria) return { ok: false, error: 'Negocio no encontrado' }
 
     const serie = ferreteria.serie_boletas ?? 'B001'
 
-    const { data: corrData } = await opts.supabase
-      .rpc('generar_numero_comprobante', {
-        p_ferreteria_id: opts.ferreteriaId,
-        p_tipo:          'boleta',
-        p_serie:         serie,
-      })
-    if (!corrData) return { ok: false, error: 'Error generando correlativo' }
+    const correlativo = await reservarCorrelativo(opts.supabase, opts.ferreteriaId, '03', serie)
+    if (!correlativo) return { ok: false, error: 'Error generando correlativo' }
 
-    const respuesta = await llamarGreenter(creds.greenterUrl, 'boleta/emitir', {
-      modo: creds.modo,
-      emisor: {
-        ruc:          creds.ruc,
-        razon_social: creds.razonSocial,
-        serie,
-        numero:       corrData,
-        direccion:    ferreteria.direccion ?? '-',
-        ubigeo:       ferreteria.ubigeo ?? '150101',
-        departamento: ferreteria.departamento ?? 'LIMA',
-        provincia:    ferreteria.provincia ?? 'LIMA',
-        distrito:     ferreteria.distrito ?? 'LIMA',
-      },
-      sol:         { usuario: creds.solUsuario, clave: creds.solClave },
-      certificado: { pfx_base64: creds.certPfxB64, clave: creds.certClave },
-      cliente: { tipo_doc: '0', numero_doc: '00000000', nombre: 'CLIENTES VARIOS' },
-      igv_incluido: ferreteria.igv_incluido_en_precios ?? false,
-      items: [{
-        descripcion:     `MATERIAL DE CONSTRUCCION TEST HOMOLOGACION ${opts.indice}`,
-        cantidad:        1,
-        precio_unitario: 10.00,
-        unidad:          'NIU',
-      }],
+    const ensureRes = await registrarEmpresaEnLycet(lycetCfg, creds)
+    if (!ensureRes.ok) {
+      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '03', serie, correlativo)
+      return { ok: false, error: `Error configurando el servicio de facturación: ${ensureRes.error}` }
+    }
+
+    const { doc, totales } = mapearInvoice('03', {
+      serie, correlativo,
+      emisor:  buildEmisor(ferreteria, creds),
+      cliente: { tipoDoc: '0', numDoc: '00000000', rznSocial: 'CLIENTES VARIOS' },
+      items:   [{ descripcion: `MATERIAL DE CONSTRUCCION TEST HOMOLOGACION ${opts.indice}`, cantidad: 1, precioUnitario: 10.00, unidad: 'NIU' }],
+      igvIncluido: false,
     })
 
-    if (!respuesta.ok) return { ok: false, error: respuesta.error }
+    const resultado     = await enviarInvoice(lycetCfg, doc)
+    const estadoFinal   = estadoSunat(resultado)
+    const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
 
-    const numero = corrData as number
-    const numeroCompleto = respuesta.numero_completo ?? `${serie}-${String(numero).padStart(8, '0')}`
+    if (!resultado.aceptado) {
+      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '03', serie, correlativo)
+    }
+
     await opts.supabase.from('comprobantes').insert({
       ferreteria_id:      opts.ferreteriaId,
       pedido_id:          null,
       tipo:               'boleta',
       serie,
-      numero,
+      numero:             correlativo,
       numero_completo:    numeroCompleto,
       numero_comprobante: numeroCompleto,
-      estado:             'emitido',
-      pdf_url:            respuesta.pdf_url ?? null,
-      xml_url:            respuesta.xml_url ?? null,
-      sunat_cdr_codigo:      respuesta.cdr_codigo ?? null,
-      sunat_cdr_descripcion: respuesta.cdr_descripcion ?? null,
+      estado:             resultado.aceptado ? 'emitido' : 'error',
+      estado_sunat:       estadoFinal,
+      fecha_emision:      fechaEmisionHoy(),
+      moneda:             'PEN',
+      subtotal:           totales.mtoOperGravadas,
+      igv:                totales.mtoIGV,
+      total:              totales.mtoImpVenta,
+      sunat_cdr_codigo:      resultado.cdrCodigo ?? null,
+      sunat_cdr_descripcion: resultado.cdrDescripcion ?? null,
       cliente_nombre:     'CLIENTES VARIOS',
       emitido_por:        'homologacion_sunat',
     })
 
-    return { ok: true, numeroCompleto, pdfUrl: respuesta.pdf_url, xmlUrl: respuesta.xml_url, cdrCodigo: respuesta.cdr_codigo }
+    if (!resultado.ok || !resultado.aceptado) {
+      return {
+        ok: false,
+        error: resultado.cdrDescripcion ?? resultado.error ?? 'SUNAT rechazó la boleta de prueba',
+        cdrCodigo: resultado.cdrCodigo ?? undefined,
+      }
+    }
+
+    return { ok: true, numeroCompleto, cdrCodigo: resultado.cdrCodigo ?? undefined }
   }
 }

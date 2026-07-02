@@ -1,0 +1,310 @@
+// Construcción del JSON en formato modelo Greenter que Lycet deserializa (JMS).
+//
+// Las claves y su forma están tomadas del fixture oficial de Lycet
+// (tests/Resources/documents/invoice.json) y de los modelos Greenter.
+// La aritmética por línea es idéntica a la que SUNAT ya aceptó en boletas.
+
+const IGV_RATE = 0.18
+
+export interface EmisorLycet {
+  ruc:          string
+  razonSocial:  string
+  direccion?:   string
+  ubigeo?:      string
+  departamento?: string
+  provincia?:   string
+  distrito?:    string
+}
+
+export interface ClienteLycet {
+  tipoDoc:   string   // catálogo 06: 0=varios, 1=DNI, 6=RUC
+  numDoc:    string
+  rznSocial: string
+}
+
+export interface ItemLycet {
+  descripcion:    string
+  cantidad:       number
+  precioUnitario: number   // con o sin IGV según igvIncluido
+  unidad?:        string
+}
+
+export interface MapearParams {
+  serie:        string
+  correlativo:  number
+  emisor:       EmisorLycet
+  cliente:      ClienteLycet
+  items:        ItemLycet[]
+  igvIncluido:  boolean
+  moneda?:      string    // default PEN
+}
+
+export interface Totales {
+  mtoOperGravadas: number
+  mtoIGV:          number
+  mtoImpVenta:     number
+}
+
+// ── Unidad interna → código SUNAT (catálogo 03) ───────────────────────────────
+function unidadSunat(unidad: string): string {
+  const mapa: Record<string, string> = {
+    niu: 'NIU', und: 'NIU', unidad: 'NIU', unidades: 'NIU',
+    kg: 'KGM', kgm: 'KGM', kilo: 'KGM',
+    l: 'LTR', lt: 'LTR', litro: 'LTR',
+    m: 'MTR', metro: 'MTR',
+    caja: 'BX', saco: 'SAC', bolsa: 'BG',
+  }
+  return mapa[(unidad ?? '').trim().toLowerCase()] ?? 'NIU'
+}
+
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100
+}
+
+// ── Detalles + totales ────────────────────────────────────────────────────────
+function construirDetalles(items: ItemLycet[], igvIncluido: boolean) {
+  const detalles = items.map((item, i) => {
+    const precio        = Number(item.precioUnitario) || 0
+    const cantidad      = Number(item.cantidad) || 1
+    const valorUnitario = igvIncluido ? precio / (1 + IGV_RATE) : precio
+    const mtoValorVenta = round2(valorUnitario * cantidad)
+    const igvItem       = round2(mtoValorVenta * IGV_RATE)
+
+    return {
+      codProducto:      String(i + 1).padStart(3, '0'),
+      unidad:           unidadSunat(item.unidad ?? 'NIU'),
+      descripcion:      item.descripcion ?? 'Producto',
+      cantidad,
+      mtoValorUnitario: round2(valorUnitario),
+      mtoValorVenta,
+      mtoBaseIgv:       mtoValorVenta,
+      porcentajeIgv:    18.0,
+      igv:              igvItem,
+      tipAfeIgv:        '10',              // Gravado - Operación Onerosa
+      totalImpuestos:   igvItem,
+      mtoPrecioUnitario: round2(precio),
+    }
+  })
+
+  const mtoOperGravadas = round2(detalles.reduce((a, d) => a + d.mtoValorVenta, 0))
+  const mtoIGV          = round2(detalles.reduce((a, d) => a + d.igv, 0))
+  const mtoImpVenta     = round2(mtoOperGravadas + mtoIGV)
+
+  return { detalles, totales: { mtoOperGravadas, mtoIGV, mtoImpVenta } as Totales }
+}
+
+function crearCompany(e: EmisorLycet) {
+  return {
+    ruc:             e.ruc,
+    razonSocial:     e.razonSocial,
+    nombreComercial: e.razonSocial,
+    address: {
+      ubigueo:      e.ubigeo ?? '150101',
+      codigoPais:   'PE',
+      departamento: (e.departamento ?? 'LIMA').toUpperCase(),
+      provincia:    (e.provincia ?? 'LIMA').toUpperCase(),
+      distrito:     (e.distrito ?? 'LIMA').toUpperCase(),
+      urbanizacion: '-',
+      direccion:    e.direccion ?? '-',
+    },
+  }
+}
+
+function fechaEmisionLima(): string {
+  // ISO con offset Lima (-05:00). Lycet/Greenter espera fechaEmision con hora.
+  const ahora = new Date()
+  const lima  = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Lima' }))
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${lima.getFullYear()}-${pad(lima.getMonth() + 1)}-${pad(lima.getDate())}T${pad(lima.getHours())}:${pad(lima.getMinutes())}:${pad(lima.getSeconds())}-05:00`
+}
+
+// ── Boleta (03) / Factura (01) ────────────────────────────────────────────────
+export function mapearInvoice(tipoDoc: '01' | '03', p: MapearParams): { doc: any; totales: Totales } {
+  const { detalles, totales } = construirDetalles(p.items, p.igvIncluido)
+
+  const doc: any = {
+    ublVersion:      '2.1',
+    tipoOperacion:   '0101',
+    tipoDoc,
+    serie:           p.serie,
+    correlativo:     String(p.correlativo),
+    fechaEmision:    fechaEmisionLima(),
+    tipoMoneda:      p.moneda ?? 'PEN',
+    company:         crearCompany(p.emisor),
+    client: {
+      tipoDoc:   p.cliente.tipoDoc,
+      numDoc:    p.cliente.numDoc,
+      rznSocial: p.cliente.rznSocial,
+    },
+    mtoOperGravadas: totales.mtoOperGravadas,
+    mtoIGV:          totales.mtoIGV,
+    totalImpuestos:  totales.mtoIGV,
+    valorVenta:      totales.mtoOperGravadas,
+    subTotal:        totales.mtoImpVenta,
+    mtoImpVenta:     totales.mtoImpVenta,
+    details:         detalles,
+    legends: [
+      { code: '1000', value: numeroALetras(totales.mtoImpVenta, p.moneda ?? 'PEN') },
+    ],
+  }
+
+  // La factura requiere forma de pago (UBL 2.1); la boleta no.
+  if (tipoDoc === '01') {
+    doc.formaPago = { tipo: 'Contado' }
+  }
+
+  return { doc, totales }
+}
+
+// ── Nota de Crédito (07) ──────────────────────────────────────────────────────
+export interface MapearNotaParams extends MapearParams {
+  tipoDocAfectado: string   // 01 factura, 03 boleta
+  numDocAfectado:  string   // ej: B001-14
+  codMotivo:       string   // catálogo 09
+  desMotivo:       string
+}
+
+export function mapearNota(p: MapearNotaParams): { doc: any; totales: Totales } {
+  const { detalles, totales } = construirDetalles(p.items, p.igvIncluido)
+
+  const doc = {
+    ublVersion:      '2.1',
+    tipoDoc:         '07',
+    serie:           p.serie,
+    correlativo:     String(p.correlativo),
+    fechaEmision:    fechaEmisionLima(),
+    tipDocAfectado:  p.tipoDocAfectado,
+    numDocfectado:   p.numDocAfectado,      // nombre exacto del modelo Greenter (sin 'A')
+    codMotivo:       p.codMotivo,
+    desMotivo:       p.desMotivo,
+    tipoMoneda:      p.moneda ?? 'PEN',
+    company:         crearCompany(p.emisor),
+    client: {
+      tipoDoc:   p.cliente.tipoDoc,
+      numDoc:    p.cliente.numDoc,
+      rznSocial: p.cliente.rznSocial,
+    },
+    mtoOperGravadas: totales.mtoOperGravadas,
+    mtoIGV:          totales.mtoIGV,
+    totalImpuestos:  totales.mtoIGV,
+    mtoImpVenta:     totales.mtoImpVenta,
+    details:         detalles,
+    legends: [
+      { code: '1000', value: numeroALetras(totales.mtoImpVenta, p.moneda ?? 'PEN') },
+    ],
+  }
+
+  return { doc, totales }
+}
+
+// ── Resumen Diario (RC) ───────────────────────────────────────────────────────
+// Lycet espera el modelo Greenter Summary serializado.
+// Los detalles se agrupan por serie; dentro de cada serie se declara el rango
+// (correlativoInicio, correlativoFin) y el billing acumulado.
+
+export interface BoletaParaRC {
+  serie:    string
+  numero:   number   // correlativo
+  subtotal: number   // base imponible sin IGV
+  igv:      number
+  total:    number
+}
+
+export interface DetalleRC {
+  tipoDoc:             string   // 03 = boleta
+  serie:               string
+  correlativoInicio:   number
+  correlativoFin:      number
+  billing: {
+    gravadas:     number
+    igv:          number
+    importeTotal: number
+  }
+  status: { type: string }   // '1' = adicionar
+}
+
+export function mapearResumenDiario(
+  fecha:       string,   // YYYY-MM-DD
+  correlativo: number,
+  emisor:      EmisorLycet,
+  boletas:     BoletaParaRC[],
+): any {
+  // Agrupar por serie
+  const porSerie = new Map<string, BoletaParaRC[]>()
+  for (const b of boletas) {
+    const grupo = porSerie.get(b.serie) ?? []
+    grupo.push(b)
+    porSerie.set(b.serie, grupo)
+  }
+
+  const details: DetalleRC[] = []
+  for (const [serie, grupo] of porSerie) {
+    const nums    = grupo.map(b => b.numero)
+    const billing = {
+      gravadas:     round2(grupo.reduce((a, b) => a + (b.subtotal ?? 0), 0)),
+      igv:          round2(grupo.reduce((a, b) => a + (b.igv ?? 0), 0)),
+      importeTotal: round2(grupo.reduce((a, b) => a + (b.total ?? 0), 0)),
+    }
+    details.push({
+      tipoDoc:           '03',
+      serie,
+      correlativoInicio: Math.min(...nums),
+      correlativoFin:    Math.max(...nums),
+      billing,
+      status:            { type: '1' },
+    })
+  }
+
+  return {
+    correlativo,
+    fecGeneracion: fecha,
+    company:       crearCompany(emisor),
+    details,
+  }
+}
+
+// ── Número a letras (para la leyenda 1000) ────────────────────────────────────
+function numeroALetras(monto: number, moneda: string): string {
+  const entero   = Math.floor(monto)
+  const centavos = Math.round((monto - entero) * 100)
+  const sufijo   = moneda === 'USD' ? 'DÓLARES AMERICANOS' : 'SOLES'
+  return `SON ${enteroALetras(entero).toUpperCase()} CON ${String(centavos).padStart(2, '0')}/100 ${sufijo}`
+}
+
+function enteroALetras(n: number): string {
+  if (n === 0) return 'CERO'
+
+  const unidades   = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE']
+  const especiales  = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE']
+  const decenas    = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA']
+  const centenas   = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS']
+
+  let resultado = ''
+
+  if (n >= 1000000) {
+    const m = Math.floor(n / 1000000)
+    resultado += (m === 1 ? 'UN MILLÓN' : enteroALetras(m) + ' MILLONES') + ' '
+    n %= 1000000
+  }
+  if (n >= 1000) {
+    const m = Math.floor(n / 1000)
+    resultado += (m === 1 ? 'MIL' : enteroALetras(m) + ' MIL') + ' '
+    n %= 1000
+  }
+  if (n >= 100) {
+    const c = Math.floor(n / 100)
+    resultado += (n === 100 ? 'CIEN' : centenas[c]) + ' '
+    n %= 100
+  }
+  if (n >= 20) {
+    const d = Math.floor(n / 10)
+    const u = n % 10
+    resultado += decenas[d] + (u > 0 ? ' Y ' + unidades[u] : '') + ' '
+  } else if (n >= 10) {
+    resultado += especiales[n - 10] + ' '
+  } else if (n > 0) {
+    resultado += (n === 1 ? 'UNO' : unidades[n]) + ' '
+  }
+
+  return resultado.trim()
+}

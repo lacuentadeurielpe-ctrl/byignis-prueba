@@ -7,6 +7,7 @@ use Greenter\Model\Sale\Invoice;
 use Greenter\Model\Sale\Note;
 use Greenter\Model\Sale\SaleDetail;
 use Greenter\Model\Sale\Legend;
+use Greenter\Model\Sale\FormaPagos\FormaPagoContado;
 use Greenter\Model\Client\Client;
 use Greenter\Model\Company\Company;
 use Greenter\Model\Company\Address;
@@ -119,6 +120,7 @@ class DocumentoFactory
             ->setMtoIGV($mtoIGV)
             ->setTotalImpuestos($mtoIGV)
             ->setValorVenta($mtoOperGravadas)
+            ->setSubTotal($mtoTotal)
             ->setMtoImpVenta($mtoTotal)
             ->setDetails($detalles)
             ->setLegends([
@@ -152,12 +154,14 @@ class DocumentoFactory
             ->setSerie($emisorData['serie'] ?? 'F001')
             ->setCorrelativo((string)($emisorData['numero'] ?? 1))
             ->setFechaEmision(new \DateTime('now', new \DateTimeZone('America/Lima')))
+            ->setFormaPago(new FormaPagoContado())
             ->setCompany(self::crearEmisor($emisorData))
             ->setClient(self::crearCliente($clienteData))
             ->setMtoOperGravadas($mtoOperGravadas)
             ->setMtoIGV($mtoIGV)
             ->setTotalImpuestos($mtoIGV)
             ->setValorVenta($mtoOperGravadas)
+            ->setSubTotal($mtoTotal)
             ->setMtoImpVenta($mtoTotal)
             ->setDetails($detalles)
             ->setLegends([
@@ -201,9 +205,11 @@ class DocumentoFactory
             ->setMtoOperGravadas($mtoOperGravadas)
             ->setMtoIGV($mtoIGV)
             ->setTotalImpuestos($mtoIGV)
-            ->setValorVenta($mtoOperGravadas)
             ->setMtoImpVenta($mtoTotal)
-            ->setDetails($detalles);
+            ->setDetails($detalles)
+            ->setLegends([
+                (new Legend())->setCode('1000')->setValue(self::numeroALetras($mtoTotal)),
+            ]);
 
         return $note;
     }
