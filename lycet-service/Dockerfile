@@ -39,7 +39,7 @@ WORKDIR /var/www
 RUN rm -rf html /var/www/html \
     && git clone --depth=1 https://github.com/giansalex/lycet.git html \
     && cd html \
-    && composer install --no-dev --optimize-autoloader --no-interaction --no-scripts \
+    && composer install --optimize-autoloader --no-interaction --no-scripts \
     && composer dump-autoload --optimize --no-interaction
 
 WORKDIR /var/www/html
