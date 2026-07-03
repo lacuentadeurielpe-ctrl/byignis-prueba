@@ -102,8 +102,12 @@ export async function ensureCompany(
   data: { ruc: string; solUser: string; solPass: string; certPem: string; feUrl?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    // SUNAT autentica con RUC+usuario concatenados (ej. "20000000001MODDATOS").
+    // El negocio guarda solo su usuario SOL; si no viene con el RUC, se antepone.
+    // Sin esto SUNAT responde "No tiene el perfil ... Rejected by policy".
+    const solUser = data.solUser.startsWith(data.ruc) ? data.solUser : data.ruc + data.solUser
     const body: Record<string, string> = {
-      SOL_USER:    data.solUser,
+      SOL_USER:    solUser,
       SOL_PASS:    data.solPass,
       certificate: Buffer.from(data.certPem, 'utf-8').toString('base64'),
     }

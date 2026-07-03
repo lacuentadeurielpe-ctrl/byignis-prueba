@@ -51,8 +51,13 @@ RUN rm -rf html /var/www/html \
 
 WORKDIR /var/www/html
 
-# Permisos para var/ (Symfony cache, logs y configs de empresa)
-RUN mkdir -p var && chown -R www-data:www-data /var/www/html/var
+# Permisos de escritura para php-fpm (corre como www-data):
+#   var/  → cache y logs de Symfony
+#   data/ → Lycet escribe aquí el certificado PEM y empresas.json de cada empresa.
+#           El repo trae data/ como root (git clone corre como root); sin este chown
+#           php-fpm NO puede escribir el cert → Greenter firma con un archivo vacío →
+#           openssl_get_privatekey('') → "DECODER routines::unsupported" → HTTP 500.
+RUN mkdir -p var data && chown -R www-data:www-data /var/www/html/var /var/www/html/data
 
 # Configuración de nginx para Symfony (puerto se inyecta en runtime)
 COPY nginx.conf /etc/nginx/sites-available/lycet
