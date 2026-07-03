@@ -39,12 +39,15 @@ WORKDIR /var/www
 RUN apt-get update && apt-get install -y --no-install-recommends jq \
     && rm -rf /var/lib/apt/lists/*
 
+COPY generate-autoload.php /tmp/generate-autoload.php
+
 RUN rm -rf html /var/www/html \
     && git clone --depth=1 https://github.com/giansalex/lycet.git html \
     && cd html \
     && jq 'del(.scripts["post-install-cmd"]) | del(.scripts["post-update-cmd"])' composer.json > /tmp/c.json \
     && mv /tmp/c.json composer.json \
-    && composer install --no-dev --optimize-autoloader --no-interaction
+    && composer install --no-dev --optimize-autoloader --no-interaction \
+    && php /tmp/generate-autoload.php
 
 WORKDIR /var/www/html
 
