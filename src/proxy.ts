@@ -17,7 +17,6 @@ const RUTAS_PUBLICAS = [
   '/delivery',    // Interfaz del repartidor en su celular (token público)
   '/tracking',    // Página de tracking pública para el cliente (sin login)
   '/api/tracking',// API de tracking — datos de posición GPS (sin auth)
-  '/api/admin/recifrar', // TEMPORAL: migración de cifrado — se autentica con Bearer ENCRYPTION_KEY
   // Panel de superadmin — tiene su propio sistema de autenticación
   // (Supabase Auth + tabla superadmins + header x-superadmin-secret)
   '/superadmin',
