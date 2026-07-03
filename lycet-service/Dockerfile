@@ -36,11 +36,15 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Clonar Lycet — limpiar primero para evitar conflictos de build cache de Railway
 WORKDIR /var/www
+RUN apt-get update && apt-get install -y --no-install-recommends jq \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN rm -rf html /var/www/html \
     && git clone --depth=1 https://github.com/giansalex/lycet.git html \
     && cd html \
-    && composer install --optimize-autoloader --no-interaction --no-scripts \
-    && composer dump-autoload --optimize --no-interaction
+    && jq 'del(.scripts["post-install-cmd"]) | del(.scripts["post-update-cmd"])' composer.json > /tmp/c.json \
+    && mv /tmp/c.json composer.json \
+    && composer install --no-dev --optimize-autoloader --no-interaction
 
 WORKDIR /var/www/html
 
