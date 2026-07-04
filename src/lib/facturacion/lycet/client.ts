@@ -7,6 +7,8 @@
 //   POST /api/v1/note/send                     → nota de crédito/débito
 //   POST /api/v1/summary/send                  → resumen diario (RC) → ticket
 //   GET  /api/v1/summary/status?ticket=&ruc=   → CDR del RC
+//   POST /api/v1/voided/send                   → comunicación de baja (RA, factura) → ticket
+//   GET  /api/v1/voided/status?ticket=&ruc=    → CDR de la RA
 //   POST /api/v1/invoice/pdf | /invoice/xml    → PDF/XML fiscal
 
 const TIMEOUT_MS = 60_000
@@ -151,12 +153,13 @@ async function enviarDoc(cfg: LycetConfig, path: string, doc: any): Promise<Resu
 export const enviarInvoice = (cfg: LycetConfig, doc: any) => enviarDoc(cfg, '/api/v1/invoice/send', doc)
 export const enviarNota    = (cfg: LycetConfig, doc: any) => enviarDoc(cfg, '/api/v1/note/send', doc)
 export const enviarSummary = (cfg: LycetConfig, doc: any) => enviarDoc(cfg, '/api/v1/summary/send', doc)
+export const enviarVoided  = (cfg: LycetConfig, doc: any) => enviarDoc(cfg, '/api/v1/voided/send', doc)
 
-// ── Consultar estado de un ticket de resumen diario ───────────────────────────
-export async function consultarSummary(cfg: LycetConfig, ticket: string, ruc: string): Promise<ResultadoSunat> {
+// ── Consultar estado de un ticket asíncrono (RC o RA) ─────────────────────────
+async function consultarTicket(cfg: LycetConfig, path: string, ticket: string, ruc: string): Promise<ResultadoSunat> {
   try {
     const res = await fetchConTimeout(
-      urls(cfg, '/api/v1/summary/status', `ticket=${encodeURIComponent(ticket)}&ruc=${encodeURIComponent(ruc)}`),
+      urls(cfg, path, `ticket=${encodeURIComponent(ticket)}&ruc=${encodeURIComponent(ruc)}`),
       { method: 'GET' },
     )
     const texto = await res.text().catch(() => '')
@@ -169,6 +172,12 @@ export async function consultarSummary(cfg: LycetConfig, ticket: string, ruc: st
     return fallo(e instanceof Error ? e.message : String(e))
   }
 }
+
+export const consultarSummary = (cfg: LycetConfig, ticket: string, ruc: string) =>
+  consultarTicket(cfg, '/api/v1/summary/status', ticket, ruc)
+
+export const consultarVoided = (cfg: LycetConfig, ticket: string, ruc: string) =>
+  consultarTicket(cfg, '/api/v1/voided/status', ticket, ruc)
 
 // ── PDF fiscal (devuelve base64) ──────────────────────────────────────────────
 export async function obtenerPdf(cfg: LycetConfig, tipo: 'invoice' | 'note', doc: any): Promise<string | null> {

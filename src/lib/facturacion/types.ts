@@ -47,6 +47,25 @@ export interface OpcionesNotaCredito {
   itemsDevueltos?:         { producto_id: string | null; cantidad: number }[]
 }
 
+export interface OpcionesReintentoEnvio {
+  supabase:      any
+  comprobanteId: string
+  ferreteriaId:  string
+}
+
+export interface OpcionesSolicitarAnulacion {
+  supabase:      any
+  comprobanteId: string
+  ferreteriaId:  string
+  motivo:        string
+  usuario:       string   // quién la solicitó (para trazabilidad)
+}
+
+export interface ResultadoAnulacion {
+  ok:    boolean
+  error?: string
+}
+
 // ── Interfaz que todo proveedor debe implementar ──────────────────────────────
 
 export interface ProveedorFacturacion {
@@ -55,4 +74,20 @@ export interface ProveedorFacturacion {
   emitirBoleta(opts: OpcionesEmisionBoleta): Promise<ResultadoEmisionUnificado>
   emitirFactura(opts: OpcionesEmisionFactura): Promise<ResultadoEmisionUnificado>
   emitirNotaCredito(opts: OpcionesNotaCredito): Promise<ResultadoEmisionUnificado>
+
+  /**
+   * Reintenta el envío de un comprobante que quedó en `error_reintentable`
+   * (falla de infraestructura, no de rechazo SUNAT). Reutiliza la misma serie
+   * y correlativo — no reserva uno nuevo. Proveedores sin cola de reintentos
+   * (ej. Nubefact, que resuelve todo síncrono) pueden omitir el método.
+   */
+  reintentarEnvio?(opts: OpcionesReintentoEnvio): Promise<ResultadoEmisionUnificado>
+
+  /**
+   * Marca un comprobante para anulación. NO llama a SUNAT directamente — solo
+   * registra la solicitud; el envío real (RC de baja para boletas, RA/Voided
+   * para facturas) lo procesa el job nocturno, agrupado por día.
+   * Proveedores que anulan síncrono (Nubefact) pueden resolver aquí mismo.
+   */
+  solicitarAnulacion(opts: OpcionesSolicitarAnulacion): Promise<ResultadoAnulacion>
 }

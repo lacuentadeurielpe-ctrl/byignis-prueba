@@ -204,13 +204,23 @@ export interface Comprobante {
   emitido_por: string | null         // 'bot' | 'dashboard'
   comprobante_referencia_id: string | null // Referencia a boleta/factura original
   // Lycet / SUNAT Directo (migración 095)
-  estado_sunat: string | null        // 'borrador'|'enviado'|'aceptado'|'aceptado_obs'|'rechazado'|'anulado'|'baja'
+  estado_sunat: string | null        // 'borrador'|'enviado'|'aceptado'|'aceptado_obs'|'rechazado'|'anulado'|'baja'|'error_reintentable'|'baja_pendiente'
   fecha_emision: string | null       // DATE fiscal Lima (YYYY-MM-DD)
-  rc_id: string | null               // FK a sunat_resumenes_diarios
+  rc_id: string | null               // FK a sunat_resumenes_diarios (ahora: RC de baja, no de declaración)
   cdr_notas: unknown | null          // JSON metadata del CDR
   moneda: string | null              // 'PEN' | 'USD'
   sunat_cdr_codigo: string | null    // Código numérico del CDR SUNAT
   sunat_cdr_descripcion: string | null
+  // Cola de reintentos y anulaciones (migración 099 — facturación automática)
+  intentos_envio: number
+  proximo_intento_at: string | null
+  ultimo_error_sunat: string | null
+  requiere_atencion: boolean
+  anulacion_solicitada: boolean
+  anulacion_motivo: string | null
+  anulacion_solicitada_at: string | null
+  anulacion_solicitada_por: string | null
+  comunicacion_baja_id: string | null
   created_at: string
 }
 

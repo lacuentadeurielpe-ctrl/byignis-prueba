@@ -4,9 +4,10 @@ import { useState, useMemo } from 'react'
 import { formatPEN, formatFechaHoraLima, cn } from '@/lib/utils'
 import {
   Search, FileText, Download, CheckCircle2, AlertTriangle,
-  RefreshCcw, Receipt, Clock, CheckCheck, XCircle, Info,
+  RefreshCcw, Receipt, Clock, CheckCheck, XCircle, Ban,
 } from 'lucide-react'
 import ModalNotaCredito from './ModalNotaCredito'
+import ModalAnularComprobante from './ModalAnularComprobante'
 import type { Comprobante as ComprobanteDB } from '@/types/database'
 import { toast } from 'sonner'
 
@@ -41,10 +42,17 @@ function BadgeSunat({ comp }: { comp: ComprobanteExt }) {
       </span>
     )
   }
-  if (es === 'enviado') {
+  if (es === 'enviado' || es === 'baja_pendiente') {
     return (
       <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-        <Clock className="w-3 h-3" /> Procesando
+        <Clock className="w-3 h-3" /> {es === 'baja_pendiente' ? 'Anulando…' : 'Procesando'}
+      </span>
+    )
+  }
+  if (es === 'error_reintentable') {
+    return (
+      <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+        <RefreshCcw className="w-3 h-3" /> Reintentando…
       </span>
     )
   }
@@ -88,6 +96,16 @@ function BadgeSunat({ comp }: { comp: ComprobanteExt }) {
 // ── Tooltip de observaciones CDR ─────────────────────────────────────────────
 
 function CdrInfo({ comp }: { comp: ComprobanteExt }) {
+  if (comp.estado_sunat === 'error_reintentable') {
+    return (
+      <div className="mt-1 text-[10px] rounded px-1.5 py-0.5 max-w-[200px] bg-amber-50 text-amber-700">
+        <span className="line-clamp-2">
+          {comp.ultimo_error_sunat ?? 'Reintentando envío automáticamente'}
+          {comp.intentos_envio > 0 && ` (intento ${comp.intentos_envio})`}
+        </span>
+      </div>
+    )
+  }
   if (comp.estado_sunat !== 'rechazado' && comp.estado_sunat !== 'aceptado_obs') return null
   const codigo = comp.sunat_cdr_codigo
   const desc   = comp.sunat_cdr_descripcion
@@ -125,20 +143,6 @@ function guiaSunat(codigo: string | null | undefined): string | null {
   return null
 }
 
-// ── Badge RC ──────────────────────────────────────────────────────────────────
-
-function BadgeRC({ comp }: { comp: ComprobanteExt }) {
-  if (comp.tipo !== 'boleta' || !comp.rc_id) return null
-  return (
-    <span
-      className="inline-flex items-center gap-0.5 bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[10px] font-bold ml-1"
-      title="Incluida en Resumen Diario"
-    >
-      RC ✓
-    </span>
-  )
-}
-
 // ── Componente principal ──────────────────────────────────────────────────────
 
 const labelTipo = (tipo: string) => {
@@ -162,6 +166,13 @@ function pdfHref(comp: ComprobanteExt): string | null {
   return comp.pdf_url ?? `/api/comprobantes/${comp.id}/pdf`
 }
 
+// Solo boletas/facturas aceptadas, y que no tengan ya una anulación en trámite.
+function puedeAnular(comp: ComprobanteExt): boolean {
+  if (comp.tipo !== 'boleta' && comp.tipo !== 'factura') return false
+  if (comp.anulacion_solicitada) return false
+  return comp.estado_sunat === 'aceptado' || comp.estado_sunat === 'aceptado_obs'
+}
+
 export default function ComprobantesTable({
   comprobantes,
   nubefactConfigurado,
@@ -171,6 +182,7 @@ export default function ComprobantesTable({
 }) {
   const [busqueda, setBusqueda] = useState('')
   const [ncTarget, setNcTarget] = useState<ComprobanteExt | null>(null)
+  const [anularTarget, setAnularTarget] = useState<ComprobanteExt | null>(null)
 
   const filtrados = useMemo(() => {
     return comprobantes.filter(c => {
@@ -185,32 +197,18 @@ export default function ComprobantesTable({
     })
   }, [comprobantes, busqueda])
 
-  // Alerta si hay boletas rechazadas o sin RC
-  const boletasSinRC = comprobantes.filter(
-    c => c.tipo === 'boleta' &&
-         (c.estado_sunat === 'aceptado' || c.estado_sunat === 'aceptado_obs') &&
-         !c.rc_id
-  ).length
-  const boletasRechazadas = comprobantes.filter(c => c.estado_sunat === 'rechazado').length
+  // Alerta si hay boletas/facturas rechazadas definitivamente por SUNAT
+  const rechazados = comprobantes.filter(c => c.estado_sunat === 'rechazado').length
 
   return (
     <div className="space-y-3">
       {/* Banner de alerta contextual */}
-      {boletasRechazadas > 0 && (
+      {rechazados > 0 && (
         <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-sm text-red-700">
           <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <div>
-            <span className="font-bold">{boletasRechazadas} boleta(s) rechazada(s) por SUNAT.</span>{' '}
-            Revisa los detalles en la tabla y corrígelas o emite una nota de crédito.
-          </div>
-        </div>
-      )}
-      {boletasSinRC > 0 && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-sm text-amber-700">
-          <Info className="w-4 h-4 mt-0.5 shrink-0" />
-          <div>
-            <span className="font-bold">{boletasSinRC} boleta(s) aceptadas sin Resumen Diario.</span>{' '}
-            Ve a <strong>Contabilidad → Resumen Diario</strong> para declararlas ante SUNAT.
+            <span className="font-bold">{rechazados} comprobante(s) rechazado(s) por SUNAT.</span>{' '}
+            Revisa los detalles en la tabla y corrígelos o emite una nota de crédito.
           </div>
         </div>
       )}
@@ -261,7 +259,6 @@ export default function ComprobantesTable({
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-zinc-900">{comp.numero_completo || 'Pendiente'}</span>
                             {labelTipo(comp.tipo || '')}
-                            <BadgeRC comp={comp} />
                           </div>
                           <div className="text-xs text-zinc-500 mt-0.5">
                             {/* Mostrar fecha_emision fiscal si existe, si no la hora de creación */}
@@ -324,6 +321,15 @@ export default function ComprobantesTable({
                             Nota de Crédito
                           </button>
                         )}
+                        {puedeAnular(comp) && (
+                          <button
+                            onClick={() => setAnularTarget(comp)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 ml-2 bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50 rounded-lg text-xs font-bold transition shadow-sm"
+                            title="Anular comprobante"
+                          >
+                            <Ban className="w-3.5 h-3.5" /> Anular
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -350,6 +356,18 @@ export default function ComprobantesTable({
             onEmitida={(res) => {
               setNcTarget(null)
               toast.success(`Nota de crédito ${res.numeroCompleto} emitida`)
+              setTimeout(() => window.location.reload(), 1500)
+            }}
+          />
+        )}
+
+        {anularTarget && (
+          <ModalAnularComprobante
+            comprobante={{ id: anularTarget.id, numeroCompleto: anularTarget.numero_completo || '' }}
+            onCerrar={() => setAnularTarget(null)}
+            onAnulada={() => {
+              setAnularTarget(null)
+              toast.success('Anulación solicitada — se procesará ante SUNAT en la próxima corrida nocturna')
               setTimeout(() => window.location.reload(), 1500)
             }}
           />

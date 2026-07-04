@@ -17,6 +17,10 @@ import { fnRepartidorEmergencia } from '@/lib/inngest/functions/repartidor-emerg
 import { fnClienteAusente } from '@/lib/inngest/functions/cliente-ausente'
 import { fnPedidoCanceladoReasignar } from '@/lib/inngest/functions/pedido-cancelado-reasignar'
 import { fnMonitorDemora } from '@/lib/inngest/functions/monitor-demora'
+// Facturación automática (reintentos, anulaciones, conciliación)
+import { fnFacturacionReintentos } from '@/lib/inngest/functions/facturacion-reintentos'
+import { fnFacturacionAnulaciones } from '@/lib/inngest/functions/facturacion-anulaciones'
+import { fnFacturacionConciliacion } from '@/lib/inngest/functions/facturacion-conciliacion'
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -32,5 +36,9 @@ export const { GET, POST, PUT } = serve({
     fnClienteAusente,
     fnPedidoCanceladoReasignar,
     fnMonitorDemora,
+    // Facturación automática
+    fnFacturacionReintentos,
+    fnFacturacionAnulaciones,
+    fnFacturacionConciliacion,
   ],
 })

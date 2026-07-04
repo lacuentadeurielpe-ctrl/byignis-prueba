@@ -197,10 +197,11 @@ export function mapearNota(p: MapearNotaParams): { doc: any; totales: Totales } 
   return { doc, totales }
 }
 
-// ── Resumen Diario (RC) ───────────────────────────────────────────────────────
+// ── Resumen Diario (RC) — EXCLUSIVAMENTE para dar de baja boletas ─────────────
+// Desde 2023 SUNAT exige informar cada boleta individualmente (lo que el sistema
+// ya hace en cada venta); el RC dejó de usarse para "declarar". Su único uso
+// vigente es anular boletas ya aceptadas: un detalle con `status.type = '3'`.
 // Lycet espera el modelo Greenter Summary serializado.
-// Los detalles se agrupan por serie; dentro de cada serie se declara el rango
-// (correlativoInicio, correlativoFin) y el billing acumulado.
 
 export interface BoletaParaRC {
   serie:    string
@@ -220,11 +221,12 @@ export interface DetalleRC {
     igv:          number
     importeTotal: number
   }
-  status: { type: string }   // '1' = adicionar
+  status: { type: string }   // '3' = dar de baja
 }
 
-export function mapearResumenDiario(
-  fecha:       string,   // YYYY-MM-DD
+/** Construye el RC de baja para el conjunto de boletas dado (todas con status '3'). */
+export function mapearResumenBaja(
+  fecha:       string,   // YYYY-MM-DD — fecha de generación del RC
   correlativo: number,
   emisor:      EmisorLycet,
   boletas:     BoletaParaRC[],
@@ -251,7 +253,7 @@ export function mapearResumenDiario(
       correlativoInicio: Math.min(...nums),
       correlativoFin:    Math.max(...nums),
       billing,
-      status:            { type: '1' },
+      status:            { type: '3' },
     })
   }
 
@@ -260,6 +262,38 @@ export function mapearResumenDiario(
     fecGeneracion: fecha,
     company:       crearCompany(emisor),
     details,
+  }
+}
+
+// ── Comunicación de Baja (RA) — anulación de facturas/notas ───────────────────
+// Documento Greenter "Voided" (distinto del Summary). Regla SUNAT: solo puede
+// comunicarse la baja a partir del día siguiente a la emisión del documento.
+
+export interface DocumentoParaBaja {
+  tipoDoc:     string   // 01 = factura, 07 = NC, 08 = ND
+  serie:       string
+  correlativo: number
+  motivo:      string
+}
+
+export function mapearComunicacionBaja(
+  fechaComunicacion: string,   // YYYY-MM-DD — hoy (cuándo se envía la RA)
+  fechaGeneracion:   string,   // YYYY-MM-DD — fecha del/los documento(s) afectados
+  correlativo:       number,
+  emisor:            EmisorLycet,
+  documentos:        DocumentoParaBaja[],
+): any {
+  return {
+    correlativo,
+    fecGeneracion:   fechaGeneracion,
+    fecComunicacion: fechaComunicacion,
+    company:         crearCompany(emisor),
+    details: documentos.map(d => ({
+      tipoDoc:      d.tipoDoc,
+      serie:        d.serie,
+      correlativo:  String(d.correlativo),
+      desMotivoBaja: d.motivo,
+    })),
   }
 }
 
