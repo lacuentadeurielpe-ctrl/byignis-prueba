@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+﻿import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { formatFecha, formatMonto, registerFonts } from '../shared/helpers'
 import { PropsFactura } from './types'
 
@@ -70,7 +70,7 @@ export default function PlantillaFacturaTicket80({ emisor, comprobante, items, t
 
         <View style={styles.itemsHeader}>
           <Text style={[styles.itemQty, { fontWeight: 'bold' }]}>Cant</Text>
-          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>Descripción</Text>
+          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>DescripciÃ³n</Text>
           <Text style={[styles.itemTotal, { fontWeight: 'bold' }]}>Total</Text>
         </View>
 
@@ -82,7 +82,15 @@ export default function PlantillaFacturaTicket80({ emisor, comprobante, items, t
           </View>
         ))}
 
-        <View style={styles.totalSection}>
+                <View style={styles.totalSection}>
+          <View style={styles.totalRow}>
+            <Text style={{ fontSize: 9 }}>Op. Gravada</Text>
+            <Text style={{ fontSize: 9 }}>{formatMonto(comprobante.subtotal)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={{ fontSize: 9 }}>IGV (18%)</Text>
+            <Text style={{ fontSize: 9 }}>{formatMonto(comprobante.igv)}</Text>
+          </View>
           <View style={[styles.totalRow, { marginTop: 2 }]}>
             <Text style={styles.totalLabel}>TOTAL A PAGAR</Text>
             <Text style={styles.totalValue}>{formatMonto(comprobante.total)}</Text>
@@ -92,8 +100,8 @@ export default function PlantillaFacturaTicket80({ emisor, comprobante, items, t
         <View style={styles.separator} />
 
         <View style={styles.footer}>
-          <Text style={styles.footerTitle}>¡GRACIAS POR SU COMPRA!</Text>
-          <Text style={styles.legalText}>Representaci�n impresa de la Factura Electr�nica.</Text>
+          <Text style={styles.footerTitle}>Â¡GRACIAS POR SU COMPRA!</Text>
+          <Text style={styles.legalText}>Representaciï¿½n impresa de la Factura Electrï¿½nica.</Text>
         </View>
       </Page>
     </Document>

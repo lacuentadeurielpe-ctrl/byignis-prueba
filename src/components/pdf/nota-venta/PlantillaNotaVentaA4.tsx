@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+﻿import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { formatFecha, formatMonto, registerFonts } from '../shared/helpers'
 import { PropsNotaVenta } from './types'
 
@@ -100,7 +100,7 @@ export default function PlantillaNotaVentaA4({ emisor, comprobante, items, tema 
           <View style={styles.headerRight}>
             <Text style={styles.titleBox}>RUC: {emisor.ruc}</Text>
             <Text style={styles.titleBox}>NOTA DE VENTA</Text>
-            <Text style={styles.titleBox}>ELECTRÓNICA</Text>
+            <Text style={styles.titleBox}>ELECTRÃ“NICA</Text>
             <Text style={{ fontSize: 12, marginTop: 5 }}>{comprobante.numero_completo}</Text>
           </View>
         </View>
@@ -127,7 +127,7 @@ export default function PlantillaNotaVentaA4({ emisor, comprobante, items, tema 
         <View style={styles.table}>
           <View style={styles.tableHeader}>
             <Text style={styles.col1}>CANT.</Text>
-            <Text style={styles.col2}>DESCRIPCIÓN</Text>
+            <Text style={styles.col2}>DESCRIPCIÃ“N</Text>
             <Text style={styles.col3}>P. UNITARIO</Text>
             <Text style={styles.col4}>SUBTOTAL</Text>
           </View>
@@ -142,15 +142,7 @@ export default function PlantillaNotaVentaA4({ emisor, comprobante, items, tema 
         </View>
 
         {/* Totales */}
-        <View style={styles.totalsBox}>
-          <View style={styles.totalRow}>
-            <Text>Op. Gravada:</Text>
-            <Text>{formatMonto(comprobante.subtotal)}</Text>
-          </View>
-          <View style={styles.totalRow}>
-            <Text>IGV (18%):</Text>
-            <Text>{formatMonto(comprobante.igv)}</Text>
-          </View>
+                <View style={styles.totalsBox}>
           <View style={styles.totalFinal}>
             <Text>TOTAL:</Text>
             <Text>{formatMonto(comprobante.total)}</Text>
@@ -163,7 +155,7 @@ export default function PlantillaNotaVentaA4({ emisor, comprobante, items, tema 
             <Image src={comprobante.qr_data_uri} style={styles.qrBox} />
           )}
           <View style={styles.legalBox}>
-            <Text style={styles.legalText}>Representación impresa de la NOTA DE VENTA Electrónica.</Text>
+            <Text style={styles.legalText}>RepresentaciÃ³n impresa de la NOTA DE VENTA ElectrÃ³nica.</Text>
             <Text style={styles.legalText}>Hash: {comprobante.hash}</Text>
             <Text style={styles.legalText}>Consulte su documento en www.sunat.gob.pe</Text>
           </View>
