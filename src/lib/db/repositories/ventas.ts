@@ -635,15 +635,15 @@ export class VentasRepository {
       const afectoIgv = item.productos?.afecto_igv === true
 
       let gananciaItem = 0
+      const gananciaBruta = (precioUnitario - costo) * cant
       
       if (esFacturable && afectoIgv && igvIncluido) {
-        // El precio de venta incluye IGV, por lo que el ingreso real de la tienda es el precio sin IGV
-        const precioSinIgv = precioUnitario / 1.18
-        gananciaItem = (precioSinIgv - costo) * cant
+        // El precio de venta incluye IGV. Asumimos que el precio de compra ingresado también lo incluye.
+        // Para obtener la ganancia neta real (sin IGV), extraemos el IGV de la ganancia bruta.
+        gananciaItem = gananciaBruta / 1.18
       } else {
-        // No facturable, o exonerado (no afecto), o el IGV no está incluido en el precio base.
-        // El precio_unitario es el ingreso neto del producto.
-        gananciaItem = (precioUnitario - costo) * cant
+        // No facturable, exonerado (no afecto), o el IGV se suma al final (precios netos).
+        gananciaItem = gananciaBruta
       }
       
       ganancia_total += gananciaItem
