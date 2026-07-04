@@ -190,7 +190,7 @@ export async function generarYEnviarComprobante({
     .from('comprobantes')
     .upload(storagePath, pdfBuffer, {
       contentType: 'application/pdf',
-      upsert: false,
+      upsert: true,
     })
 
   if (errUpload) {
