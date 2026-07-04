@@ -155,7 +155,7 @@ export default function PlantillaNotaVentaA4({ emisor, comprobante, items, tema 
             <Image src={comprobante.qr_data_uri} style={styles.qrBox} />
           )}
           <View style={styles.legalBox}>
-            <Text style={styles.legalText}>Representación impresa de la NOTA DE VENTA Electrónica.</Text>
+            <Text style={styles.legalText}>Representacion impresa de la NOTA DE VENTA Electronica.</Text>
             <Text style={styles.legalText}>Hash: {comprobante.hash}</Text>
             <Text style={styles.legalText}>Consulte su documento en www.sunat.gob.pe</Text>
           </View>

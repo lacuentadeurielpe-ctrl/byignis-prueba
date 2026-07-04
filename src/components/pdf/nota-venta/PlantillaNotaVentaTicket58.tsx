@@ -70,7 +70,7 @@ export default function PlantillaNotaVentaTicket58({ emisor, comprobante, items,
 
         <View style={styles.itemsHeader}>
           <Text style={[styles.itemQty, { fontWeight: 'bold' }]}>Cant</Text>
-          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>Descripción</Text>
+          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>Descripcion</Text>
           <Text style={[styles.itemTotal, { fontWeight: 'bold' }]}>Total</Text>
         </View>
 
@@ -92,7 +92,7 @@ export default function PlantillaNotaVentaTicket58({ emisor, comprobante, items,
         <View style={styles.separator} />
 
         <View style={styles.footer}>
-          <Text style={styles.footerTitle}>¡GRACIAS POR SU COMPRA!</Text>
+          <Text style={styles.footerTitle}>GRACIAS POR SU COMPRA!</Text>
           <Text style={styles.legalText}>Documento de control interno sin validez tributaria.</Text>
         </View>
       </Page>

@@ -128,7 +128,7 @@ export default function PlantillaFacturaA4({ emisor, comprobante, items, tema }:
         <View style={styles.footer}>
           {comprobante.qr_data_uri && <Image src={comprobante.qr_data_uri} style={styles.qrBox} />}
           <View style={styles.legalBox}>
-            <Text style={styles.legalText}>Representación impresa de la Factura Electrónica.</Text>
+            <Text style={styles.legalText}>Representacion impresa de la Factura Electronica.</Text>
             <Text style={styles.legalText}>Hash: {comprobante.hash}</Text>
             <Text style={styles.legalText}>Consulte su documento en www.sunat.gob.pe</Text>
           </View>

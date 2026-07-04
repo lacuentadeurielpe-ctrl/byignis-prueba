@@ -70,7 +70,7 @@ export default function PlantillaBoletaTicket80({ emisor, comprobante, items, te
 
         <View style={styles.itemsHeader}>
           <Text style={[styles.itemQty, { fontWeight: 'bold' }]}>Cant</Text>
-          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>Descripción</Text>
+          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>Descripcion</Text>
           <Text style={[styles.itemTotal, { fontWeight: 'bold' }]}>Total</Text>
         </View>
 
@@ -100,8 +100,8 @@ export default function PlantillaBoletaTicket80({ emisor, comprobante, items, te
         <View style={styles.separator} />
 
         <View style={styles.footer}>
-          <Text style={styles.footerTitle}>¡GRACIAS POR SU COMPRA!</Text>
-          <Text style={styles.legalText}>Representación impresa de la Boleta de Venta Electrónica.</Text>
+          <Text style={styles.footerTitle}>GRACIAS POR SU COMPRA!</Text>
+          <Text style={styles.legalText}>Representacion impresa de la Boleta de Venta Electronica.</Text>
         </View>
       </Page>
     </Document>

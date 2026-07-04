@@ -21,8 +21,15 @@ export function formatFecha(iso: string): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return iso
   
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return d.toLocaleString('es-PE', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).replace(',', '')
 }
 
 export function formatMonto(n: number): string {
