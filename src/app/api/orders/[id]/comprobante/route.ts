@@ -6,12 +6,15 @@ import { getSessionInfo } from '@/lib/auth/roles'
 import { resolverSender } from '@/lib/whatsapp/provider'
 
 // GET /api/orders/[id]/comprobante — obtener comprobante existente
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionInfo()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const supabase = await createClient()
   const { id: pedidoId } = await params
+  
+  const url = new URL(request.url)
+  const tipo = url.searchParams.get('tipo')
 
   const admin = createAdminClient()
   const { data: comprobantesList, error } = await admin
@@ -20,7 +23,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     .eq('pedido_id', pedidoId)
     .order('created_at', { ascending: false })
 
-  const comprobante = comprobantesList?.find(c => c.tipo === 'nota_venta') 
+  const comprobante = tipo 
+    ? comprobantesList?.find(c => c.tipo === tipo)
+    : comprobantesList?.find(c => c.tipo === 'nota_venta') 
 
   if (error || !comprobante) {
     return NextResponse.json({ error: 'Sin comprobante' }, { status: 404 })

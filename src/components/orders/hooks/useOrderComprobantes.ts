@@ -65,16 +65,17 @@ export function useOrderComprobantes(pedidos: any[]) {
     return `/api/orders/${pedidoId}/comprobante/view${comprobanteId ? `?id=${comprobanteId}` : ''}`
   }
 
-  async function verComprobante(pedidoId: string) {
-    const estado = estadoComprobante(pedidoId)
+  async function verComprobante(pedidoId: string, tipo?: string) {
+    const cacheKey = tipo ? `${pedidoId}_${tipo}` : pedidoId
+    const estado = estadoComprobante(cacheKey)
     if (estado.url) { window.open(viewerUrl(pedidoId, estado.id), '_blank'); return }
 
-    patchComprobante(pedidoId, { cargando: true, error: null })
+    patchComprobante(cacheKey, { cargando: true, error: null })
     try {
-      const res = await fetch(`/api/orders/${pedidoId}/comprobante`)
+      const res = await fetch(`/api/orders/${pedidoId}/comprobante${tipo ? `?tipo=${tipo}` : ''}`)
       if (res.ok) {
         const data = await res.json()
-        patchComprobante(pedidoId, { 
+        patchComprobante(cacheKey, { 
           id: data.id, 
           numero_completo: data.numero_completo || data.numero_comprobante, 
           tipo: data.tipo, 
@@ -82,11 +83,11 @@ export function useOrderComprobantes(pedidos: any[]) {
           cargando: false 
         })
         window.open(viewerUrl(pedidoId, data.id), '_blank')
-      } else if (res.status === 404) {
+      } else if (res.status === 404 && (!tipo || tipo === 'nota_venta')) {
         const gen = await fetch(`/api/orders/${pedidoId}/comprobante`, { method: 'POST' })
         if (gen.ok) {
           const data = await gen.json()
-          patchComprobante(pedidoId, { 
+          patchComprobante(cacheKey, { 
             id: data.comprobanteId, 
             numero_completo: data.numeroCompleto, 
             url: data.pdfUrl, 
@@ -99,8 +100,9 @@ export function useOrderComprobantes(pedidos: any[]) {
       } else {
         throw new Error((await res.json()).error ?? 'Error')
       }
-    } catch (e) {
-      patchComprobante(pedidoId, { cargando: false, error: e instanceof Error ? e.message : 'Error' })
+    } catch (err: any) {
+      patchComprobante(cacheKey, { cargando: false, error: err.message })
+      alert(err.message)
     }
   }
 
