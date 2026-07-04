@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { Plus, Download, Mic, Bell, Search, Filter } from 'lucide-react'
+import { Plus, Download, Mic, Search, Filter } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import type { Rol } from '@/lib/auth/roles'
@@ -13,6 +11,7 @@ import { checkPermiso, type PermisoMap } from '@/lib/auth/permisos'
 import { useOrderActions } from '../hooks/useOrderActions'
 import { useOrderComprobantes } from '../hooks/useOrderComprobantes'
 import { useOrderFilters } from '../hooks/useOrderFilters'
+import { useRealtimePedidos } from '../hooks/useRealtimePedidos'
 
 import NuevoPedidoModal from '../NuevoPedidoModal'
 import PedidoVozModal from '../PedidoVozModal'
@@ -87,7 +86,6 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
   const [pedidos, setPedidos] = useState(inicial)
   const [modalNuevo, setModalNuevo] = useState(false)
   const [modalVoz, setModalVoz]     = useState(false)
-  const [nuevoPedidoAlert, setNuevoPedidoAlert] = useState(false)
   const [cancelDialog, setCancelDialog] = useState<{ pedidoId: string; motivo: string } | null>(null)
   const [creditoDialog, setCreditoDialog] = useState<{ pedidoId: string; fechaLimite: string; notas: string } | null>(null)
 
@@ -111,20 +109,14 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
     }
   }, [initEstado, initPedidoId])
 
-  // Realtime
-  useEffect(() => {
-    if (!ferreteriaId) return
-    const supabase = createClient()
-    const channel = supabase
-      .channel(`pedidos-${ferreteriaId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'pedidos', filter: `ferreteria_id=eq.${ferreteriaId}` },
-        () => setNuevoPedidoAlert(true)
-      )
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [ferreteriaId])
+  // La lista vive sincronizada con la BD: inserts/updates/deletes de pedidos
+  // llegan por WebSocket y actualizan el estado local sin recargar la página.
+  useRealtimePedidos(ferreteriaId, setPedidos)
+
+  // Cuando el server component se re-renderiza (router.refresh tras editar,
+  // emitir comprobante, etc.), useState NO se reinicializa solo — sin este
+  // efecto la lista quedaba congelada con los datos del primer render.
+  useEffect(() => { setPedidos(inicial) }, [inicial])
 
   function exportarCSV() {
     // Igual que OrdersTable
@@ -176,12 +168,6 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {nuevoPedidoAlert && (
-            <button onClick={() => { setNuevoPedidoAlert(false); router.refresh() }} className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-medium hover:bg-zinc-800 transition-all animate-pulse shadow-md">
-              <Bell className="w-4 h-4" /> Hay nuevos pedidos
-            </button>
-          )}
-          
           <button onClick={exportarCSV} className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white border border-zinc-200 text-zinc-700 rounded-xl text-sm font-medium hover:bg-zinc-50 transition-all">
             <Download className="w-4 h-4" /> Exportar CSV
           </button>

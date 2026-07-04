@@ -77,10 +77,11 @@ export class OrdersService {
       clienteId = nuevoCliente.id
     }
 
-    // El estado base es 'creado' (nuestro nuevo estado root en XState)
-    // Pero como la base de datos no lo acepta, lo creamos directamente en estado 'pendiente' o 'programado'
-    // O si es venta directa (POS), pasa a 'entregado'
-    let estadoInicial = payload.fecha_entrega_programada ? 'programado' : 'pendiente'
+    // Estado inicial unificado con el bot (message-handler crea 'confirmado'):
+    // un pedido creado a mano por el staff ya está confirmado por definición —
+    // 'pendiente' queda reservado para flujos que sí requieren aprobación.
+    // Programados esperan su fecha; venta directa (POS) nace entregada.
+    let estadoInicial = payload.fecha_entrega_programada ? 'programado' : 'confirmado'
     if (payload.venta_directa) {
       estadoInicial = 'entregado'
     }
