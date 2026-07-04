@@ -3,9 +3,12 @@ import { getSessionInfo } from '@/lib/auth/roles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { renderToStream } from '@react-pdf/renderer'
 import QRCode from 'qrcode'
-import PlantillaTicket from '@/components/pdf/PlantillaTicket'
-import PlantillaBoletaFactura from '@/components/pdf/PlantillaBoletaFactura'
 import React from 'react'
+import { getPlantillaBoleta } from '@/components/pdf/boleta'
+import { getPlantillaFactura } from '@/components/pdf/factura'
+import { getPlantillaNotaVenta } from '@/components/pdf/nota-venta'
+import { getPlantillaFactura as getPlantillaNotaCredito } from '@/components/pdf/factura' // Reuse factura for nota_credito by default
+import { PropsPDF } from '@/components/pdf/shared/types'
 
 export async function GET(
   request: Request,
@@ -71,38 +74,54 @@ export async function GET(
     subtotal: i.subtotal,
   }))
 
-  const data = {
-    ferreteria: {
-      razon_social: ferreteria.razon_social || ferreteria.nombre || 'MI FERRETERIA E.I.R.L',
-      nombre_comercial: ferreteria.nombre_comercial || ferreteria.nombre,
-      ruc: ferreteria.ruc || '00000000000',
-      direccion: ferreteria.direccion || 'Lima, Peru',
-      logo_url: ferreteria.logo_url || null,
-    },
-    comprobante: {
-      numero_completo: comprobante.numero_completo || comprobante.numero_comprobante || '',
-      tipo: (comprobante.tipo || 'boleta') as any,
-      fecha: comprobante.created_at,
-      cliente_nombre: comprobante.cliente_nombre || 'CLIENTES VARIOS',
-      cliente_doc: comprobante.cliente_ruc_dni || '',
-      subtotal: comprobante.subtotal || 0,
-      igv: comprobante.igv || 0,
-      total: comprobante.total || 0,
-      hash: comprobante.nubefact_hash || '',
-      qr_data_uri: qrDataUri,
-    },
+  const emisor = {
+    razon_social: ferreteria.razon_social || ferreteria.nombre || 'MI FERRETERIA E.I.R.L',
+    nombre_comercial: ferreteria.nombre_comercial || ferreteria.nombre,
+    ruc: ferreteria.ruc || '00000000000',
+    direccion: ferreteria.direccion || 'Lima, Peru',
+    logo_url: ferreteria.logo_url || null,
+  }
+
+  const comprobanteData = {
+    numero_completo: comprobante.numero_completo || comprobante.numero_comprobante || '',
+    fecha: comprobante.created_at,
+    cliente_nombre: comprobante.cliente_nombre || 'CLIENTES VARIOS',
+    cliente_doc: comprobante.cliente_ruc_dni || '',
+    subtotal: comprobante.subtotal || 0,
+    igv: comprobante.igv || 0,
+    total: comprobante.total || 0,
+    hash: comprobante.nubefact_hash || '',
+    qr_data_uri: qrDataUri,
+  }
+
+  const tema = {
+    primario: ferreteria.color_comprobante || '#1e40af',
+    secundario: ferreteria.pdf_color_secundario || '#e67e22',
+  }
+
+  const propsPDF: PropsPDF = {
+    emisor,
+    comprobante: comprobanteData,
     items,
+    tema
   }
 
   // 5. Elegir plantilla según tipo de comprobante
-  // Boletas y Facturas usan la plantilla A4 profesional
-  // Notas de venta internas usan la plantilla de ticket 80mm
   const tipo = comprobante.tipo || ''
-  const usarTicket = !tipo || tipo === 'nota_venta' || tipo === 'proforma'
-  
-  const component = usarTicket
-    ? React.createElement(PlantillaTicket, { data })
-    : React.createElement(PlantillaBoletaFactura, { data })
+  let ComponentePDF: any
+
+  if (tipo === 'boleta') {
+    ComponentePDF = getPlantillaBoleta(ferreteria.pdf_formato_boleta || 'clasico')
+  } else if (tipo === 'factura') {
+    ComponentePDF = getPlantillaFactura(ferreteria.pdf_formato_factura || 'clasico')
+  } else if (tipo === 'nota_credito') {
+    ComponentePDF = getPlantillaNotaCredito('clasico')
+  } else {
+    // nota_venta, proforma o vacio
+    ComponentePDF = getPlantillaNotaVenta(ferreteria.pdf_formato_nota_venta || 'ticket')
+  }
+
+  const component = React.createElement(ComponentePDF, propsPDF)
 
   // 6. Renderizar PDF
   try {
@@ -126,7 +145,7 @@ export async function GET(
     return new NextResponse(readableStream, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="${data.comprobante.numero_completo}.pdf"`
+        'Content-Disposition': `inline; filename="${propsPDF.comprobante.numero_completo}.pdf"`
       }
     })
   } catch (err) {

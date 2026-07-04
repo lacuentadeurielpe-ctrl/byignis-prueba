@@ -175,44 +175,7 @@ export default function GeneralForm() {
           </div>
         </div>
 
-        {/* Sección 2: Marca y presentación */}
-        <div className="border-b border-zinc-200 pb-6">
-          <h3 className="text-sm font-semibold text-zinc-900 mb-4">🎨 Marca y presentación</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-zinc-700 mb-2">
-                Logo URL
-              </label>
-              <input
-                type="text"
-                value={data.logo_url || ''}
-                onChange={e => handleChange('logo_url', e.target.value)}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="https://tu-dominio.com/logo.png"
-              />
-              <p className="text-xs text-zinc-500 mt-1">
-                URL pública de la imagen (PNG/JPG). Sube tu logo a Supabase Storage o ImgBB y pega la URL aquí.
-              </p>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-2">
-                Color comprobantes
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={data.color_comprobante || '#1e40af'}
-                  onChange={e => handleChange('color_comprobante', e.target.value)}
-                  className="w-14 h-10 rounded cursor-pointer border border-zinc-200"
-                />
-                <span className="text-xs text-zinc-500">
-                  Color de cabecera en notas de venta y cotizaciones PDF
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Nota informativa */}
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">

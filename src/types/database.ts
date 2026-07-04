@@ -119,6 +119,10 @@ export interface Ferreteria {
   logo_url: string | null
   color_comprobante: string          // hex, default '#1e40af'
   mensaje_comprobante: string | null // pie personalizable
+  pdf_formato_boleta: 'clasico' | 'moderno' | 'compacto'
+  pdf_formato_factura: 'clasico' | 'moderno' | 'compacto'
+  pdf_formato_nota_venta: 'ticket' | 'a5' | 'compacto'
+  pdf_color_secundario: string
   ultimo_numero_comprobante: number
   // Resumen diario
   telefono_dueno: string | null

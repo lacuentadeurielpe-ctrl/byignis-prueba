@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import SettingsHeader from '../components/SettingsHeader'
 import GeneralForm from './components/GeneralForm'
@@ -6,6 +6,7 @@ import HorariosForm from './components/HorariosForm'
 import PagosMetodosForm from './components/PagosMetodosForm'
 import LocalesForm from './components/LocalesForm'
 import WelcomeBanner from './components/WelcomeBanner'
+import ComprobanteAparienciaForm from './components/ComprobanteAparienciaForm'
 
 export default function NegocioPage() {
   return (
@@ -19,6 +20,7 @@ export default function NegocioPage() {
       <div className="p-6 max-w-4xl space-y-6">
         <WelcomeBanner />
         <GeneralForm />
+        <ComprobanteAparienciaForm />
         <LocalesForm />
         <HorariosForm />
         <PagosMetodosForm />
