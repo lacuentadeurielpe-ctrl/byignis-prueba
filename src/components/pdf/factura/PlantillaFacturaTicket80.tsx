@@ -1,8 +1,8 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { formatFecha, formatMonto, registerFonts } from '../shared/helpers'
-import { PropsNotaVenta } from './types'
+import { PropsFactura } from './types'
 
-export default function PlantillaNotaVentaTicket({ emisor, comprobante, items, tema }: PropsNotaVenta) {
+export default function PlantillaFacturaTicket80({ emisor, comprobante, items, tema }: PropsFactura) {
   registerFonts()
 
   const styles = StyleSheet.create({
@@ -52,7 +52,7 @@ export default function PlantillaNotaVentaTicket({ emisor, comprobante, items, t
         <View style={styles.separator} />
 
         <View style={styles.docInfo}>
-          <Text style={styles.docType}>NOTA DE VENTA</Text>
+          <Text style={styles.docType}>FACTURA</Text>
           <Text style={styles.docNum}>{comprobante.numero_completo}</Text>
         </View>
 
@@ -93,7 +93,7 @@ export default function PlantillaNotaVentaTicket({ emisor, comprobante, items, t
 
         <View style={styles.footer}>
           <Text style={styles.footerTitle}>Â¡GRACIAS POR SU COMPRA!</Text>
-          <Text style={styles.legalText}>Documento de control interno sin validez tributaria.</Text>
+          <Text style={styles.legalText}>Representación impresa de la Factura Electrónica.</Text>
         </View>
       </Page>
     </Document>

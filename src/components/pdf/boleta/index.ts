@@ -1,13 +1,12 @@
-import PlantillaBoletaClasica from './PlantillaBoletaClasica'
-import PlantillaBoletaModerna from './PlantillaBoletaModerna'
-import PlantillaBoletaCompacta from './PlantillaBoletaCompacta'
+import PlantillaBoletaA4 from './PlantillaBoletaA4'
+import PlantillaBoletaTicket80 from './PlantillaBoletaTicket80'
+import PlantillaBoletaTicket58 from './PlantillaBoletaTicket58'
 
-export function getPlantillaBoleta(formato: string) {
+export const getPlantillaBoleta = (formato?: string) => {
   switch (formato) {
-    case 'moderno': return PlantillaBoletaModerna
-    case 'compacto': return PlantillaBoletaCompacta
-    case 'clasico':
-    default:
-      return PlantillaBoletaClasica
+    case 'ticket_80mm': return PlantillaBoletaTicket80
+    case 'ticket_58mm': return PlantillaBoletaTicket58
+    case 'a4': return PlantillaBoletaA4
+    default: return PlantillaBoletaTicket80
   }
 }

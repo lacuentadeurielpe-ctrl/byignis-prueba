@@ -2,7 +2,7 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 import { formatFecha, formatMonto, registerFonts } from '../shared/helpers'
 import { PropsFactura } from './types'
 
-export default function PlantillaFacturaClasica({ emisor, comprobante, items, tema }: PropsFactura) {
+export default function PlantillaFacturaA4({ emisor, comprobante, items, tema }: PropsFactura) {
   registerFonts()
 
   const styles = StyleSheet.create({

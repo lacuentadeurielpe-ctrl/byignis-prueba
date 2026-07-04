@@ -176,39 +176,39 @@ export default function ComprobanteAparienciaForm() {
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Boletas</label>
               <select
-                value={data.pdf_formato_boleta || 'clasico'}
+                value={data.pdf_formato_boleta || 'ticket_80mm'}
                 onChange={e => handleChange('pdf_formato_boleta', e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
               >
-                <option value="clasico">A4 Clásico (Tradicional sin banda)</option>
-                <option value="moderno">A4 Moderno (Con banda de color sup.)</option>
-                <option value="compacto">A5 Compacto (Mitad de hoja)</option>
+                <option value="ticket_80mm">Ticket 80mm (Tiquetera Estándar)</option>
+                <option value="ticket_58mm">Ticket 58mm (Tiquetera Pequeña)</option>
+                <option value="a4">Tamaño A4 (Hoja Completa)</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Facturas</label>
               <select
-                value={data.pdf_formato_factura || 'clasico'}
+                value={data.pdf_formato_factura || 'a4'}
                 onChange={e => handleChange('pdf_formato_factura', e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
               >
-                <option value="clasico">A4 Clásico (Formal SUNAT)</option>
-                <option value="moderno">A4 Moderno (Branded color)</option>
-                <option value="compacto">A5 Compacto (Mitad de hoja)</option>
+                <option value="a4">Tamaño A4 (Hoja Completa)</option>
+                <option value="ticket_80mm">Ticket 80mm (Tiquetera Estándar)</option>
+                <option value="ticket_58mm">Ticket 58mm (Tiquetera Pequeña)</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Notas de Venta / Proformas</label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Notas de Venta</label>
               <select
-                value={data.pdf_formato_nota_venta || 'ticket'}
+                value={data.pdf_formato_nota_venta || 'ticket_80mm'}
                 onChange={e => handleChange('pdf_formato_nota_venta', e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
               >
-                <option value="ticket">Ticket 80mm (Impresora térmica standard)</option>
-                <option value="compacto">Ticket 58mm (Impresora pequeña)</option>
-                <option value="a5">A5 Diseño Moderno (Hoja)</option>
+                <option value="ticket_80mm">Ticket 80mm (Tiquetera Estándar)</option>
+                <option value="ticket_58mm">Ticket 58mm (Tiquetera Pequeña)</option>
+                <option value="a4">Tamaño A4 (Hoja Completa)</option>
               </select>
             </div>
 

@@ -2,7 +2,7 @@ import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/render
 import { formatFecha, formatMonto, registerFonts } from '../shared/helpers'
 import { PropsBoleta } from './types'
 
-export default function PlantillaBoletaClasica({ emisor, comprobante, items, tema }: PropsBoleta) {
+export default function PlantillaBoletaA4({ emisor, comprobante, items, tema }: PropsBoleta) {
   registerFonts()
 
   const styles = StyleSheet.create({

@@ -1,13 +1,12 @@
-import PlantillaFacturaClasica from './PlantillaFacturaClasica'
-import PlantillaFacturaModerna from './PlantillaFacturaModerna'
-import PlantillaFacturaCompacta from './PlantillaFacturaCompacta'
+import PlantillaFacturaA4 from './PlantillaFacturaA4'
+import PlantillaFacturaTicket80 from './PlantillaFacturaTicket80'
+import PlantillaFacturaTicket58 from './PlantillaFacturaTicket58'
 
-export function getPlantillaFactura(formato: string) {
+export const getPlantillaFactura = (formato?: string) => {
   switch (formato) {
-    case 'moderno': return PlantillaFacturaModerna
-    case 'compacto': return PlantillaFacturaCompacta
-    case 'clasico':
-    default:
-      return PlantillaFacturaClasica
+    case 'ticket_80mm': return PlantillaFacturaTicket80
+    case 'ticket_58mm': return PlantillaFacturaTicket58
+    case 'a4': return PlantillaFacturaA4
+    default: return PlantillaFacturaA4
   }
 }

@@ -1,40 +1,41 @@
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 import { formatFecha, formatMonto, registerFonts } from '../shared/helpers'
-import { PropsNotaVenta } from './types'
+import { PropsBoleta } from './types'
 
-export default function PlantillaNotaVentaCompacta({ emisor, comprobante, items }: PropsNotaVenta) {
+export default function PlantillaBoletaTicket58({ emisor, comprobante, items, tema }: PropsBoleta) {
   registerFonts()
 
   const styles = StyleSheet.create({
     page: { width: '58mm', padding: '3mm', fontFamily: 'Roboto', fontSize: 7, color: '#000', backgroundColor: '#fff' },
     
-    header: { alignItems: 'center', marginBottom: 6 },
-    title: { fontSize: 10, fontWeight: 'bold', marginBottom: 2, textAlign: 'center' },
+    header: { alignItems: 'center', marginBottom: 8 },
+    logo: { width: 60, marginBottom: 4, objectFit: 'contain' },
+    title: { fontSize: 6, fontWeight: 'bold', marginBottom: 2, textAlign: 'center', color: tema.primario },
     subtitle: { fontSize: 7, textAlign: 'center', marginBottom: 1 },
     
-    separator: { borderBottomWidth: 1, borderBottomColor: '#000', borderBottomStyle: 'dashed', marginVertical: 3 },
+    separator: { borderBottomWidth: 1, borderBottomColor: '#000', borderBottomStyle: 'dashed', marginVertical: 4 },
     
-    docInfo: { alignItems: 'center', marginBottom: 3 },
+    docInfo: { alignItems: 'center', marginBottom: 4 },
     docType: { fontWeight: 'bold', fontSize: 9 },
-    docNum: { fontSize: 8, marginTop: 1 },
+    docNum: { fontSize: 6, marginTop: 2 },
     
-    clientBox: { marginBottom: 3, gap: 1 },
+    clientBox: { marginBottom: 4, gap: 2 },
     clientRow: { flexDirection: 'row' },
-    clientBold: { fontWeight: 'bold', marginRight: 2 },
+    clientBold: { fontWeight: 'bold', marginRight: 4 },
     
-    itemsHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#000', paddingBottom: 1, marginBottom: 2 },
+    itemsHeader: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#000', paddingBottom: 2, marginBottom: 4 },
     itemRow: { flexDirection: 'row', marginBottom: 2 },
     itemQty: { width: '15%' },
-    itemDesc: { width: '55%' },
-    itemTotal: { width: '30%', textAlign: 'right' },
+    itemDesc: { width: '60%' },
+    itemTotal: { width: '25%', textAlign: 'right' },
     
-    totalSection: { marginTop: 3, borderTopWidth: 1, borderTopColor: '#000', paddingTop: 3 },
+    totalSection: { marginTop: 4, borderTopWidth: 1, borderTopColor: '#000', paddingTop: 4 },
     totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 },
-    totalLabel: { fontWeight: 'bold', fontSize: 8 },
-    totalValue: { fontWeight: 'bold', fontSize: 8 },
+    totalLabel: { fontWeight: 'bold', fontSize: 6 },
+    totalValue: { fontWeight: 'bold', fontSize: 6 },
     
-    footer: { marginTop: 6, alignItems: 'center' },
-    footerTitle: { fontWeight: 'bold', fontSize: 8, marginBottom: 2, marginTop: 2 },
+    footer: { marginTop: 8, alignItems: 'center' },
+    footerTitle: { fontWeight: 'bold', fontSize: 6, marginBottom: 4, marginTop: 4, color: tema.primario },
     legalText: { fontSize: 6, color: '#555', textAlign: 'center' }
   })
 
@@ -42,13 +43,16 @@ export default function PlantillaNotaVentaCompacta({ emisor, comprobante, items 
     <Document>
       <Page style={styles.page}>
         <View style={styles.header}>
+          {emisor.logo_url && <Image src={emisor.logo_url} style={styles.logo} />}
           <Text style={styles.title}>{emisor.nombre_comercial}</Text>
+          <Text style={styles.subtitle}>{emisor.razon_social}</Text>
+          <Text style={styles.subtitle}>{emisor.direccion}</Text>
         </View>
 
         <View style={styles.separator} />
 
         <View style={styles.docInfo}>
-          <Text style={styles.docType}>NOTA DE VENTA</Text>
+          <Text style={styles.docType}>BOLETA DE VENTA</Text>
           <Text style={styles.docNum}>{comprobante.numero_completo}</Text>
         </View>
 
@@ -57,13 +61,16 @@ export default function PlantillaNotaVentaCompacta({ emisor, comprobante, items 
         <View style={styles.clientBox}>
           <Text><Text style={styles.clientBold}>Fecha:</Text> {formatFecha(comprobante.fecha)}</Text>
           <Text><Text style={styles.clientBold}>Cliente:</Text> {comprobante.cliente_nombre}</Text>
+          {comprobante.cliente_doc && (
+            <Text><Text style={styles.clientBold}>DNI/Doc:</Text> {comprobante.cliente_doc}</Text>
+          )}
         </View>
 
         <View style={styles.separator} />
 
         <View style={styles.itemsHeader}>
           <Text style={[styles.itemQty, { fontWeight: 'bold' }]}>Cant</Text>
-          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>Desc</Text>
+          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>DescripciÃ³n</Text>
           <Text style={[styles.itemTotal, { fontWeight: 'bold' }]}>Total</Text>
         </View>
 
@@ -77,7 +84,7 @@ export default function PlantillaNotaVentaCompacta({ emisor, comprobante, items 
 
         <View style={styles.totalSection}>
           <View style={[styles.totalRow, { marginTop: 2 }]}>
-            <Text style={styles.totalLabel}>TOTAL</Text>
+            <Text style={styles.totalLabel}>TOTAL A PAGAR</Text>
             <Text style={styles.totalValue}>{formatMonto(comprobante.total)}</Text>
           </View>
         </View>
@@ -85,8 +92,8 @@ export default function PlantillaNotaVentaCompacta({ emisor, comprobante, items 
         <View style={styles.separator} />
 
         <View style={styles.footer}>
-          <Text style={styles.footerTitle}>Â¡GRACIAS!</Text>
-          <Text style={styles.legalText}>Sin validez tributaria.</Text>
+          <Text style={styles.footerTitle}>Â¡GRACIAS POR SU COMPRA!</Text>
+          <Text style={styles.legalText}>Representación impresa de la Boleta de Venta Electrónica.</Text>
         </View>
       </Page>
     </Document>

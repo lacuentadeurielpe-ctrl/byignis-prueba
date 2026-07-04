@@ -1,13 +1,12 @@
-import PlantillaNotaVentaTicket from './PlantillaNotaVentaTicket'
-import PlantillaNotaVentaA5 from './PlantillaNotaVentaA5'
-import PlantillaNotaVentaCompacta from './PlantillaNotaVentaCompacta'
+import PlantillaNotaVentaA4 from './PlantillaNotaVentaA4'
+import PlantillaNotaVentaTicket80 from './PlantillaNotaVentaTicket80'
+import PlantillaNotaVentaTicket58 from './PlantillaNotaVentaTicket58'
 
-export function getPlantillaNotaVenta(formato: string) {
+export const getPlantillaNotaVenta = (formato?: string) => {
   switch (formato) {
-    case 'a5': return PlantillaNotaVentaA5
-    case 'compacto': return PlantillaNotaVentaCompacta
-    case 'ticket':
-    default:
-      return PlantillaNotaVentaTicket
+    case 'ticket_80mm': return PlantillaNotaVentaTicket80
+    case 'ticket_58mm': return PlantillaNotaVentaTicket58
+    case 'a4': return PlantillaNotaVentaA4
+    default: return PlantillaNotaVentaTicket80
   }
 }
