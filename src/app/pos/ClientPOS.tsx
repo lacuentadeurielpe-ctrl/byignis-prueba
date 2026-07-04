@@ -41,6 +41,11 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
   const lastKeyTime = useRef(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Tabs de móvil: en pantallas chicas los paneles de carrito y buscador se
+  // apilaban uno debajo del otro, obligando a hacer scroll por todo el carrito
+  // para llegar al buscador. En md+ ambos paneles se muestran siempre.
+  const [vistaMovil, setVistaMovil] = useState<'carrito' | 'buscar'>('buscar')
+
   // ── Búsqueda con debounce (150ms) para no correr Levenshtein en cada tecla ──
   // busquedaDelay se actualiza 150ms después de que el usuario deja de escribir.
   const [busquedaDelay, setBusquedaDelay] = useState(busqueda)
@@ -92,6 +97,7 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
     const p = productos.find(x => x.codigo_barras === codigo)
     if (p) {
       agregarItem(p)
+      setVistaMovil('carrito')
       reproducirBeep()
     } else {
       toast.error(`Código desconocido: ${codigo}`)
@@ -276,10 +282,40 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
   }, [busquedaDelay, productos])
 
   return (
-    <div className="h-screen w-screen flex flex-col md:flex-row bg-zinc-50 overflow-hidden font-sans">
+    <div className="h-dvh w-screen flex flex-col md:flex-row bg-zinc-50 overflow-hidden font-sans">
+
+      {/* ── TABS DE MÓVIL: alternan qué panel se ve sin scroll ── */}
+      <div className="md:hidden shrink-0 flex bg-white border-b border-zinc-200 p-1.5 gap-1.5">
+        <button
+          onClick={() => setVistaMovil('buscar')}
+          className={cn(
+            'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-bold transition',
+            vistaMovil === 'buscar' ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-500'
+          )}
+        >
+          <Search className="w-4 h-4" /> Buscar
+        </button>
+        <button
+          onClick={() => setVistaMovil('carrito')}
+          className={cn(
+            'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-bold transition relative',
+            vistaMovil === 'carrito' ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-500'
+          )}
+        >
+          Carrito
+          {items.length > 0 && (
+            <span className={cn(
+              'flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold',
+              vistaMovil === 'carrito' ? 'bg-white text-zinc-900' : 'bg-zinc-900 text-white'
+            )}>
+              {items.length}
+            </span>
+          )}
+        </button>
+      </div>
 
       {/* ── PANEL IZQUIERDO: TICKET ── */}
-      <div className="flex-1 flex flex-col bg-white border-r border-zinc-200 min-w-0">
+      <div className={cn('flex-1 flex-col bg-white border-r border-zinc-200 min-w-0 md:flex', vistaMovil === 'carrito' ? 'flex' : 'hidden')}>
         {/* Header */}
         <div className="h-14 flex items-center px-4 border-b border-zinc-100 shrink-0 gap-3">
           <Link href="/dashboard" className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition shrink-0">
@@ -314,9 +350,9 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
                   <p className="text-xs text-zinc-400">{formatPEN(item.precio_unitario)} / {item.unidad}</p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <button onClick={() => actualizarCantidad(idx, -1)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-600 font-bold transition text-sm">-</button>
+                  <button onClick={() => actualizarCantidad(idx, -1)} className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-600 font-bold transition text-sm">-</button>
                   <span className="w-7 text-center font-bold text-zinc-800 tabular-nums text-sm">{item.cantidad}</span>
-                  <button onClick={() => actualizarCantidad(idx, 1)} className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-600 font-bold transition text-sm">+</button>
+                  <button onClick={() => actualizarCantidad(idx, 1)} className="w-9 h-9 md:w-7 md:h-7 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-600 font-bold transition text-sm">+</button>
                 </div>
                 <div className="w-16 text-right font-bold text-zinc-900 tabular-nums text-sm shrink-0">
                   {formatPEN(item.cantidad * item.precio_unitario)}
@@ -491,7 +527,7 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
       </div>
 
       {/* ── PANEL DERECHO: BUSCADOR ── */}
-      <div className="w-full md:w-[360px] lg:w-[420px] bg-zinc-50 flex flex-col shrink-0 border-l border-zinc-100">
+      <div className={cn('w-full md:w-[360px] lg:w-[420px] bg-zinc-50 flex-col shrink-0 border-l border-zinc-100 md:flex', vistaMovil === 'buscar' ? 'flex' : 'hidden')}>
         <div className="p-3 border-b border-zinc-200">
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -500,7 +536,11 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
                 ref={busquedaRef}
                 value={busqueda}
                 onChange={e => { setBusqueda(e.target.value); setMostrarSugerencias(true) }}
-                onFocus={() => busqueda && setMostrarSugerencias(true)}
+                onFocus={e => {
+                  if (busqueda) setMostrarSugerencias(true)
+                  // En móvil el teclado virtual puede tapar el input/resultados
+                  e.currentTarget.scrollIntoView({ block: 'start', behavior: 'smooth' })
+                }}
                 placeholder="Buscar por nombre o SKU..."
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-zinc-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 transition text-sm font-medium"
               />
@@ -521,7 +561,7 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
               {sugerencias.length > 0 ? sugerencias.map(p => (
                 <button
                   key={p.id}
-                  onClick={() => agregarItem(p)}
+                  onClick={() => { agregarItem(p); setVistaMovil('carrito') }}
                   className={cn(
                     'w-full flex items-center gap-3 p-3 text-left rounded-xl transition group border hover:shadow-sm',
                     p.stock === 0
