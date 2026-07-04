@@ -127,7 +127,7 @@ export default function PlantillaNotaVentaA4({ emisor, comprobante, items, tema 
         <View style={styles.table}>
           <View style={styles.tableHeader}>
             <Text style={styles.col1}>CANT.</Text>
-            <Text style={styles.col2}>DESCRIPCIÃ“N</Text>
+            <Text style={styles.col2}>DESCRIPCIÓN</Text>
             <Text style={styles.col3}>P. UNITARIO</Text>
             <Text style={styles.col4}>SUBTOTAL</Text>
           </View>
@@ -155,7 +155,7 @@ export default function PlantillaNotaVentaA4({ emisor, comprobante, items, tema 
             <Image src={comprobante.qr_data_uri} style={styles.qrBox} />
           )}
           <View style={styles.legalBox}>
-            <Text style={styles.legalText}>RepresentaciÃ³n impresa de la NOTA DE VENTA ElectrÃ³nica.</Text>
+            <Text style={styles.legalText}>Representación impresa de la NOTA DE VENTA Electrónica.</Text>
             <Text style={styles.legalText}>Hash: {comprobante.hash}</Text>
             <Text style={styles.legalText}>Consulte su documento en www.sunat.gob.pe</Text>
           </View>

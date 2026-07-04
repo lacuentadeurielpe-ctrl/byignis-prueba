@@ -70,7 +70,7 @@ export default function PlantillaFacturaTicket80({ emisor, comprobante, items, t
 
         <View style={styles.itemsHeader}>
           <Text style={[styles.itemQty, { fontWeight: 'bold' }]}>Cant</Text>
-          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>DescripciÃ³n</Text>
+          <Text style={[styles.itemDesc, { fontWeight: 'bold' }]}>Descripción</Text>
           <Text style={[styles.itemTotal, { fontWeight: 'bold' }]}>Total</Text>
         </View>
 
@@ -100,8 +100,8 @@ export default function PlantillaFacturaTicket80({ emisor, comprobante, items, t
         <View style={styles.separator} />
 
         <View style={styles.footer}>
-          <Text style={styles.footerTitle}>Â¡GRACIAS POR SU COMPRA!</Text>
-          <Text style={styles.legalText}>Representaciï¿½n impresa de la Factura Electrï¿½nica.</Text>
+          <Text style={styles.footerTitle}>¡GRACIAS POR SU COMPRA!</Text>
+          <Text style={styles.legalText}>Representación impresa de la Factura Electrónica.</Text>
         </View>
       </Page>
     </Document>
