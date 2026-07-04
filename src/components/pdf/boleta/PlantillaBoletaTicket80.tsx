@@ -93,7 +93,7 @@ export default function PlantillaBoletaTicket80({ emisor, comprobante, items, te
 
         <View style={styles.footer}>
           <Text style={styles.footerTitle}>Â¡GRACIAS POR SU COMPRA!</Text>
-          <Text style={styles.legalText}>Representación impresa de la Boleta de Venta Electrónica.</Text>
+          <Text style={styles.legalText}>Representaciï¿½n impresa de la Boleta de Venta Electrï¿½nica.</Text>
         </View>
       </Page>
     </Document>

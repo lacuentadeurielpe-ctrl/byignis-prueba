@@ -93,7 +93,7 @@ export default function PlantillaFacturaTicket58({ emisor, comprobante, items, t
 
         <View style={styles.footer}>
           <Text style={styles.footerTitle}>Â¡GRACIAS POR SU COMPRA!</Text>
-          <Text style={styles.legalText}>Representación impresa de la Factura Electrónica.</Text>
+          <Text style={styles.legalText}>Representaciï¿½n impresa de la Factura Electrï¿½nica.</Text>
         </View>
       </Page>
     </Document>
