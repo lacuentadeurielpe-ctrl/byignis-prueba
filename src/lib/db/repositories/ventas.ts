@@ -610,18 +610,46 @@ export class VentasRepository {
       return { pedidos_n, entregados_n, ingresos_total: 0, ganancia_total: 0 }
     }
 
+    // Obtener configuración de la ferretería para IGV
+    const { data: ferrData } = await this.supabase
+      .from('ferreterias')
+      .select('igv_incluido_en_precios')
+      .eq('id', ferreteriaId)
+      .single()
+    const igvIncluido = ferrData?.igv_incluido_en_precios ?? false
+
     const pedidoIds = pedidosFacturables.map((p: any) => p.id)
     const { data: items } = await this.supabase
       .from('items_pedido')
-      .select('pedido_id, cantidad, producto_id, productos(precio_compra)')
+      .select('pedido_id, cantidad, precio_unitario, producto_id, productos(precio_compra, facturable, afecto_igv)')
       .in('pedido_id', pedidoIds)
 
-    const cogs = (items ?? []).reduce((sum: number, item: any) => {
-      const costo = Number(item.productos?.precio_compra ?? 0)
-      return sum + Number(item.cantidad ?? 0) * costo
-    }, 0)
+    let ganancia_total = 0
 
-    const ganancia_total = Math.max(0, ingresos_total - cogs)
+    ;(items ?? []).forEach((item: any) => {
+      const precioUnitario = Number(item.precio_unitario ?? 0)
+      const costo = Number(item.productos?.precio_compra ?? 0)
+      const cant = Number(item.cantidad ?? 0)
+      
+      const esFacturable = item.productos?.facturable === true
+      const afectoIgv = item.productos?.afecto_igv === true
+
+      let gananciaItem = 0
+      
+      if (esFacturable && afectoIgv && igvIncluido) {
+        // El precio de venta incluye IGV, por lo que el ingreso real de la tienda es el precio sin IGV
+        const precioSinIgv = precioUnitario / 1.18
+        gananciaItem = (precioSinIgv - costo) * cant
+      } else {
+        // No facturable, o exonerado (no afecto), o el IGV no está incluido en el precio base.
+        // El precio_unitario es el ingreso neto del producto.
+        gananciaItem = (precioUnitario - costo) * cant
+      }
+      
+      ganancia_total += gananciaItem
+    })
+
+    ganancia_total = Math.max(0, ganancia_total)
 
     return { pedidos_n, entregados_n, ingresos_total, ganancia_total }
   }

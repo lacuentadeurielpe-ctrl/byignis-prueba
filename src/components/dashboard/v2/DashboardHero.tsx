@@ -6,6 +6,7 @@ import { formatPEN } from '@/lib/utils'
 import { NumberTicker } from '@/components/ui/NumberTicker'
 import { motion } from 'framer-motion'
 import ActivityChart from '@/components/dashboard/ActivityChart'
+import DashboardGanancias from './DashboardGanancias'
 
 const fetcher = (url: string) =>
   fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
@@ -70,8 +71,17 @@ export default function DashboardHero({ esDueno, periodo }: { esDueno: boolean; 
         </div>
       </div>
 
+      {/* ── SECCION GANANCIAS NETAS (Solo dueños) ──────────────────────── */}
+      {esDueno && (
+        <DashboardGanancias
+          gananciaNeta={kpi.perGanancia ?? 0}
+          ingresosTotales={perIngresos}
+          periodoLabel={periodoLabel}
+        />
+      )}
+
       {/* ── STATS STRIP ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden divide-x divide-zinc-100 dark:divide-zinc-800">
+      <div className={`grid grid-cols-2 ${esDueno ? 'lg:grid-cols-5' : 'sm:grid-cols-4'} bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden divide-x divide-zinc-100 dark:divide-zinc-800`}>
 
         <Link href="/dashboard/ventas?tab=pedidos" className="group px-5 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
           <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-1.5 uppercase tracking-wider">Pedidos</p>
@@ -92,13 +102,22 @@ export default function DashboardHero({ esDueno, periodo }: { esDueno: boolean; 
         </Link>
 
         {esDueno ? (
-          <Link href="/dashboard/ventas?tab=pedidos" className="group px-5 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-            <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-1.5 uppercase tracking-wider">Ticket prom.</p>
-            <p className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums leading-none">
-              {ticketProm > 0 ? <NumberTicker value={ticketProm} format={formatPEN} /> : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
-            </p>
-            <p className="text-xs mt-1.5 text-zinc-400 dark:text-zinc-500">por pedido</p>
-          </Link>
+          <>
+            <Link href="/dashboard/ventas?tab=pedidos" className="group px-5 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-1.5 uppercase tracking-wider">Ticket prom.</p>
+              <p className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums leading-none">
+                {ticketProm > 0 ? <NumberTicker value={ticketProm} format={formatPEN} /> : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
+              </p>
+              <p className="text-xs mt-1.5 text-zinc-400 dark:text-zinc-500">por pedido</p>
+            </Link>
+            <div className="group px-5 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors cursor-default">
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-1.5 uppercase tracking-wider">G. Neta</p>
+              <p className="text-2xl font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums leading-none">
+                {kpi.perGanancia > 0 ? <NumberTicker value={kpi.perGanancia} format={formatPEN} /> : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
+              </p>
+              <p className="text-xs mt-1.5 text-zinc-400 dark:text-zinc-500">margen: {perIngresos > 0 ? ((kpi.perGanancia / perIngresos) * 100).toFixed(1) : 0}%</p>
+            </div>
+          </>
         ) : (
           <Link href="/dashboard/ventas?tab=pedidos&estado=entregado" className="group px-5 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
             <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-1.5 uppercase tracking-wider">Tasa entrega</p>
