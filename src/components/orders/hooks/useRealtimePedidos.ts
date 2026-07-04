@@ -80,6 +80,33 @@ export function useRealtimePedidos<T extends PedidoMinimo>(
           setPedidos(prev => prev.filter(p => p.id !== id))
         },
       )
+      .on(
+        'postgres_changes',
+        // Emitir/anular una boleta o factura NO toca la fila de pedidos — solo
+        // inserta/actualiza en comprobantes. Sin esta suscripción, emitir desde
+        // el móvil dejaba a la PC ofreciendo "Emitir Boleta" sobre el mismo
+        // pedido. Al llegar el evento se refetchea el pedido afectado (el join
+        // comprobantes viene incluido) y los botones se actualizan solos.
+        { event: 'INSERT', schema: 'public', table: 'comprobantes', filter: `ferreteria_id=eq.${ferreteriaId}` },
+        async (payload) => {
+          const pedidoId = (payload.new as { pedido_id?: string | null })?.pedido_id
+          if (!pedidoId) return
+          const completo = await fetchPedidoCompleto(pedidoId)
+          if (!completo) return
+          setPedidos(prev => prev.map(p => (p.id === completo.id ? completo : p)))
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'comprobantes', filter: `ferreteria_id=eq.${ferreteriaId}` },
+        async (payload) => {
+          const pedidoId = (payload.new as { pedido_id?: string | null })?.pedido_id
+          if (!pedidoId) return
+          const completo = await fetchPedidoCompleto(pedidoId)
+          if (!completo) return
+          setPedidos(prev => prev.map(p => (p.id === completo.id ? completo : p)))
+        },
+      )
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }

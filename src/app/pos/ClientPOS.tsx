@@ -12,16 +12,20 @@ import { toast } from 'sonner'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { usePOSStore, ProductoPOS } from '@/stores/usePOSStore'
+import { useRealtimeProductos } from '@/lib/hooks/useRealtimeProductos'
 
 interface ClientPOSProps {
   productos: ProductoPOS[]
   nombreFerreteria: string
   ferreteriaId: string
-  /** true solo si Nubefact está en modo producción — false en sandbox o desconectado */
-  nubefactActivo?: boolean
+  /** true si hay proveedor de facturación disponible (Nubefact o SUNAT Directo) */
+  facturacionActiva?: boolean
 }
 
-export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId, nubefactActivo = false }: ClientPOSProps) {
+export default function ClientPOS({ productos: productosIniciales, nombreFerreteria, ferreteriaId, facturacionActiva = false }: ClientPOSProps) {
+  // Catálogo en vivo: el stock se actualiza tras cada venta (propia o de otro
+  // cajero/dispositivo) sin recargar la página.
+  const productos = useRealtimeProductos(ferreteriaId, productosIniciales)
   const {
     items, agregarItem, actualizarCantidad, eliminarItem, vaciarCarrito, total,
     busqueda, setBusqueda, mostrarSugerencias, setMostrarSugerencias,
@@ -382,10 +386,10 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId, n
                   key={key}
                   onClick={() => {
                     setTipoComprobante(key)
-                    // Advertir al cajero si selecciona boleta/factura sin Nubefact activo
-                    if (key !== 'nota_venta' && !nubefactActivo) {
+                    // Advertir al cajero si selecciona boleta/factura sin proveedor de facturación
+                    if (key !== 'nota_venta' && !facturacionActiva) {
                       toast.warning(
-                        `Nubefact no está configurado en modo producción. La ${label} se registrará internamente pero NO se enviará a SUNAT.`,
+                        `Facturación electrónica no configurada (Nubefact o SUNAT Directo). La ${label} se registrará internamente pero NO se enviará a SUNAT.`,
                         { duration: 6000 }
                       )
                     }
@@ -401,10 +405,10 @@ export default function ClientPOS({ productos, nombreFerreteria, ferreteriaId, n
                 </button>
               ))}
             </div>
-            {/* Aviso persistente si está en modo boleta/factura sin Nubefact */}
-            {tipoComprobante !== 'nota_venta' && !nubefactActivo && (
+            {/* Aviso persistente si está en modo boleta/factura sin proveedor de facturación */}
+            {tipoComprobante !== 'nota_venta' && !facturacionActiva && (
               <p className="mt-1.5 text-[10px] text-amber-600 flex items-center gap-1">
-                ⚠️ Nubefact desconectado — no se emitirá comprobante SUNAT
+                ⚠️ Facturación electrónica sin configurar — no se emitirá comprobante SUNAT
               </p>
             )}
           </div>

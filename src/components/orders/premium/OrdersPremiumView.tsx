@@ -12,6 +12,7 @@ import { useOrderActions } from '../hooks/useOrderActions'
 import { useOrderComprobantes } from '../hooks/useOrderComprobantes'
 import { useOrderFilters } from '../hooks/useOrderFilters'
 import { useRealtimePedidos } from '../hooks/useRealtimePedidos'
+import { useRealtimeProductos } from '@/lib/hooks/useRealtimeProductos'
 
 import NuevoPedidoModal from '../NuevoPedidoModal'
 import PedidoVozModal from '../PedidoVozModal'
@@ -65,7 +66,7 @@ export interface Pedido {
 export interface Producto { id: string; nombre: string; unidad: string; precio_base: number; precio_compra: number; stock: number }
 export interface Zona { id: string; nombre: string; tiempo_estimado_min: number }
 
-export default function OrdersPremiumView({ pedidos: inicial, productos = [], zonas = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, nubefactConfigurado = false, tieneRuc = false, initEstado, initPedidoId }: {
+export default function OrdersPremiumView({ pedidos: inicial, productos: productosIniciales = [], zonas = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, nubefactConfigurado = false, tieneRuc = false, initEstado, initPedidoId }: {
   pedidos: Pedido[]
   productos?: Producto[]
   zonas?: Zona[]
@@ -84,6 +85,8 @@ export default function OrdersPremiumView({ pedidos: inicial, productos = [], zo
   const puedeConfirmarPagos = checkPermiso(sessionData, 'registrar_pagos')
   const puedeAprobarCreditos = checkPermiso(sessionData, 'aprobar_creditos')
   const [pedidos, setPedidos] = useState(inicial)
+  // Catálogo en vivo: los modales de pedido siempre ven el stock actual
+  const productos = useRealtimeProductos(ferreteriaId, productosIniciales)
   const [modalNuevo, setModalNuevo] = useState(false)
   const [modalVoz, setModalVoz]     = useState(false)
   const [cancelDialog, setCancelDialog] = useState<{ pedidoId: string; motivo: string } | null>(null)

@@ -17,27 +17,25 @@ export default async function POSPage() {
   const catalogRepo = new CatalogRepository(supabase)
   const facturacionRepo = new FacturacionRepository(supabase)
 
-  const [productos, ferreteria, nubefactRow] = await Promise.all([
+  const [productos, ferreteria, facturacionData] = await Promise.all([
     catalogRepo.listarProductosActivos(session.ferreteriaId),
     facturacionRepo.obtenerFerreteriaInfo(session.ferreteriaId),
-    supabase
-      .from('integraciones_conectadas')
-      .select('estado')
-      .eq('ferreteria_id', session.ferreteriaId)
-      .eq('tipo', 'nubefact')
-      .maybeSingle(),
+    facturacionRepo.obtenerDatosFerreteriaDashboard(session.ferreteriaId),
   ])
 
-  const nubefactEstado = nubefactRow.data?.estado ?? 'desconectado'
-  // El POS puede emitir comprobantes reales solo si Nubefact está en 'conectado' (producción)
-  const nubefactActivo = nubefactEstado === 'conectado'
+  // Misma regla que Ventas: hay proveedor de facturación disponible si Nubefact
+  // tiene token O el negocio eligió SUNAT Directo. La emisión resuelve el
+  // proveedor activo automáticamente (/api/comprobantes/emitir → resolverProveedor).
+  const facturacionActiva =
+    !!facturacionData?.nubefact_token_enc ||
+    facturacionData?.proveedor_facturacion === 'sunat_directo'
 
   return (
     <ClientPOS
       productos={productos || []}
       nombreFerreteria={ferreteria?.nombre ?? 'Negocio'}
       ferreteriaId={session.ferreteriaId}
-      nubefactActivo={nubefactActivo}
+      facturacionActiva={facturacionActiva}
     />
   )
 }
