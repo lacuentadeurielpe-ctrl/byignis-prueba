@@ -66,7 +66,7 @@ export interface Pedido {
 export interface Producto { id: string; nombre: string; unidad: string; precio_base: number; precio_compra: number; stock: number }
 export interface Zona { id: string; nombre: string; tiempo_estimado_min: number }
 
-export default function OrdersPremiumView({ pedidos: inicial, productos: productosIniciales = [], zonas = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, nubefactConfigurado = false, tieneRuc = false, initEstado, initPedidoId }: {
+export default function OrdersPremiumView({ pedidos: inicial, productos: productosIniciales = [], zonas = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, facturacionConfigurada = false, tieneRuc = false, initEstado, initPedidoId }: {
   pedidos: Pedido[]
   productos?: Producto[]
   zonas?: Zona[]
@@ -74,7 +74,7 @@ export default function OrdersPremiumView({ pedidos: inicial, productos: product
   rol?: Rol
   repartidores?: Repartidor[]
   permisos?: Partial<PermisoMap>
-  nubefactConfigurado?: boolean
+  facturacionConfigurada?: boolean
   tieneRuc?: boolean
   initEstado?: string
   initPedidoId?: string
@@ -222,7 +222,7 @@ export default function OrdersPremiumView({ pedidos: inicial, productos: product
                 puedeAprobarCreditos={puedeAprobarCreditos}
                 repartidores={repartidores}
                 onEdit={() => setModalEditar(selectedOrder)}
-                nubefactConfigurado={nubefactConfigurado}
+                facturacionConfigurada={facturacionConfigurada}
                 tieneRuc={tieneRuc}
               />
             </motion.div>

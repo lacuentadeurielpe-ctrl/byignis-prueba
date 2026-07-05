@@ -12,6 +12,7 @@ import { procesarItemsSolicitados, buscarProducto, formatearCotizacion } from '@
 import { pausarBot } from '@/lib/bot/session'
 import { generarYEnviarComprobante, generarYEnviarCotizacionPDF, eliminarComprobantePedido } from '@/lib/pdf/generar-comprobante'
 import { resolverProveedor } from '@/lib/facturacion/resolver'
+import { tieneFacturacionActiva } from '@/lib/facturacion/lycet/credenciales'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import type { WASender } from '@/lib/whatsapp/types'
 import { enviarMensajeTelegram } from '@/lib/integrations/telegram'
@@ -45,7 +46,6 @@ export interface ToolContext {
   herramientasDesactivadas?: string[]  // tools explícitamente apagadas (desde bot_herramientas_desactivadas)
   integracionesConectadas?: string[]   // tipos de integración activas (para gating de tools que las requieren)
   umbralUpsellSoles?: number           // F5: monto mínimo de cotización para activar upsell (0 = siempre)
-  nubefactTokenPlano?: string       // Inyectado
   productosDigitales?: ProductoDigital[]
   botModoCatalogo?: 'fisicos' | 'digitales' | 'ambos'
 }
@@ -296,8 +296,8 @@ export const TOOL_SCHEMAS = [
       description:
         'Genera y envía por WhatsApp el comprobante de un pedido del cliente. ' +
         'Úsalo cuando el cliente pida boleta, factura, nota de venta, proforma o comprobante. ' +
-        'Maneja automáticamente: proforma (pendiente), nota de venta (no pagado/sin Nubefact), ' +
-        'boleta electrónica (pagado + Nubefact), factura electrónica (pagado + Nubefact + RUC).',
+        'Maneja automáticamente: proforma (pendiente), nota de venta (no pagado/sin facturación electrónica), ' +
+        'boleta electrónica (pagado + facturación activa), factura electrónica (pagado + facturación activa + RUC).',
       parameters: {
         type: 'object',
         properties: {
@@ -1652,20 +1652,22 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     const tipoComprobanteArg = (args.tipo_comprobante as 'boleta' | 'factura' | undefined) ?? null
     const rucClienteArg      = ((args.ruc_cliente as string | undefined) ?? '').replace(/\D/g, '') || null
 
-    // Fetch ferreteria config (tipo_ruc, nubefact, telefono_whatsapp)
-    const { data: ferreteria } = await ctx.supabase
-      .from('ferreterias')
-      .select('tipo_ruc, nubefact_ruta, nubefact_token_enc, telefono_whatsapp')
-      .eq('id', ctx.ferreteriaId)
-      .single()
+    // Fetch ferreteria config (tipo_ruc, telefono_whatsapp) + credenciales SUNAT
+    const [{ data: ferreteria }, facturacionConfigurada] = await Promise.all([
+      ctx.supabase
+        .from('ferreterias')
+        .select('tipo_ruc, telefono_whatsapp')
+        .eq('id', ctx.ferreteriaId)
+        .single(),
+      tieneFacturacionActiva(ctx.supabase, ctx.ferreteriaId),
+    ])
 
     if (!ferreteria) return { ok: false, error: 'Ferretería no encontrada' }
 
-    type FerrConfig = { tipo_ruc?: string; nubefact_ruta?: string; nubefact_token_enc?: string; telefono_whatsapp?: string }
+    type FerrConfig = { tipo_ruc?: string; telefono_whatsapp?: string }
     const ferr = ferreteria as unknown as FerrConfig
-    const tipoRucTenant      = ferr.tipo_ruc ?? 'sin_ruc'
-    const nubefactConfigurado = !!(ferr.nubefact_ruta && ferr.nubefact_token_enc)
-    const telefonoWA          = ferr.telefono_whatsapp ?? null
+    const tipoRucTenant = ferr.tipo_ruc ?? 'sin_ruc'
+    const telefonoWA    = ferr.telefono_whatsapp ?? null
 
     // Validar RUC si el cliente lo proporcionó y el tenant puede emitir facturas
     if (tipoRucTenant === 'ruc20' && rucClienteArg) {
@@ -1777,8 +1779,8 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       }
     }
 
-    // ── Caso 2: pagado pero sin Nubefact o sin_ruc → nota de venta ─────────
-    if (!nubefactConfigurado || tipoRucTenant === 'sin_ruc') {
+    // ── Caso 2: pagado pero sin facturación electrónica o sin_ruc → nota de venta ──
+    if (!facturacionConfigurada || tipoRucTenant === 'sin_ruc') {
       const resultadoNV = await generarYEnviarComprobante({
         pedidoId:     ped.id,
         ferreteriaId: ctx.ferreteriaId,
@@ -1799,7 +1801,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       }
     }
 
-    // ── Caso 3: pagado + Nubefact → boleta o factura electrónica ───────────
+    // ── Caso 3: pagado + facturación activa → boleta o factura electrónica ─
     if (pidioFactura) {
       // Buscar RUC guardado si no se proporcionó
       let rucParaFactura = rucClienteArg ?? ''
@@ -1849,9 +1851,9 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
           },
         }
       } else if (resultFact.tokenInvalido) {
-        return { ok: false, error: 'Token Nubefact inválido. El encargado enviará el comprobante directamente.', motivo: 'nubefact_token_invalido' }
+        return { ok: false, error: 'Credenciales de facturación inválidas. El encargado enviará el comprobante directamente.', motivo: 'credenciales_invalidas' }
       } else {
-        return { ok: false, error: resultFact.error ?? 'Error emitiendo factura', motivo: 'error_nubefact' }
+        return { ok: false, error: resultFact.error ?? 'Error emitiendo factura', motivo: 'error_emision' }
       }
     }
 
@@ -1902,7 +1904,7 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
       }
       return { ok: false, error: 'Error generando documento de respaldo', motivo: 'error_fallback' }
     } else {
-      return { ok: false, error: resultBol.error ?? 'Error emitiendo boleta', motivo: 'error_nubefact' }
+      return { ok: false, error: resultBol.error ?? 'Error emitiendo boleta', motivo: 'error_emision' }
     }
   },
 

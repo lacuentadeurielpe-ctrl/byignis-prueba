@@ -72,7 +72,7 @@ export default function ModalNotaCredito({
 
       const data = await res.json()
       if (!res.ok) {
-        if (data.tokenInvalido) throw new Error('Token de Nubefact inválido. Revisa la configuración de Facturación en Settings.')
+        if (data.tokenInvalido) throw new Error('Credenciales SUNAT no configuradas o inválidas. Ve a Configuración → Integraciones → SUNAT Directo.')
         throw new Error(data.error || 'Error desconocido al emitir NC')
       }
 

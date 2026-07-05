@@ -6,7 +6,7 @@
 // lo que el cliente lleva y el total cuadra con lo cobrado en caja.
 //
 // Este helper es AGNÓSTICO al proveedor de facturación: lo usan tanto el flujo
-// Nubefact (emitir.ts) como el SUNAT Directo (sunat-directo-adapter.ts).
+// el adapter de SUNAT Directo (sunat-directo-adapter.ts).
 
 export interface CrearNotaVentaOpts {
   supabase:       any

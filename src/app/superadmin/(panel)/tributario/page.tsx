@@ -17,8 +17,8 @@ async function getTributarioStats() {
 
   const [
     { data: comprobantesData },
-    { data: ferreteriasCon },
-    { data: ferreteriasSin },
+    { data: ferreteriasData },
+    { data: credsActivas },
     { data: librosData },
     { data: librosCerradosData },
   ] = await Promise.all([
@@ -30,8 +30,8 @@ async function getTributarioStats() {
       .gte('created_at', primerDiaMes)
       .lt('created_at', primerDiaSigMes),
 
-    admin.from('ferreterias').select('id').not('nubefact_token', 'is', null),
-    admin.from('ferreterias').select('id').is('nubefact_token', null),
+    admin.from('ferreterias').select('id'),
+    admin.from('sunat_credenciales').select('ferreteria_id').eq('estado', 'activo'),
 
     admin.from('libros_contables').select('id').eq('periodo', periodoActual),
     admin.from('libros_contables').select('id').eq('periodo', periodoActual).eq('estado', 'cerrado'),
@@ -41,14 +41,17 @@ async function getTributarioStats() {
   const igv_mes    = comprobantes.reduce((s, c) => s + (Number(c.igv) ?? 0), 0)
   const ventas_mes = comprobantes.reduce((s, c) => s + (Number(c.total) ?? 0), 0)
 
+  const totalFerreterias = (ferreteriasData ?? []).length
+  const conFacturacion   = new Set((credsActivas ?? []).map(c => c.ferreteria_id)).size
+
   return {
-    comprobantes_mes:     comprobantes.length,
-    igv_mes:              Math.round(igv_mes * 100) / 100,
-    ventas_mes:           Math.round(ventas_mes * 100) / 100,
-    tenants_con_nubefact: (ferreteriasCon ?? []).length,
-    tenants_sin_nubefact: (ferreteriasSin ?? []).length,
-    libros_generados_mes: (librosData ?? []).length,
-    libros_cerrados_mes:  (librosCerradosData ?? []).length,
+    comprobantes_mes:        comprobantes.length,
+    igv_mes:                 Math.round(igv_mes * 100) / 100,
+    ventas_mes:              Math.round(ventas_mes * 100) / 100,
+    tenants_con_facturacion: conFacturacion,
+    tenants_sin_facturacion: Math.max(0, totalFerreterias - conFacturacion),
+    libros_generados_mes:    (librosData ?? []).length,
+    libros_cerrados_mes:     (librosCerradosData ?? []).length,
   }
 }
 

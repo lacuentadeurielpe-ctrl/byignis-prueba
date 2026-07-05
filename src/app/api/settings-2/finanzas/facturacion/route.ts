@@ -47,8 +47,7 @@ export async function GET() {
     .select(
       `ruc, razon_social, nombre_comercial, tipo_ruc, regimen_tributario,
        serie_boletas, serie_facturas, igv_incluido_en_precios,
-       representante_legal_nombre, representante_legal_dni, representante_legal_cargo,
-       nubefact_modo`
+       representante_legal_nombre, representante_legal_dni, representante_legal_cargo`
     )
     .eq('id', session.ferreteriaId)
     .single()
@@ -139,7 +138,6 @@ export async function PATCH(request: Request) {
     'representante_legal_nombre',
     'representante_legal_dni',
     'representante_legal_cargo',
-    'nubefact_modo',
   ]
 
   const updateData: Record<string, unknown> = {}
@@ -154,8 +152,7 @@ export async function PATCH(request: Request) {
     .select(
       `ruc, razon_social, nombre_comercial, tipo_ruc, regimen_tributario,
        serie_boletas, serie_facturas, igv_incluido_en_precios,
-       representante_legal_nombre, representante_legal_dni, representante_legal_cargo,
-       nubefact_modo`
+       representante_legal_nombre, representante_legal_dni, representante_legal_cargo`
     )
     .single()
 

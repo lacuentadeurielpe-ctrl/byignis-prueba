@@ -1,4 +1,4 @@
-// POST /api/comprobantes/emitir — emite boleta o factura electrónica vía Nubefact
+// POST /api/comprobantes/emitir — emite boleta o factura electrónica (SUNAT Directo)
 //
 // FERRETERÍA AISLADA:
 //   - session.ferreteriaId es la única fuente de verdad del tenant
@@ -35,8 +35,8 @@ export async function POST(request: Request) {
 
   const supabase = await createClient()
 
-  // Resuelve el proveedor de facturación del tenant (Nubefact o SUNAT Directo).
-  // El adapter internamente carga credenciales/token — el endpoint es agnóstico.
+  // Resuelve el proveedor de facturación del tenant.
+  // El adapter internamente carga credenciales — el endpoint es agnóstico.
   const proveedor = await resolverProveedor(supabase, session.ferreteriaId)
 
   const tipo = body.tipo ?? 'boleta'

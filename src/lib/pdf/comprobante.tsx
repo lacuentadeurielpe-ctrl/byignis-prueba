@@ -71,7 +71,7 @@ function iniciales(nombre: string): string {
     .join('')
 }
 
-// ── Estilos (Estilo SUNAT / Nubefact A4) ──────────────────────────────────────
+// ── Estilos (Estilo SUNAT A4) ──────────────────────────────────────
 
 function crearEstilos(color: string) {
   return StyleSheet.create({
@@ -419,7 +419,7 @@ export function ComprobantePDF({ datos }: { datos: DatosComprobante }) {
         {/* ── TOTALES ── */}
         <View style={S.resumenRow}>
           <View style={S.resumenIzquierda}>
-            {/* Espacio para observaciones, texto en letras, etc. típico de Nubefact */}
+            {/* Espacio para observaciones, texto en letras, etc. */}
           </View>
           <View style={S.resumenDerecha}>
             {hayDescuento && (

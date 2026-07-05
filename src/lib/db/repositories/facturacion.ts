@@ -14,9 +14,6 @@ export interface ComprobanteInput {
   total: number
   cliente_nombre: string
   cliente_ruc_dni?: string | null
-  nubefact_id?: number | null
-  nubefact_hash?: string | null
-  nubefact_qr_cadena?: string | null
   xml_url?: string | null
   pdf_url?: string | null
   emitido_por: string
@@ -28,12 +25,12 @@ export class FacturacionRepository {
   constructor(private supabase: SupabaseClient) {}
 
   /**
-   * Obtiene la configuración de facturación y Nubefact de una ferretería.
+   * Obtiene la configuración de facturación de una ferretería.
    */
   async obtenerConfiguracionFacturacion(ferreteriaId: string) {
     const { data, error } = await this.supabase
       .from('ferreterias')
-      .select('id, ruc, razon_social, nombre_comercial, serie_boletas, serie_facturas, igv_incluido_en_precios, nubefact_token_enc, nubefact_ruta, nubefact_modo, regimen_tributario')
+      .select('id, ruc, razon_social, nombre_comercial, serie_boletas, serie_facturas, igv_incluido_en_precios, regimen_tributario')
       .eq('id', ferreteriaId)
       .single()
 
@@ -92,9 +89,6 @@ export class FacturacionRepository {
         total:            input.total,
         cliente_nombre:   input.cliente_nombre,
         cliente_ruc_dni:  input.cliente_ruc_dni ?? null,
-        nubefact_id:      input.nubefact_id ?? null,
-        nubefact_hash:    input.nubefact_hash ?? null,
-        nubefact_qr_cadena: input.nubefact_qr_cadena ?? null,
         xml_url:          input.xml_url ?? null,
         pdf_url:          input.pdf_url ?? null,
         emitido_por:      input.emitido_por,
@@ -113,7 +107,7 @@ export class FacturacionRepository {
   async obtenerDatosFerreteriaDashboard(ferreteriaId: string) {
     const { data, error } = await this.supabase
       .from('ferreterias')
-      .select('id, nubefact_token_enc, tipo_ruc, proveedor_facturacion')
+      .select('id, tipo_ruc, proveedor_facturacion')
       .eq('id', ferreteriaId)
       .single()
 

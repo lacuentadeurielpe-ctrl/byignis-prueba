@@ -16,7 +16,7 @@ export default function OrderDetailPane({
   puedeAprobarCreditos,
   repartidores,
   onEdit,
-  nubefactConfigurado,
+  facturacionConfigurada,
   tieneRuc
 }: {
   pedido: Pedido
@@ -28,7 +28,7 @@ export default function OrderDetailPane({
   puedeAprobarCreditos: boolean
   repartidores: Repartidor[]
   onEdit: () => void
-  nubefactConfigurado: boolean
+  facturacionConfigurada: boolean
   tieneRuc: boolean
 }) {
 
@@ -222,7 +222,7 @@ export default function OrderDetailPane({
                     <FileText className="w-4 h-4" /> Ver Nota de Venta
                   </button>
 
-                  {tieneRuc && nubefactConfigurado && (() => {
+                  {tieneRuc && facturacionConfigurada && (() => {
                     const tieneBoletaEmitida = pedido.comprobantes?.some(c => c.tipo === 'boleta')
                     const tieneFacturaEmitida = pedido.comprobantes?.some(c => c.tipo === 'factura')
 

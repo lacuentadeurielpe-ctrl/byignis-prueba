@@ -97,6 +97,20 @@ function calcularProximoIntento(intentos: number): string {
   return new Date(Date.now() + minutos * 60_000).toISOString()
 }
 
+// Cadena estándar del código QR de la representación impresa (RM 155-2017 SUNAT):
+// RUC | TIPO DOC | SERIE | NÚMERO | IGV | TOTAL | FECHA | TIPO DOC CLIENTE | NÚM DOC CLIENTE |
+function qrSunat(p: {
+  rucEmisor: string; tipoDoc: string; serie: string; correlativo: number
+  igv: number; total: number; fecha: string
+  clienteTipoDoc: string; clienteNumDoc: string
+}): string {
+  return [
+    p.rucEmisor, p.tipoDoc, p.serie, padCorrelativo(p.correlativo),
+    p.igv.toFixed(2), p.total.toFixed(2), p.fecha,
+    p.clienteTipoDoc, p.clienteNumDoc,
+  ].join('|') + '|'
+}
+
 function superoPlazoLegal(fechaEmisionISO: string | null | undefined): boolean {
   if (!fechaEmisionISO) return false
   const emitido = new Date(`${fechaEmisionISO}T00:00:00-05:00`)
@@ -159,6 +173,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     const resultado = await enviarInvoice(lycetCfg, doc)
     const clasif = clasificarResultado(resultado)
     const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
+    const fechaEmision = fechaEmisionHoy()
 
     // Solo se libera el correlativo ante un rechazo DEFINITIVO. Una falla de
     // infraestructura mantiene la reserva: el reintento reusa el mismo número.
@@ -178,7 +193,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         numero_comprobante:    numeroCompleto,
         estado:                clasif.estado,
         estado_sunat:          clasif.estadoSunatFinal,
-        fecha_emision:         fechaEmisionHoy(),
+        fecha_emision:         fechaEmision,
         moneda:                'PEN',
         subtotal:              totales.mtoOperGravadas,
         igv:                   totales.mtoIGV,
@@ -186,6 +201,12 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         sunat_cdr_codigo:      resultado.cdrCodigo ?? null,
         sunat_cdr_descripcion: resultado.cdrDescripcion ?? null,
         cdr_notas:             resultado.cdrNotas ?? null,
+        hash_cpe:              resultado.hash ?? null,
+        qr_cadena:             qrSunat({
+          rucEmisor: creds.ruc, tipoDoc: '03', serie, correlativo,
+          igv: totales.mtoIGV, total: totales.mtoImpVenta, fecha: fechaEmision,
+          clienteTipoDoc: cliente.tipoDoc, clienteNumDoc: cliente.numDoc,
+        }),
         cliente_nombre:        opts.clienteNombre,
         cliente_ruc_dni:       opts.clienteDni.replace(/\D/g, '') || null,
         emitido_por:           opts.emitidoPor,
@@ -280,6 +301,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     const resultado = await enviarInvoice(lycetCfg, doc)
     const clasif = clasificarResultado(resultado)
     const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
+    const fechaEmision = fechaEmisionHoy()
 
     if (!resultado.aceptado && !clasif.reintentable) {
       await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '01', serie, correlativo)
@@ -297,7 +319,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         numero_comprobante:    numeroCompleto,
         estado:                clasif.estado,
         estado_sunat:          clasif.estadoSunatFinal,
-        fecha_emision:         fechaEmisionHoy(),
+        fecha_emision:         fechaEmision,
         moneda:                'PEN',
         subtotal:              totales.mtoOperGravadas,
         igv:                   totales.mtoIGV,
@@ -305,6 +327,12 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         sunat_cdr_codigo:      resultado.cdrCodigo ?? null,
         sunat_cdr_descripcion: resultado.cdrDescripcion ?? null,
         cdr_notas:             resultado.cdrNotas ?? null,
+        hash_cpe:              resultado.hash ?? null,
+        qr_cadena:             qrSunat({
+          rucEmisor: creds.ruc, tipoDoc: '01', serie, correlativo,
+          igv: totales.mtoIGV, total: totales.mtoImpVenta, fecha: fechaEmision,
+          clienteTipoDoc: '6', clienteNumDoc: clienteRucLimpio,
+        }),
         cliente_nombre:        opts.clienteNombre,
         cliente_ruc_dni:       clienteRucLimpio,
         emitido_por:           opts.emitidoPor,
@@ -557,6 +585,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     const resultado = await enviarNota(lycetCfg, doc)
     const estadoFinal = estadoSunat(resultado)
     const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
+    const fechaEmision = fechaEmisionHoy()
 
     if (!resultado.aceptado) {
       await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '07', serie, correlativo)
@@ -574,7 +603,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         numero_comprobante:        numeroCompleto,
         estado:                    resultado.aceptado ? 'emitido' : 'error',
         estado_sunat:              estadoFinal,
-        fecha_emision:             fechaEmisionHoy(),
+        fecha_emision:             fechaEmision,
         moneda:                    'PEN',
         subtotal:                  totales.mtoOperGravadas,
         igv:                       totales.mtoIGV,
@@ -582,6 +611,12 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         sunat_cdr_codigo:          resultado.cdrCodigo ?? null,
         sunat_cdr_descripcion:     resultado.cdrDescripcion ?? null,
         cdr_notas:                 resultado.cdrNotas ?? null,
+        hash_cpe:                  resultado.hash ?? null,
+        qr_cadena:                 qrSunat({
+          rucEmisor: creds.ruc, tipoDoc: '07', serie, correlativo,
+          igv: totales.mtoIGV, total: totales.mtoImpVenta, fecha: fechaEmision,
+          clienteTipoDoc: cliente.tipoDoc, clienteNumDoc: cliente.numDoc,
+        }),
         cliente_nombre:            ref.cliente_nombre,
         cliente_ruc_dni:           ref.cliente_ruc_dni,
         emitido_por:               opts.emitidoPor,
@@ -598,6 +633,18 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     if (!resultado.ok)       return { ok: false, error: resultado.error ?? 'Error enviando NC a SUNAT' }
     if (!resultado.aceptado) return { ok: false, error: resultado.cdrDescripcion ?? `SUNAT rechazó la NC (código ${resultado.cdrCodigo})` }
+
+    // Devolver el stock de los items anulados/devueltos (mismo comportamiento
+    // que tenía la ruta de NC antes de unificar proveedores).
+    for (const item of originalItems) {
+      if (item.producto_id) {
+        const { error: rpcErr } = await opts.supabase.rpc('restaurar_stock_parcial', {
+          p_producto_id: item.producto_id,
+          p_cantidad:    item.cantidad,
+        })
+        if (rpcErr) console.error('[NotaCredito] Error ajustando stock:', rpcErr)
+      }
+    }
 
     return { ok: true, comprobanteId: comp?.id, numeroCompleto }
   }

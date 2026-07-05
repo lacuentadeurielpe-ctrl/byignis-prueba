@@ -37,20 +37,27 @@ export async function GET() {
     // 2. Check configuration (e.g. metodos de pago, facturacion)
     const { data: config } = await supabase
       .from('ferreterias')
-      .select('tipo_ruc, nubefact_token_enc')
+      .select('tipo_ruc')
       .eq('id', fid)
       .single()
 
-    if (config) {
-      // Si tiene RUC configurado pero no tiene token de NubeFact, podría sugerirse
-      if (config.tipo_ruc && config.tipo_ruc !== 'sin_ruc' && !config.nubefact_token_enc) {
+    if (config?.tipo_ruc && config.tipo_ruc !== 'sin_ruc') {
+      // Con RUC registrado pero sin credenciales SUNAT activas → sugerir activarlas
+      const { data: credsSunat } = await supabase
+        .from('sunat_credenciales')
+        .select('id')
+        .eq('ferreteria_id', fid)
+        .eq('estado', 'activo')
+        .maybeSingle()
+
+      if (!credsSunat) {
         alerts.push({
-          id: 'config_nubefact',
+          id: 'config_facturacion',
           type: 'info',
           title: 'Facturación Electrónica inactiva',
-          description: 'Tienes un RUC registrado, pero falta vincular NubeFact para emitir boletas/facturas automáticamente.',
-          actionText: 'Configurar NubeFact',
-          href: '/dashboard/settings-2/finanzas',
+          description: 'Tienes un RUC registrado, pero falta activar SUNAT Directo para emitir boletas/facturas automáticamente.',
+          actionText: 'Configurar SUNAT Directo',
+          href: '/dashboard/settings-2/integraciones/sunat-directo',
         })
       }
     }

@@ -48,11 +48,11 @@ const INTEGRACION_DATA: Record<string, IntegracionInfo> = {
       { label: 'Exportar catálogo a Drive', descripcion: 'Genera un CSV del catálogo de productos y lo sube a Drive para respaldo o compartir' },
     ],
   },
-  nubefact: {
+  sunat_directo: {
     tools: [],
     features: [
       { label: 'Emisión de boletas y facturas SUNAT', descripcion: 'El bot puede solicitar la emisión de comprobantes electrónicos válidos ante SUNAT al confirmar una venta' },
-      { label: 'Facturación en modo sandbox', descripcion: 'Prueba el flujo completo de facturación sin emitir comprobantes reales' },
+      { label: 'Homologación en modo beta', descripcion: 'Prueba el flujo completo de facturación contra el entorno beta de SUNAT antes de pasar a producción' },
     ],
   },
   maps: {

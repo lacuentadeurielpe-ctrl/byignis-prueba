@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
-import { emitirNotaCredito } from '@/lib/comprobantes/emitir'
-import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
-import { desencriptar } from '@/lib/encryption'
+import { resolverProveedor } from '@/lib/facturacion/resolver'
 
 export async function POST(request: Request) {
   const session = await getSessionInfo()
@@ -17,7 +15,7 @@ export async function POST(request: Request) {
     motivoDescripcion?: string
     itemsDevueltos?: { producto_id: string | null; cantidad: number }[]
   }
-  
+
   try {
     body = await request.json()
   } catch {
@@ -29,21 +27,12 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient()
-  const facturacionRepo = new FacturacionRepository(supabase)
-  
-  let config
-  try {
-    config = await facturacionRepo.obtenerConfiguracionFacturacion(session.ferreteriaId)
-  } catch (errConfig) {
-    return NextResponse.json({ error: 'Configuración de facturación no encontrada' }, { status: 400 })
-  }
-
-  const tokenPlano = config.nubefact_token_enc ? await desencriptar(config.nubefact_token_enc) : ''
 
   const motivoCodigo = body.motivoCodigo ?? '01' // 01 = Anulación de la operación
   const motivoDescripcion = body.motivoDescripcion ?? 'Anulación de la operación'
 
-  const resultado = await emitirNotaCredito({
+  const proveedor = await resolverProveedor(supabase, session.ferreteriaId)
+  const resultado = await proveedor.emitirNotaCredito({
     supabase,
     comprobanteReferenciaId: body.comprobanteReferenciaId,
     ferreteriaId:  session.ferreteriaId,
@@ -51,7 +40,6 @@ export async function POST(request: Request) {
     motivoDescripcion,
     emitidoPor:    'dashboard',
     itemsDevueltos: body.itemsDevueltos,
-    tokenPlano,
   })
 
   if (!resultado.ok) {

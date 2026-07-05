@@ -1,8 +1,8 @@
 // Capa de abstracción de facturación electrónica.
-// Hoy soporta Nubefact y SUNAT Directo (vía microservicio Greenter).
+// Proveedor único: SUNAT Directo (vía microservicio Greenter/Lycet).
 // Añadir un nuevo proveedor = implementar ProveedorFacturacion.
 
-export type ProveedorFacturacionNombre = 'nubefact' | 'sunat_directo'
+export type ProveedorFacturacionNombre = 'sunat_directo'
 
 // ── Resultado unificado (compatible con lo que ya usa el resto del código) ────
 
@@ -78,8 +78,8 @@ export interface ProveedorFacturacion {
   /**
    * Reintenta el envío de un comprobante que quedó en `error_reintentable`
    * (falla de infraestructura, no de rechazo SUNAT). Reutiliza la misma serie
-   * y correlativo — no reserva uno nuevo. Proveedores sin cola de reintentos
-   * (ej. Nubefact, que resuelve todo síncrono) pueden omitir el método.
+   * y correlativo — no reserva uno nuevo. Proveedores que resuelven todo
+   * síncrono pueden omitir el método.
    */
   reintentarEnvio?(opts: OpcionesReintentoEnvio): Promise<ResultadoEmisionUnificado>
 
@@ -87,7 +87,6 @@ export interface ProveedorFacturacion {
    * Marca un comprobante para anulación. NO llama a SUNAT directamente — solo
    * registra la solicitud; el envío real (RC de baja para boletas, RA/Voided
    * para facturas) lo procesa el job nocturno, agrupado por día.
-   * Proveedores que anulan síncrono (Nubefact) pueden resolver aquí mismo.
    */
   solicitarAnulacion(opts: OpcionesSolicitarAnulacion): Promise<ResultadoAnulacion>
 }

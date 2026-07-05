@@ -46,11 +46,12 @@ export async function GET(
     return new NextResponse('Error interno', { status: 500 })
   }
 
-  // 3. Generar QR
+  // 3. Generar QR (cadena estándar SUNAT guardada al emitir)
   let qrDataUri = ''
-  if (comprobante.nubefact_qr_cadena) {
+  const qrCadena = comprobante.qr_cadena
+  if (qrCadena) {
     try {
-      qrDataUri = await QRCode.toDataURL(comprobante.nubefact_qr_cadena, {
+      qrDataUri = await QRCode.toDataURL(qrCadena, {
         margin: 0,
         width: 150
       })
@@ -90,7 +91,7 @@ export async function GET(
     subtotal: comprobante.subtotal || 0,
     igv: comprobante.igv || 0,
     total: comprobante.total || 0,
-    hash: comprobante.nubefact_hash || '',
+    hash: comprobante.hash_cpe || '',
     qr_data_uri: qrDataUri,
   }
 

@@ -130,18 +130,6 @@ export default function SunatDirectoPage() {
     }
   }
 
-  const handleDesactivar = async () => {
-    const res = await fetch('/api/settings-2/integraciones/sunat-directo', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ proveedor: 'nubefact' }),
-    })
-    if (res.ok) {
-      setSuccess('Revertido a Nubefact como proveedor de facturación')
-      setEstado(prev => prev ? { ...prev, proveedor_activo: 'nubefact' } : prev)
-    }
-  }
-
   const handleHomologar = async () => {
     setIsHomologando(true)
     setHomoResultados([])
@@ -165,10 +153,10 @@ export default function SunatDirectoPage() {
   }
 
   const handleEliminar = async () => {
-    if (!confirm('¿Eliminar las credenciales SUNAT? Esto revertirá a Nubefact.')) return
+    if (!confirm('¿Eliminar las credenciales SUNAT? El negocio quedará sin facturación electrónica hasta configurarlas de nuevo.')) return
     const res = await fetch('/api/settings-2/integraciones/sunat-directo', { method: 'DELETE' })
     if (res.ok) {
-      setEstado(prev => prev ? { ...prev, configurado: false, credenciales: undefined, proveedor_activo: 'nubefact' } : prev)
+      setEstado(prev => prev ? { ...prev, configurado: false, credenciales: undefined } : prev)
       setSuccess('Credenciales eliminadas')
     }
   }
@@ -208,7 +196,7 @@ export default function SunatDirectoPage() {
               <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-lg flex items-center gap-3">
                 <AlertCircle className="w-5 h-5 text-zinc-400 flex-shrink-0" />
                 <div>
-                  <p className="font-medium text-zinc-700">Usando {estado?.proveedor_activo === 'nubefact' ? 'Nubefact' : 'otro proveedor'}</p>
+                  <p className="font-medium text-zinc-700">Facturación electrónica sin activar</p>
                   <p className="text-sm text-zinc-500">Configura tus credenciales SUNAT y completa la homologación para activar</p>
                 </div>
               </div>
@@ -296,12 +284,6 @@ export default function SunatDirectoPage() {
                 {!estaActivo && puedeActivar && (
                   <button onClick={handleActivar} className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg">
                     Activar SUNAT Directo
-                  </button>
-                )}
-
-                {estaActivo && (
-                  <button onClick={handleDesactivar} className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 border border-zinc-200 rounded-lg">
-                    Volver a Nubefact
                   </button>
                 )}
 

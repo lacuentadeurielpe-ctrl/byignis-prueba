@@ -18,7 +18,7 @@ interface ClientPOSProps {
   productos: ProductoPOS[]
   nombreFerreteria: string
   ferreteriaId: string
-  /** true si hay proveedor de facturación disponible (Nubefact o SUNAT Directo) */
+  /** true si el negocio tiene facturación electrónica activa (SUNAT Directo) */
   facturacionActiva?: boolean
 }
 
@@ -425,7 +425,7 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
                     // Advertir al cajero si selecciona boleta/factura sin proveedor de facturación
                     if (key !== 'nota_venta' && !facturacionActiva) {
                       toast.warning(
-                        `Facturación electrónica no configurada (Nubefact o SUNAT Directo). La ${label} se registrará internamente pero NO se enviará a SUNAT.`,
+                        `Facturación electrónica no configurada (SUNAT Directo). La ${label} se registrará internamente pero NO se enviará a SUNAT.`,
                         { duration: 6000 }
                       )
                     }

@@ -147,10 +147,6 @@ export interface Ferreteria {
   representante_legal_nombre: string | null
   representante_legal_dni: string | null
   representante_legal_cargo: string | null
-  // ── Nubefact (F3) ───────────────────────────────────────────────
-  nubefact_token_enc: string | null   // cifrado en BD, nunca exponer al cliente
-  nubefact_ruta:      string | null   // URL de la cuenta Nubefact (no secreta)
-  nubefact_modo: 'prueba' | 'produccion'
   // ── Telegram (FASE 3) ───────────────────────────────────────────
   telegram_bot_token: string | null   // token del bot de Telegram
   telegram_chat_id:   string | null   // chat/grupo donde se notifica
@@ -201,9 +197,8 @@ export interface Comprobante {
   total: number | null
   cliente_nombre: string | null
   cliente_ruc_dni: string | null
-  nubefact_id: string | null         // F3
-  nubefact_hash: string | null       // F3
-  nubefact_qr_cadena: string | null  // F3
+  hash_cpe: string | null            // hash del XML firmado (Lycet)
+  qr_cadena: string | null           // cadena estándar SUNAT para el QR impreso
   xml_url: string | null             // F3
   emitido_por: string | null         // 'bot' | 'dashboard'
   comprobante_referencia_id: string | null // Referencia a boleta/factura original

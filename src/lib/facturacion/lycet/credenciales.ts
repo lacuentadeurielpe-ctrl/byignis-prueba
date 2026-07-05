@@ -14,6 +14,21 @@ export interface CredencialesSunat {
   modo:        'beta' | 'produccion'
 }
 
+/**
+ * Chequeo ligero de "¿este negocio puede emitir comprobantes electrónicos?"
+ * — sin desencriptar nada. Lo usan el bot, el POS y las páginas del dashboard
+ * para decidir entre nota de venta y boleta/factura.
+ */
+export async function tieneFacturacionActiva(supabase: any, ferreteriaId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('sunat_credenciales')
+    .select('id')
+    .eq('ferreteria_id', ferreteriaId)
+    .eq('estado', 'activo')
+    .maybeSingle()
+  return !!data
+}
+
 export async function cargarCredencialesSunat(supabase: any, ferreteriaId: string): Promise<CredencialesSunat | null> {
   const { data } = await supabase
     .from('sunat_credenciales')

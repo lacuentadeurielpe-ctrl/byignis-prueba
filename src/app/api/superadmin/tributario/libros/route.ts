@@ -18,10 +18,11 @@ export async function GET(request: Request) {
   const [
     { data: ferreterias },
     { data: libros },
+    { data: credsActivas },
   ] = await Promise.all([
     admin
       .from('ferreterias')
-      .select('id, nombre_comercial, razon_social, ruc, nubefact_token')
+      .select('id, nombre_comercial, razon_social, ruc')
       .order('nombre_comercial', { ascending: true }),
 
     admin
@@ -29,6 +30,11 @@ export async function GET(request: Request) {
       .select('id, ferreteria_id, periodo, tipo_libro, estado, total_registros, total_ventas, total_igv, total_base_imponible, total_boletas, total_facturas')
       .eq('periodo', periodo)
       .eq('tipo_libro', 'ventas'),
+
+    admin
+      .from('sunat_credenciales')
+      .select('ferreteria_id')
+      .eq('estado', 'activo'),
   ])
 
   const librosMap: Record<string, any> = {}
@@ -36,12 +42,14 @@ export async function GET(request: Request) {
     librosMap[l.ferreteria_id] = l
   }
 
+  const conFacturacion = new Set((credsActivas ?? []).map((c: any) => c.ferreteria_id))
+
   const resultado = (ferreterias ?? []).map((f: any) => ({
-    ferreteria_id:    f.id,
-    ferreteria_nombre: f.nombre_comercial ?? f.razon_social ?? '—',
-    ferreteria_ruc:   f.ruc ?? '—',
-    tiene_nubefact:   !!f.nubefact_token,
-    libro:            librosMap[f.id] ?? null,
+    ferreteria_id:      f.id,
+    ferreteria_nombre:  f.nombre_comercial ?? f.razon_social ?? '—',
+    ferreteria_ruc:     f.ruc ?? '—',
+    tiene_facturacion:  conFacturacion.has(f.id),
+    libro:              librosMap[f.id] ?? null,
   }))
 
   // Sort: ferreterías con libro primero, luego sin libro

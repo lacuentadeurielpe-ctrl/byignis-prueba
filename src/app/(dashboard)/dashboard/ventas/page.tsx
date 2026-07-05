@@ -15,6 +15,7 @@ import { VentasRepository } from '@/lib/db/repositories/ventas'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { DeliveryRepository } from '@/lib/db/repositories/logistica'
 import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
+import { tieneFacturacionActiva } from '@/lib/facturacion/lycet/credenciales'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,12 +65,14 @@ export default async function VentasPage({
       zonas,
       repartidores,
       ferreteriaData,
+      facturacionConfigurada,
     ] = await Promise.all([
       ventasRepo.obtenerPedidosDashboard(session.ferreteriaId),
       catalogRepo.listarProductosActivos(session.ferreteriaId),
       deliveryRepo.listarZonasDelivery(session.ferreteriaId),
       deliveryRepo.listarRepartidores(session.ferreteriaId),
       facturacionRepo.obtenerDatosFerreteriaDashboard(session.ferreteriaId),
+      tieneFacturacionActiva(supabase, session.ferreteriaId),
     ])
 
     pedidosContent = (
@@ -81,10 +84,7 @@ export default async function VentasPage({
         rol={session.rol}
         repartidores={repartidores as any[] ?? []}
         permisos={session.permisos as PermisoMap}
-        nubefactConfigurado={
-          !!ferreteriaData?.nubefact_token_enc ||
-          ferreteriaData?.proveedor_facturacion === 'sunat_directo'
-        }
+        facturacionConfigurada={facturacionConfigurada}
         tieneRuc={ferreteriaData?.tipo_ruc !== 'sin_ruc'}
         initEstado={initEstado}
         initPedidoId={initPedidoId}

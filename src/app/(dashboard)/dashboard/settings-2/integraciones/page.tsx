@@ -26,13 +26,6 @@ const INTEGRACIONES_CORE = [
     href: '/dashboard/settings-2/integraciones/ycloud',
   },
   {
-    id: 'nubefact',
-    name: 'Nubefact',
-    description: 'Facturación electrónica SUNAT vía plataforma Nubefact',
-    icon: FileText,
-    href: '/dashboard/settings-2/integraciones/nubefact',
-  },
-  {
     id: 'sunat_directo',
     name: 'SUNAT Directo',
     description: 'Emisión electrónica directa con tus credenciales CDT/SOL — sin intermediarios',

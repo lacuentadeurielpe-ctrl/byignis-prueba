@@ -1,7 +1,6 @@
 // POST /api/comprobantes/[id]/anular — solicitar anulación de un comprobante
 //
-// Provider-agnóstico: resuelve el adapter activo del negocio (Nubefact o SUNAT
-// Directo) y delega. Nubefact anula síncrono (tiene su propio endpoint); SUNAT
+// Provider-agnóstico: resuelve el adapter activo del negocio y delega. SUNAT
 // Directo solo marca la solicitud — el envío real del RC de baja / Comunicación
 // de Baja lo procesa el job nocturno `facturacion-anulaciones`.
 

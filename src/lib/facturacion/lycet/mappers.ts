@@ -48,11 +48,50 @@ export interface Totales {
 // ── Unidad interna → código SUNAT (catálogo 03) ───────────────────────────────
 function unidadSunat(unidad: string): string {
   const mapa: Record<string, string> = {
-    niu: 'NIU', und: 'NIU', unidad: 'NIU', unidades: 'NIU',
-    kg: 'KGM', kgm: 'KGM', kilo: 'KGM',
-    l: 'LTR', lt: 'LTR', litro: 'LTR',
-    m: 'MTR', metro: 'MTR',
-    caja: 'BX', saco: 'SAC', bolsa: 'BG',
+    // Unidad genérica
+    'unid': 'NIU', 'unidad': 'NIU', 'unidades': 'NIU',
+    'und': 'NIU', 'u': 'NIU', 'niu': 'NIU',
+    'pza': 'NIU', 'pieza': 'NIU', 'piezas': 'NIU',
+    'item': 'NIU', 'items': 'NIU',
+    // Peso
+    'kg': 'KGM', 'kgm': 'KGM', 'kilo': 'KGM', 'kilos': 'KGM',
+    'kilogramo': 'KGM', 'kilogramos': 'KGM',
+    'g': 'GRM', 'gr': 'GRM', 'gramo': 'GRM', 'gramos': 'GRM',
+    'tn': 'TNE', 'ton': 'TNE', 'tonelada': 'TNE', 'toneladas': 'TNE',
+    'lb': 'LBR', 'libra': 'LBR', 'libras': 'LBR',
+    // Longitud
+    'm': 'MTR', 'mt': 'MTR', 'mtr': 'MTR', 'metro': 'MTR', 'metros': 'MTR',
+    'cm': 'CMT', 'centimetro': 'CMT', 'centimetros': 'CMT',
+    'mm': 'MMT', 'milimetro': 'MMT', 'milimetros': 'MMT',
+    'pie': 'FOT', 'pies': 'FOT', 'pulg': 'INH', 'pulgada': 'INH',
+    // Área / Volumen
+    'm2': 'MTK', 'metro2': 'MTK', 'metro cuadrado': 'MTK',
+    'm3': 'MTQ', 'metro3': 'MTQ', 'metro cubico': 'MTQ',
+    // Líquido
+    'l': 'LTR', 'lt': 'LTR', 'ltr': 'LTR', 'litro': 'LTR', 'litros': 'LTR',
+    'ml': 'MLT', 'mililitro': 'MLT', 'mililitros': 'MLT',
+    'galon': 'GLL', 'galón': 'GLL', 'galones': 'GLL',
+    // Empaque
+    'caja': 'BX',  'cajas': 'BX',
+    'bolsa': 'BG',  'bolsas': 'BG',
+    'saco': 'SAC', 'sacos': 'SAC',
+    'rollo': 'ROL', 'rollos': 'ROL',
+    'par': 'PR',   'pares': 'PR',
+    'docena': 'DZN', 'docenas': 'DZN',
+    'paquete': 'PK',  'paquetes': 'PK',
+    'juego': 'SET', 'juegos': 'SET',
+    'kit': 'SET',
+    'plancha': 'NIU', 'planchas': 'NIU',
+    'varilla': 'NIU', 'varillas': 'NIU',
+    'balde': 'NIU', 'baldes': 'NIU',
+    'cilindro': 'NIU', 'cilindros': 'NIU',
+    'bidon': 'NIU', 'bidones': 'NIU',
+    'tubo': 'NIU', 'tubos': 'NIU',
+    'bollon': 'NIU', 'bollones': 'NIU',
+    // Servicio / Tiempo
+    'serv': 'ZZ', 'servicio': 'ZZ', 'servicios': 'ZZ',
+    'hr': 'HUR', 'hora': 'HUR', 'horas': 'HUR',
+    'dia': 'DAY', 'días': 'DAY', 'dias': 'DAY',
   }
   return mapa[(unidad ?? '').trim().toLowerCase()] ?? 'NIU'
 }

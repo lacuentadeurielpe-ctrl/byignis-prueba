@@ -35,6 +35,7 @@ import {
 } from '@/lib/credits'
 import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import { resolverProveedor } from '@/lib/facturacion/resolver'
+import { tieneFacturacionActiva } from '@/lib/facturacion/lycet/credenciales'
 import { geocodificarDireccion } from '@/lib/delivery/geocoding'
 import { calcularETA } from '@/lib/delivery/eta'
 import { crearEntrega } from '@/lib/delivery/assignment'
@@ -194,7 +195,6 @@ export async function handleIncomingMessage({
 
   // FASE 3: Integraciones conectadas — controla qué tools con requiereIntegracion están activas
   const integracionesConectadas: string[] = []
-  if (ferreteria.nubefact_token_enc && ferreteria.nubefact_ruta)          integracionesConectadas.push('nubefact')
   if (ferreteria.telegram_bot_token  && ferreteria.telegram_chat_id)      integracionesConectadas.push('telegram')
   if ((ferreteria as any).resend_api_key && (ferreteria as any).resend_from_email) integracionesConectadas.push('resend')
 
@@ -1157,7 +1157,7 @@ export async function handleIncomingMessage({
     case 'solicitar_comprobante': {
       const admin = createAdminClient()
       const tipoRucTenant = (ferreteria as any).tipo_ruc ?? 'sin_ruc'
-      const nubefactConfigurado = !!(ferreteria as any).nubefact_ruta && !!(ferreteria as any).nubefact_token_enc
+      const facturacionConfigurada = await tieneFacturacionActiva(admin, ferreteria.id)
 
       // ── F2: Si el cliente proveyó su RUC para factura, validar y guardar ─
       // Solo aplica para tenants ruc20 (que pueden emitir facturas)
@@ -1264,8 +1264,8 @@ export async function handleIncomingMessage({
         break
       }
 
-      // ── Caso 2: pagado pero sin Nubefact o sin_ruc → nota de venta ────────
-      if (!nubefactConfigurado || tipoRucTenant === 'sin_ruc') {
+      // ── Caso 2: pagado pero sin facturación electrónica o sin_ruc → nota de venta ──
+      if (!facturacionConfigurada || tipoRucTenant === 'sin_ruc') {
         const resultadoNV = await generarYEnviarComprobante({
           pedidoId:     pedidoTarget.id,
           ferreteriaId: ferreteria.id,
@@ -1283,8 +1283,7 @@ export async function handleIncomingMessage({
       }
 
       // ── Caso 3: pagado → emitir comprobante con el proveedor del tenant ────
-      // El proveedor (Nubefact o SUNAT Directo) se resuelve más abajo; cada
-      // adapter carga sus propias credenciales y devuelve error si faltan.
+      // El adapter carga sus propias credenciales y devuelve error si faltan.
 
       // Si pide factura, verificar que tengamos RUC del cliente
       if (pidioFactura) {
@@ -1326,7 +1325,7 @@ export async function handleIncomingMessage({
           } else if (resultFact.tokenInvalido) {
             mensajeFinal = 'Hubo un problema con la emisión electrónica. El encargado te enviará el comprobante directamente 🙏'
           } else {
-            console.error(`[Bot F6] Error Nubefact factura: ${resultFact.error}`)
+            console.error(`[Bot F6] Error emitiendo factura: ${resultFact.error}`)
             mensajeFinal = `Hubo un inconveniente al generar la factura (${resultFact.error ?? 'error desconocido'}). El encargado te la envía en breve 🙏`
           }
           break
@@ -1354,14 +1353,14 @@ export async function handleIncomingMessage({
           caption:  `Boleta ${resultBol.numeroCompleto} — Pedido ${pedidoTarget.numero_pedido}`,
         })
       } else if (resultBol.tokenInvalido) {
-        // Token Nubefact inválido — fallback a nota de venta
+        // Credenciales de facturación inválidas — fallback a nota de venta
         const resultNV = await generarYEnviarComprobante({ pedidoId: pedidoTarget.id, ferreteriaId: ferreteria.id, sender })
         mensajeFinal = resultNV.ok
           ? `🧾 Tu *nota de venta ${resultNV.numero_comprobante}* del pedido *${pedidoTarget.numero_pedido}*. (La boleta electrónica está temporalmente no disponible, el encargado te la envía 🙏)`
           : 'Tuve un problema generando el comprobante. El encargado te lo enviará directamente 🙏'
       } else {
-        // Error de Nubefact (ej: serie incorrecta, SUNAT caída) — no reintentar, avisar
-        console.error(`[Bot F6] Error Nubefact boleta: ${resultBol.error}`)
+        // Error de emisión (ej: serie incorrecta, SUNAT caída) — no reintentar, avisar
+        console.error(`[Bot F6] Error emitiendo boleta: ${resultBol.error}`)
         mensajeFinal = `Tuve un inconveniente al emitir la boleta electrónica. El encargado te la enviará directamente 🙏`
       }
       break

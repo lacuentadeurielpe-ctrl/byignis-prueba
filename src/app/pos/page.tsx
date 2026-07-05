@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import ClientPOS from './ClientPOS'
 import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
+import { tieneFacturacionActiva } from '@/lib/facturacion/lycet/credenciales'
 
 export const metadata = {
   title: 'Caja POS | Uintegrus'
@@ -17,18 +18,14 @@ export default async function POSPage() {
   const catalogRepo = new CatalogRepository(supabase)
   const facturacionRepo = new FacturacionRepository(supabase)
 
-  const [productos, ferreteria, facturacionData] = await Promise.all([
+  // Misma regla que Ventas: hay facturación electrónica si el negocio tiene
+  // credenciales SUNAT activas. La emisión resuelve el adapter automáticamente
+  // (/api/comprobantes/emitir → resolverProveedor).
+  const [productos, ferreteria, facturacionActiva] = await Promise.all([
     catalogRepo.listarProductosActivos(session.ferreteriaId),
     facturacionRepo.obtenerFerreteriaInfo(session.ferreteriaId),
-    facturacionRepo.obtenerDatosFerreteriaDashboard(session.ferreteriaId),
+    tieneFacturacionActiva(supabase, session.ferreteriaId),
   ])
-
-  // Misma regla que Ventas: hay proveedor de facturación disponible si Nubefact
-  // tiene token O el negocio eligió SUNAT Directo. La emisión resuelve el
-  // proveedor activo automáticamente (/api/comprobantes/emitir → resolverProveedor).
-  const facturacionActiva =
-    !!facturacionData?.nubefact_token_enc ||
-    facturacionData?.proveedor_facturacion === 'sunat_directo'
 
   return (
     <ClientPOS

@@ -1,6 +1,6 @@
 /**
  * Unidades de medida aceptadas por SUNAT para comprobantes electrónicos.
- * El `code` es el valor que se guarda en BD y se envía a Nubefact.
+ * El `code` es el valor que se guarda en BD y se envía a SUNAT (catálogo 03).
  * El `label` es lo que ve el usuario en el dashboard y el bot.
  *
  * Fuente: Tabla 6 del Catálogo de Bienes y Servicios SUNAT (UBL 2.1)

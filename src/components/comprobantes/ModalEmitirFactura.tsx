@@ -86,10 +86,10 @@ export default function ModalEmitirFactura({ pedido, clienteRuc, clienteRazonSoc
       const d = await res.json()
       if (!res.ok) {
         if (d.tokenInvalido) {
-          setError('Token Nubefact inválido. Ve a Configuración → Facturación para reconfigurarlo.')
+          setError('Credenciales SUNAT no configuradas o inválidas. Ve a Configuración → Integraciones → SUNAT Directo.')
         } else if (d.error?.toLowerCase().includes('serie')) {
           setError(
-            `${d.error} → Ve a Configuración → Facturación y corrige la "Serie Facturas Electrónicas" para que coincida con la serie registrada en tu cuenta Nubefact.`
+            `${d.error} → Ve a Configuración → Facturación y corrige la "Serie Facturas Electrónicas".`
           )
         } else {
           setError(d.error ?? 'Error al emitir la factura')

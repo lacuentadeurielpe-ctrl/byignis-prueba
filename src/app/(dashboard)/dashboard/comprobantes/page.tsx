@@ -15,9 +15,8 @@ export default async function ComprobantesPage() {
   const supabase = await createClient()
   const facturacionRepo = new FacturacionRepository(supabase)
 
-  const [comprobantes, ferreteriaData, credSunat] = await Promise.all([
+  const [comprobantes, credSunat] = await Promise.all([
     facturacionRepo.obtenerComprobantesDashboard(session.ferreteriaId),
-    facturacionRepo.obtenerConfiguracionFacturacion(session.ferreteriaId),
     supabase
       .from('sunat_credenciales')
       .select('cert_vence_at')
@@ -45,7 +44,7 @@ export default async function ComprobantesPage() {
 
       <ComprobantesTable
         comprobantes={comprobantes ?? []}
-        nubefactConfigurado={!!ferreteriaData?.nubefact_token_enc}
+        facturacionConfigurada={!!credSunat}
       />
     </div>
   )

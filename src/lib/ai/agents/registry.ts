@@ -7,7 +7,6 @@ export type IntegracionTipo =
   | 'resend'
   | 'drive'
   | 'calendar'
-  | 'nubefact'
   | 'mercadopago'
   | 'google'      // OAuth único que cubre gmail + calendar + drive
   | 'ycloud'      // para herramientas que usen la API WhatsApp directamente

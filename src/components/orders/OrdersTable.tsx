@@ -133,7 +133,7 @@ function estaEnRango(fecha: string, rango: string): boolean {
   return true
 }
 
-export default function OrdersTable({ pedidos: inicial, productos = [], zonas = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, nubefactConfigurado = false, tieneRuc = false }: {
+export default function OrdersTable({ pedidos: inicial, productos = [], zonas = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, facturacionConfigurada = false, tieneRuc = false }: {
   pedidos: Pedido[]
   productos?: Producto[]
   zonas?: Zona[]
@@ -141,7 +141,7 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
   rol?: Rol
   repartidores?: Repartidor[]
   permisos?: Partial<PermisoMap>
-  nubefactConfigurado?: boolean
+  facturacionConfigurada?: boolean
   tieneRuc?: boolean
 }) {
   const router = useRouter()
@@ -683,7 +683,7 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                           </button>
 
                           {/* 2. Ver Boleta */}
-                          {nubefactConfigurado && (
+                          {facturacionConfigurada && (
                             boletaEmitida ? (
                               <button
                                 onClick={() => window.open(boletaEmitida.pdfUrl || `/orders/print/${pedido.id}?comprobanteId=${boletaEmitida.comprobanteId}`, '_blank')}
@@ -706,7 +706,7 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                           )}
 
                           {/* 3. Ver Factura */}
-                          {nubefactConfigurado && tieneRuc && (
+                          {facturacionConfigurada && tieneRuc && (
                             facturaEmitida ? (
                               <button
                                 onClick={() => window.open(facturaEmitida.pdfUrl || `/orders/print/${pedido.id}?comprobanteId=${facturaEmitida.comprobanteId}`, '_blank')}

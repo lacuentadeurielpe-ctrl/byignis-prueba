@@ -38,7 +38,7 @@ export async function GET() {
 
   return NextResponse.json({
     configurado: !!data,
-    proveedor_activo: ferr?.proveedor_facturacion ?? 'nubefact',
+    proveedor_activo: ferr?.proveedor_facturacion ?? 'sunat_directo',
     credenciales: data ? { ...credsSinEnc, sol_usuario: solUsuario } : null,
     // Datos pre-existentes del negocio para pre-llenar cuando no hay credenciales SUNAT aún
     negocio_ruc:          ferr?.ruc ?? null,
@@ -214,11 +214,8 @@ export async function DELETE() {
     .delete()
     .eq('ferreteria_id', session.ferreteriaId)
 
-  // Revertir proveedor a nubefact
-  await supabase
-    .from('ferreterias')
-    .update({ proveedor_facturacion: 'nubefact' })
-    .eq('id', session.ferreteriaId)
+  // SUNAT Directo es el único proveedor: desconectar solo borra credenciales.
+  // El negocio queda sin facturación electrónica hasta volver a configurarlas.
 
   return NextResponse.json({ ok: true })
 }

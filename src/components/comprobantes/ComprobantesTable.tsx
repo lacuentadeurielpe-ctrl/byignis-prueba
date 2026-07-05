@@ -64,7 +64,7 @@ function BadgeSunat({ comp }: { comp: ComprobanteExt }) {
     )
   }
 
-  // Nubefact / legado — usar campo estado
+  // Legado — usar campo estado
   switch (comp.estado) {
     case 'emitido':
       return (
@@ -156,7 +156,7 @@ const labelTipo = (tipo: string) => {
 }
 
 // Si tiene estado_sunat (Lycet), el PDF se pide on-demand a nuestro route.
-// Si tiene pdf_url (Nubefact), usamos la URL directa.
+// Si tiene pdf_url externa, usamos la URL directa.
 // Si solo está 'emitido' sin estado_sunat (pre-Lycet), igual ofrecemos el route.
 function pdfHref(comp: ComprobanteExt): string | null {
   const esSunatEmitido = comp.estado_sunat === 'aceptado' || comp.estado_sunat === 'aceptado_obs'
@@ -175,10 +175,10 @@ function puedeAnular(comp: ComprobanteExt): boolean {
 
 export default function ComprobantesTable({
   comprobantes,
-  nubefactConfigurado,
+  facturacionConfigurada,
 }: {
   comprobantes: ComprobanteExt[]
-  nubefactConfigurado: boolean
+  facturacionConfigurada: boolean
 }) {
   const [busqueda, setBusqueda] = useState('')
   const [ncTarget, setNcTarget] = useState<ComprobanteExt | null>(null)

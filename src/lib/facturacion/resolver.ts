@@ -1,26 +1,14 @@
 // Resuelve el proveedor de facturación activo para una ferretería.
-// Leer proveedor_facturacion de ferreterias y devolver el adapter correcto.
+// Desde la migración 102, SUNAT Directo es el único proveedor del sistema.
+// Se mantiene la firma async (supabase, ferreteriaId) para que los llamadores
+// no cambien y para poder reintroducir multi-proveedor sin tocarlos.
 
-import { NubefactAdapter }      from './nubefact-adapter'
-import { SunatDirectoAdapter }  from './sunat-directo-adapter'
+import { SunatDirectoAdapter } from './sunat-directo-adapter'
 import type { ProveedorFacturacion } from './types'
 
 export async function resolverProveedor(
-  supabase: any,
-  ferreteriaId: string
+  _supabase: any,
+  _ferreteriaId: string
 ): Promise<ProveedorFacturacion> {
-  const { data } = await supabase
-    .from('ferreterias')
-    .select('proveedor_facturacion')
-    .eq('id', ferreteriaId)
-    .single()
-
-  const proveedor = data?.proveedor_facturacion ?? 'nubefact'
-
-  if (proveedor === 'sunat_directo') {
-    return new SunatDirectoAdapter()
-  }
-
-  // Fallback seguro: Nubefact (que devuelve error descriptivo si no está configurado)
-  return new NubefactAdapter()
+  return new SunatDirectoAdapter()
 }

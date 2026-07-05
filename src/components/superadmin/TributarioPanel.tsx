@@ -4,13 +4,13 @@ import { useState, useCallback } from 'react'
 import { AlertTriangle, FileText, BookOpen, BarChart3, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 
 interface Stats {
-  comprobantes_mes:     number
-  igv_mes:              number
-  ventas_mes:           number
-  tenants_con_nubefact: number
-  tenants_sin_nubefact: number
-  libros_generados_mes: number
-  libros_cerrados_mes:  number
+  comprobantes_mes:        number
+  igv_mes:                 number
+  ventas_mes:              number
+  tenants_con_facturacion: number
+  tenants_sin_facturacion: number
+  libros_generados_mes:    number
+  libros_cerrados_mes:     number
 }
 
 interface Comprobante {
@@ -34,7 +34,7 @@ interface LibroRow {
   ferreteria_id:    string
   ferreteria_nombre: string
   ferreteria_ruc:   string
-  tiene_nubefact:   boolean
+  tiene_facturacion: boolean
   libro: {
     id:              string
     estado:          string
@@ -70,13 +70,13 @@ function TabKPIs({ stats }: { stats: Stats }) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Tenants con Nubefact</p>
-          <p className="text-3xl font-bold text-green-400">{stats.tenants_con_nubefact}</p>
-          <p className="text-xs text-gray-500 mt-1">Facturación electrónica activa</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Tenants con facturación</p>
+          <p className="text-3xl font-bold text-green-400">{stats.tenants_con_facturacion}</p>
+          <p className="text-xs text-gray-500 mt-1">Facturación electrónica activa (SUNAT Directo)</p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-          <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Tenants sin Nubefact</p>
-          <p className="text-3xl font-bold text-yellow-400">{stats.tenants_sin_nubefact}</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Tenants sin facturación</p>
+          <p className="text-3xl font-bold text-yellow-400">{stats.tenants_sin_facturacion}</p>
           <p className="text-xs text-gray-500 mt-1">Sin facturación electrónica</p>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
@@ -398,7 +398,7 @@ function TabLibros() {
                 <tr className="bg-gray-800 text-gray-300 text-left text-xs uppercase tracking-wide">
                   <th className="px-4 py-3 font-medium">Negocio</th>
                   <th className="px-4 py-3 font-medium">RUC</th>
-                  <th className="px-4 py-3 font-medium">Nubefact</th>
+                  <th className="px-4 py-3 font-medium">Facturación</th>
                   <th className="px-4 py-3 font-medium text-right">Registros</th>
                   <th className="px-4 py-3 font-medium text-right">Total ventas</th>
                   <th className="px-4 py-3 font-medium">Estado libro</th>
@@ -413,19 +413,19 @@ function TabLibros() {
                   </tr>
                 ) : (
                   libros.map((row) => {
-                    const alertaNubefact = row.tiene_nubefact && !row.libro
+                    const alertaFacturacion = row.tiene_facturacion && !row.libro
                     return (
                       <tr
                         key={row.ferreteria_id}
                         className={`transition-colors ${
-                          alertaNubefact
+                          alertaFacturacion
                             ? 'bg-red-950/20 hover:bg-red-950/30'
                             : 'bg-gray-900 hover:bg-gray-800'
                         }`}
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            {alertaNubefact && (
+                            {alertaFacturacion && (
                               <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
                             )}
                             <span className="text-white text-xs">{row.ferreteria_nombre}</span>
@@ -433,7 +433,7 @@ function TabLibros() {
                         </td>
                         <td className="px-4 py-3 text-gray-400 font-mono text-xs">{row.ferreteria_ruc}</td>
                         <td className="px-4 py-3">
-                          {row.tiene_nubefact ? (
+                          {row.tiene_facturacion ? (
                             <span className="text-xs border border-green-500 text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
                               Activo
                             </span>
