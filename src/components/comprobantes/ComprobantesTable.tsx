@@ -7,6 +7,7 @@ import {
   RefreshCcw, Receipt, Clock, CheckCheck, XCircle, Ban,
 } from 'lucide-react'
 import ModalNotaCredito from './ModalNotaCredito'
+import ModalNotaDebito from './ModalNotaDebito'
 import ModalAnularComprobante from './ModalAnularComprobante'
 import type { Comprobante as ComprobanteDB } from '@/types/database'
 import { toast } from 'sonner'
@@ -182,6 +183,7 @@ export default function ComprobantesTable({
 }) {
   const [busqueda, setBusqueda] = useState('')
   const [ncTarget, setNcTarget] = useState<ComprobanteExt | null>(null)
+  const [ndTarget, setNdTarget] = useState<ComprobanteExt | null>(null)
   const [anularTarget, setAnularTarget] = useState<ComprobanteExt | null>(null)
 
   const filtrados = useMemo(() => {
@@ -321,6 +323,14 @@ export default function ComprobantesTable({
                             Nota de Crédito
                           </button>
                         )}
+                        {puedeNc && (
+                          <button
+                            onClick={() => setNdTarget(comp)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 ml-2 bg-white border border-amber-200 text-amber-600 hover:bg-amber-50 rounded-lg text-xs font-bold transition shadow-sm"
+                          >
+                            Nota de Débito
+                          </button>
+                        )}
                         {puedeAnular(comp) && (
                           <button
                             onClick={() => setAnularTarget(comp)}
@@ -356,6 +366,18 @@ export default function ComprobantesTable({
             onEmitida={(res) => {
               setNcTarget(null)
               toast.success(`Nota de crédito ${res.numeroCompleto} emitida`)
+              setTimeout(() => window.location.reload(), 1500)
+            }}
+          />
+        )}
+
+        {ndTarget && (
+          <ModalNotaDebito
+            comprobanteOriginal={{ id: ndTarget.id, numeroCompleto: ndTarget.numero_completo || '', tipo: ndTarget.tipo || '' }}
+            onCerrar={() => setNdTarget(null)}
+            onEmitida={(res) => {
+              setNdTarget(null)
+              toast.success(`Nota de débito ${res.numeroCompleto} emitida`)
               setTimeout(() => window.location.reload(), 1500)
             }}
           />

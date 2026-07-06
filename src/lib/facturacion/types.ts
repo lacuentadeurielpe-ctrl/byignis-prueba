@@ -41,10 +41,26 @@ export interface OpcionesNotaCredito {
   supabase:                any
   comprobanteReferenciaId: string
   ferreteriaId:            string
-  motivoCodigo:            string
+  motivoCodigo:            string   // catálogo 09 — ver catalogos-sunat.ts
   motivoDescripcion:       string
   emitidoPor:              'dashboard' | 'bot'
-  itemsDevueltos?:         { producto_id: string | null; cantidad: number }[]
+  /** Motivos de devolución (06/07): qué ítems del pedido original se devuelven,
+   *  identificados por items_pedido.id (NO producto_id — dos líneas del mismo
+   *  producto, o un ítem sin producto_id, colisionarían). */
+  itemsDevueltos?:         { itemId: string; cantidad: number }[]
+  /** Motivos de ajuste (04/05/08/09/10/11/12/13): monto directo, sin tocar
+   *  ítems del pedido ni el stock. */
+  montoAjuste?:            number
+}
+
+export interface OpcionesNotaDebito {
+  supabase:                any
+  comprobanteReferenciaId: string
+  ferreteriaId:            string
+  motivoCodigo:            string   // catálogo 10 — ver catalogos-sunat.ts
+  motivoDescripcion:       string
+  montoAjuste:             number   // ND siempre es un cargo adicional directo
+  emitidoPor:              'dashboard' | 'bot'
 }
 
 export interface OpcionesReintentoEnvio {
@@ -74,6 +90,7 @@ export interface ProveedorFacturacion {
   emitirBoleta(opts: OpcionesEmisionBoleta): Promise<ResultadoEmisionUnificado>
   emitirFactura(opts: OpcionesEmisionFactura): Promise<ResultadoEmisionUnificado>
   emitirNotaCredito(opts: OpcionesNotaCredito): Promise<ResultadoEmisionUnificado>
+  emitirNotaDebito(opts: OpcionesNotaDebito): Promise<ResultadoEmisionUnificado>
 
   /**
    * Reintenta el envío de un comprobante que quedó en `error_reintentable`

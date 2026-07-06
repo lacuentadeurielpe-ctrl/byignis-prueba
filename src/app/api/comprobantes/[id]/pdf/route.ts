@@ -7,8 +7,9 @@ import React from 'react'
 import { getPlantillaBoleta } from '@/components/pdf/boleta'
 import { getPlantillaFactura } from '@/components/pdf/factura'
 import { getPlantillaNotaVenta } from '@/components/pdf/nota-venta'
-import { getPlantillaFactura as getPlantillaNotaCredito } from '@/components/pdf/factura' // Reuse factura for nota_credito by default
+import { getPlantillaNota } from '@/components/pdf/nota-credito'
 import { PropsPDF } from '@/components/pdf/shared/types'
+import { PropsNota } from '@/components/pdf/nota-credito/types'
 
 export async function GET(
   request: Request,
@@ -61,11 +62,29 @@ export async function GET(
   }
 
   // 4. Preparar data
-  let rawItems = comprobante.pedidos?.items_pedido || []
+  // NC/ND: el PDF debe reflejar EXACTAMENTE lo que se envió a SUNAT (el snapshot
+  // `detalle_emision.itemsLycet`), no los ítems del pedido completo — una NC de
+  // "devolución parcial" o "descuento global" no tiene los mismos ítems que el
+  // pedido original. Solo se cae al pedido completo si es un comprobante viejo
+  // emitido antes de que existiera el snapshot (detalle_emision null).
+  const esNota = comprobante.tipo === 'nota_credito' || comprobante.tipo === 'nota_debito'
+  const itemsSnapshot = comprobante.detalle_emision?.itemsLycet as
+    { descripcion: string; cantidad: number; precioUnitario: number }[] | undefined
 
-  // Si es boleta o factura, filtrar para que solo vayan los productos facturables
-  if (comprobante.tipo === 'boleta' || comprobante.tipo === 'factura') {
-    rawItems = rawItems.filter((i: any) => i.productos?.facturable !== false)
+  let rawItems: any[]
+  if (esNota && itemsSnapshot?.length) {
+    rawItems = itemsSnapshot.map((i) => ({
+      cantidad: i.cantidad,
+      nombre_producto: i.descripcion,
+      precio_unitario: i.precioUnitario,
+      subtotal: i.precioUnitario * i.cantidad,
+    }))
+  } else {
+    rawItems = comprobante.pedidos?.items_pedido || []
+    // Si es boleta o factura, filtrar para que solo vayan los productos facturables
+    if (comprobante.tipo === 'boleta' || comprobante.tipo === 'factura') {
+      rawItems = rawItems.filter((i: any) => i.productos?.facturable !== false)
+    }
   }
 
   const items = rawItems.map((i: any) => ({
@@ -100,29 +119,33 @@ export async function GET(
     secundario: ferreteria.pdf_color_secundario || '#e67e22',
   }
 
-  const propsPDF: PropsPDF = {
-    emisor,
-    comprobante: comprobanteData,
-    items,
-    tema
-  }
-
   // 5. Elegir plantilla según tipo de comprobante
   const tipo = comprobante.tipo || ''
   let ComponentePDF: any
+  let props: PropsPDF | PropsNota
 
   if (tipo === 'boleta') {
     ComponentePDF = getPlantillaBoleta(ferreteria.pdf_formato_boleta || 'clasico')
+    props = { emisor, comprobante: comprobanteData, items, tema }
   } else if (tipo === 'factura') {
     ComponentePDF = getPlantillaFactura(ferreteria.pdf_formato_factura || 'clasico')
-  } else if (tipo === 'nota_credito') {
-    ComponentePDF = getPlantillaNotaCredito('clasico')
+    props = { emisor, comprobante: comprobanteData, items, tema }
+  } else if (esNota) {
+    ComponentePDF = getPlantillaNota()
+    const snap = comprobante.detalle_emision
+    props = {
+      emisor, comprobante: comprobanteData, items, tema,
+      tipoNota:          tipo === 'nota_debito' ? 'debito' : 'credito',
+      documentoAfectado: snap?.numDocAfectado ?? '—',
+      motivoDescripcion: snap?.desMotivo ?? '',
+    } satisfies PropsNota
   } else {
     // nota_venta, proforma o vacio
     ComponentePDF = getPlantillaNotaVenta(ferreteria.pdf_formato_nota_venta || 'ticket')
+    props = { emisor, comprobante: comprobanteData, items, tema }
   }
 
-  const component = React.createElement(ComponentePDF, propsPDF)
+  const component = React.createElement(ComponentePDF, props)
 
   // 6. Renderizar PDF
   try {
@@ -146,7 +169,7 @@ export async function GET(
     return new NextResponse(readableStream, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="${propsPDF.comprobante.numero_completo}.pdf"`
+        'Content-Disposition': `inline; filename="${comprobanteData.numero_completo}.pdf"`
       }
     })
   } catch (err) {

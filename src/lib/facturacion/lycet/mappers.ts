@@ -195,11 +195,12 @@ export function mapearInvoice(tipoDoc: '01' | '03', p: MapearParams): { doc: any
   return { doc, totales }
 }
 
-// ── Nota de Crédito (07) ──────────────────────────────────────────────────────
+// ── Nota de Crédito (07) / Nota de Débito (08) ────────────────────────────────
 export interface MapearNotaParams extends MapearParams {
+  tipoNota:        '07' | '08'  // 07 = Nota de Crédito, 08 = Nota de Débito
   tipoDocAfectado: string   // 01 factura, 03 boleta
   numDocAfectado:  string   // ej: B001-14
-  codMotivo:       string   // catálogo 09
+  codMotivo:       string   // catálogo 09 (NC) o 10 (ND)
   desMotivo:       string
 }
 
@@ -208,7 +209,7 @@ export function mapearNota(p: MapearNotaParams): { doc: any; totales: Totales } 
 
   const doc = {
     ublVersion:      '2.1',
-    tipoDoc:         '07',
+    tipoDoc:         p.tipoNota,
     serie:           p.serie,
     correlativo:     String(p.correlativo),
     fechaEmision:    fechaEmisionLima(),

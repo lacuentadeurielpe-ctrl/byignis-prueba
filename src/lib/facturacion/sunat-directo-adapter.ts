@@ -29,11 +29,13 @@ import type {
   OpcionesEmisionBoleta,
   OpcionesEmisionFactura,
   OpcionesNotaCredito,
+  OpcionesNotaDebito,
   OpcionesReintentoEnvio,
   OpcionesSolicitarAnulacion,
   ResultadoAnulacion,
   ResultadoEmisionUnificado,
 } from './types'
+import { buscarMotivo, CATALOGO_09_NOTA_CREDITO } from './catalogos-sunat'
 
 async function mapearItemsDePedido(supabase: any, pedidoId: string): Promise<any[]> {
   const { data } = await supabase
@@ -383,6 +385,11 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       .single()
 
     if (!comp) return { ok: false, error: 'Comprobante no encontrado' }
+
+    if (comp.tipo === 'nota_credito' || comp.tipo === 'nota_debito') {
+      return this.reintentarNota(opts, comp)
+    }
+
     if (!comp.pedido_id) return { ok: false, error: 'Comprobante sin pedido asociado — no se puede reintentar' }
     if (comp.tipo !== 'boleta' && comp.tipo !== 'factura') {
       return { ok: false, error: `Reintento no soportado para tipo "${comp.tipo}"` }
@@ -485,6 +492,86 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     return { ok: false, error: resultado.error ?? 'Error de infraestructura al reintentar' }
   }
 
+  // ── Reintento de NC/ND — reconstruye desde el snapshot `detalle_emision`,
+  // sin volver a derivar ítems del pedido (que pudo cambiar entretanto).
+  private async reintentarNota(opts: OpcionesReintentoEnvio, comp: any): Promise<ResultadoEmisionUnificado> {
+    const snap = comp.detalle_emision
+    if (!snap) {
+      return { ok: false, error: 'No hay snapshot de emisión guardado — no se puede reintentar automáticamente. Emite una nueva.' }
+    }
+
+    const creds = await cargarCredencialesSunat(opts.supabase, opts.ferreteriaId)
+    if (!creds) return { ok: false, error: 'SUNAT Directo no configurado o inactivo.' }
+
+    let lycetCfg: LycetConfig
+    try { lycetCfg = getLycetConfig() }
+    catch (e) { return { ok: false, error: (e as Error).message } }
+
+    const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
+    if (!ferreteria) return { ok: false, error: 'Negocio no encontrado' }
+
+    const ensureRes = await registrarEmpresaEnLycet(lycetCfg, creds)
+    if (!ensureRes.ok) {
+      return { ok: false, error: `Error configurando el servicio de facturación: ${ensureRes.error}` }
+    }
+
+    const { doc, totales } = mapearNota({
+      serie: comp.serie, correlativo: comp.numero,
+      emisor: buildEmisor(ferreteria, creds),
+      cliente: snap.cliente,
+      items: snap.itemsLycet,
+      igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
+      tipoNota: snap.tipoNota,
+      tipoDocAfectado: snap.tipoDocAfectado,
+      numDocAfectado: snap.numDocAfectado,
+      codMotivo: snap.codMotivo, desMotivo: snap.desMotivo,
+    })
+
+    const resultado = await enviarNota(lycetCfg, doc)
+    const numeroCompleto = `${comp.serie}-${padCorrelativo(comp.numero)}`
+
+    await escribirLog(
+      opts.supabase, opts.ferreteriaId, comp.id,
+      'envio', 'note/send (reintento)', resultado,
+      { serie: comp.serie, correlativo: comp.numero, ruc: creds.ruc, tipoDoc: snap.tipoNota },
+    )
+
+    if (resultado.aceptado) {
+      await opts.supabase.from('comprobantes').update({
+        estado: 'emitido', estado_sunat: estadoSunat(resultado),
+        sunat_cdr_codigo: resultado.cdrCodigo ?? null,
+        sunat_cdr_descripcion: resultado.cdrDescripcion ?? null,
+        cdr_notas: resultado.cdrNotas ?? null,
+        hash_cpe: resultado.hash ?? null,
+        subtotal: totales.mtoOperGravadas, igv: totales.mtoIGV, total: totales.mtoImpVenta,
+        intentos_envio: 0, proximo_intento_at: null, ultimo_error_sunat: null, requiere_atencion: false,
+      }).eq('id', comp.id)
+      return { ok: true, comprobanteId: comp.id, numeroCompleto }
+    }
+
+    if (resultado.ok) {
+      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, snap.tipoNota, comp.serie, comp.numero)
+      await opts.supabase.from('comprobantes').update({
+        estado: 'error', estado_sunat: 'rechazado',
+        sunat_cdr_codigo: resultado.cdrCodigo ?? null,
+        sunat_cdr_descripcion: resultado.cdrDescripcion ?? null,
+        ultimo_error_sunat: resultado.cdrDescripcion ?? resultado.error ?? null,
+        proximo_intento_at: null, requiere_atencion: true,
+      }).eq('id', comp.id)
+      return { ok: false, error: resultado.cdrDescripcion ?? `SUNAT rechazó la nota (código ${resultado.cdrCodigo})` }
+    }
+
+    const intentos = (comp.intentos_envio ?? 0) + 1
+    const agotado  = intentos >= MAX_INTENTOS_ENVIO || superoPlazoLegal(comp.fecha_emision)
+    await opts.supabase.from('comprobantes').update({
+      intentos_envio: intentos,
+      proximo_intento_at: agotado ? null : calcularProximoIntento(intentos),
+      ultimo_error_sunat: resultado.error, requiere_atencion: agotado,
+    }).eq('id', comp.id)
+
+    return { ok: false, error: resultado.error ?? 'Error de infraestructura al reintentar' }
+  }
+
   // ── Solicitar anulación (Fase 2) ───────────────────────────────────────────
   // No llama a SUNAT — solo marca la intención. El envío real (RC de baja para
   // boletas, Comunicación de Baja para facturas) lo procesa el job nocturno,
@@ -520,12 +607,8 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
   // ── Nota de Crédito ────────────────────────────────────────────────────────
   async emitirNotaCredito(opts: OpcionesNotaCredito): Promise<ResultadoEmisionUnificado> {
-    const creds = await cargarCredencialesSunat(opts.supabase, opts.ferreteriaId)
-    if (!creds) return { ok: false, error: 'SUNAT Directo no configurado.', tokenInvalido: true }
-
-    let lycetCfg: LycetConfig
-    try { lycetCfg = getLycetConfig() }
-    catch (e) { return { ok: false, error: (e as Error).message } }
+    const motivo = buscarMotivo(CATALOGO_09_NOTA_CREDITO, opts.motivoCodigo)
+    if (!motivo) return { ok: false, error: `Motivo de NC desconocido: "${opts.motivoCodigo}"` }
 
     const { data: ref } = await opts.supabase
       .from('comprobantes')
@@ -538,71 +621,207 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       return { ok: false, error: 'Comprobante original no encontrado o no emitido' }
     }
 
-    const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
-    const isBoleta       = ref.tipo === 'boleta'
-    const tipoDocAfectado = isBoleta ? '03' : '01'
-    const serie           = isBoleta ? 'BC01' : 'FC01'
+    // ── Guard anti-doble-NC ───────────────────────────────────────────────────
+    // Suma las NC ya emitidas contra este comprobante; si junto con la nueva
+    // se pasan del total original, se bloquea (evita devolver/anular de más).
+    const { data: ncPrevias } = await opts.supabase
+      .from('comprobantes')
+      .select('total')
+      .eq('comprobante_referencia_id', ref.id)
+      .eq('tipo', 'nota_credito')
+      .eq('estado', 'emitido')
+    const sumaPrevia = (ncPrevias ?? []).reduce((s: number, c: any) => s + (Number(c.total) || 0), 0)
 
-    const correlativo = await reservarCorrelativo(opts.supabase, opts.ferreteriaId, '07', serie)
-    if (!correlativo) return { ok: false, error: 'Error generando correlativo NC' }
+    const todosLosItems = (ref.pedidos?.items_pedido ?? []) as any[]
 
-    const ensureRes = await registrarEmpresaEnLycet(lycetCfg, creds)
-    if (!ensureRes.ok) {
-      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '07', serie, correlativo)
-      return { ok: false, error: `Error configurando el servicio de facturación: ${ensureRes.error}` }
-    }
-
-    let originalItems = (ref.pedidos?.items_pedido ?? []) as any[]
-    if (opts.itemsDevueltos?.length) {
-      originalItems = originalItems
+    // ── Construir ítems según el comportamiento del motivo (catálogo 09) ─────
+    let itemsParaNota: any[]
+    if (motivo.comportamiento === 'items') {
+      if (!opts.itemsDevueltos?.length) {
+        return { ok: false, error: 'Selecciona al menos un ítem a devolver' }
+      }
+      itemsParaNota = todosLosItems
         .map((oi: any) => {
-          const dev = opts.itemsDevueltos!.find(d => d.producto_id === oi.producto_id)
+          const dev = opts.itemsDevueltos!.find(d => d.itemId === oi.id)
           return dev ? { ...oi, cantidad: dev.cantidad } : null
         })
         .filter(Boolean)
+      if (itemsParaNota.length === 0) {
+        return { ok: false, error: 'Ningún ítem seleccionado coincide con el pedido original' }
+      }
+    } else if (motivo.comportamiento === 'monto_directo') {
+      if (!opts.montoAjuste || opts.montoAjuste <= 0) {
+        return { ok: false, error: 'Ingresa el monto del ajuste' }
+      }
+      itemsParaNota = [{
+        nombre_producto: opts.motivoDescripcion || motivo.descripcion,
+        cantidad:        1,
+        precio_unitario: opts.montoAjuste,
+        unidad:          'NIU',
+        producto_id:     null,
+      }]
+    } else {
+      // documento_completo: todo el comprobante (anulación total)
+      itemsParaNota = todosLosItems
     }
 
+    const itemsLycet = toItemsLycet(itemsParaNota)
+
+    const isBoleta        = ref.tipo === 'boleta'
+    const tipoDocAfectado = isBoleta ? '03' : '01'
+    const numDocAfectado  = `${ref.serie}-${padCorrelativo(ref.numero)}`
     const cliente: ClienteLycet = {
       tipoDoc:   isBoleta ? '1' : '6',
       numDoc:    ref.cliente_ruc_dni || '00000000',
       rznSocial: ref.cliente_nombre  || 'CLIENTES VARIOS',
     }
 
-    const numDocAfectado = `${ref.serie}-${padCorrelativo(ref.numero)}`
-
-    const { doc, totales } = mapearNota({
-      serie, correlativo,
-      emisor:          buildEmisor(ferreteria, creds),
-      cliente,
-      items:           toItemsLycet(originalItems),
-      igvIncluido:     ferreteria?.igv_incluido_en_precios ?? false,
-      tipoDocAfectado,
-      numDocAfectado,
-      codMotivo:       opts.motivoCodigo,
-      desMotivo:       opts.motivoDescripcion,
+    const resultado = await this.construirYEnviarNota({
+      supabase: opts.supabase, ferreteriaId: opts.ferreteriaId,
+      tipoNota: '07', serieBase: isBoleta ? 'BC01' : 'FC01',
+      tipoDocAfectado, numDocAfectado, cliente, itemsLycet,
+      codMotivo: opts.motivoCodigo, desMotivo: opts.motivoDescripcion,
+      pedidoId: ref.pedido_id, referenciaId: ref.id, emitidoPor: opts.emitidoPor,
+      totalMaximo: sumaPrevia > 0 ? Number(ref.total) - sumaPrevia : undefined,
     })
 
-    const resultado = await enviarNota(lycetCfg, doc)
-    const estadoFinal = estadoSunat(resultado)
-    const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
-    const fechaEmision = fechaEmisionHoy()
+    if (!resultado.ok) return resultado
 
-    if (!resultado.aceptado) {
-      await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '07', serie, correlativo)
+    // Devolver el stock de los items devueltos (solo motivos 'items').
+    if (motivo.comportamiento === 'items') {
+      for (const item of itemsParaNota) {
+        if (item.producto_id) {
+          const { error: rpcErr } = await opts.supabase.rpc('restaurar_stock_parcial', {
+            p_producto_id: item.producto_id,
+            p_cantidad:    item.cantidad,
+          })
+          if (rpcErr) console.error('[NotaCredito] Error ajustando stock:', rpcErr)
+        }
+      }
     }
 
-    const { data: comp } = await opts.supabase
+    return resultado
+  }
+
+  // ── Nota de Débito ─────────────────────────────────────────────────────────
+  // Siempre es un cargo adicional directo (intereses, aumento de valor,
+  // penalidad) — no toca ítems del pedido original ni el stock.
+  async emitirNotaDebito(opts: OpcionesNotaDebito): Promise<ResultadoEmisionUnificado> {
+    if (!opts.montoAjuste || opts.montoAjuste <= 0) {
+      return { ok: false, error: 'Ingresa el monto del cargo' }
+    }
+
+    const { data: ref } = await opts.supabase
+      .from('comprobantes')
+      .select('*')
+      .eq('id', opts.comprobanteReferenciaId)
+      .eq('ferreteria_id', opts.ferreteriaId)
+      .single()
+
+    if (!ref || ref.estado !== 'emitido') {
+      return { ok: false, error: 'Comprobante original no encontrado o no emitido' }
+    }
+
+    const isBoleta = ref.tipo === 'boleta'
+    const itemsLycet = toItemsLycet([{
+      nombre_producto: opts.motivoDescripcion,
+      cantidad:        1,
+      precio_unitario: opts.montoAjuste,
+      unidad:          'NIU',
+    }])
+
+    return this.construirYEnviarNota({
+      supabase: opts.supabase, ferreteriaId: opts.ferreteriaId,
+      tipoNota: '08', serieBase: isBoleta ? 'BD01' : 'FD01',
+      tipoDocAfectado: isBoleta ? '03' : '01',
+      numDocAfectado:  `${ref.serie}-${padCorrelativo(ref.numero)}`,
+      cliente: {
+        tipoDoc:   isBoleta ? '1' : '6',
+        numDoc:    ref.cliente_ruc_dni || '00000000',
+        rznSocial: ref.cliente_nombre  || 'CLIENTES VARIOS',
+      },
+      itemsLycet,
+      codMotivo: opts.motivoCodigo, desMotivo: opts.motivoDescripcion,
+      pedidoId: ref.pedido_id, referenciaId: ref.id, emitidoPor: opts.emitidoPor,
+    })
+  }
+
+  // ── Helper compartido NC/ND: reserva correlativo, envía a Lycet y persiste ──
+  // el comprobante + un snapshot (`detalle_emision`) que permite reintentar sin
+  // volver a derivar los ítems del pedido (que pudo cambiar entretanto).
+  private async construirYEnviarNota(p: {
+    supabase: any; ferreteriaId: string
+    tipoNota: '07' | '08'; serieBase: string
+    tipoDocAfectado: string; numDocAfectado: string
+    cliente: ClienteLycet; itemsLycet: ItemLycet[]
+    codMotivo: string; desMotivo: string
+    pedidoId: string | null; referenciaId: string
+    emitidoPor: 'dashboard' | 'bot'
+    totalMaximo?: number   // si se pasa, valida antes de enviar (guard anti-doble-NC)
+  }): Promise<ResultadoEmisionUnificado> {
+    const creds = await cargarCredencialesSunat(p.supabase, p.ferreteriaId)
+    if (!creds) return { ok: false, error: 'SUNAT Directo no configurado.', tokenInvalido: true }
+
+    let lycetCfg: LycetConfig
+    try { lycetCfg = getLycetConfig() }
+    catch (e) { return { ok: false, error: (e as Error).message } }
+
+    const ferreteria = await obtenerFerreteria(p.supabase, p.ferreteriaId)
+    if (!ferreteria) return { ok: false, error: 'Negocio no encontrado' }
+
+    const tipoDocLabel = p.tipoNota === '07' ? 'nota_credito' : 'nota_debito'
+    const correlativo = await reservarCorrelativo(p.supabase, p.ferreteriaId, p.tipoNota, p.serieBase)
+    if (!correlativo) return { ok: false, error: `Error generando correlativo de ${p.tipoNota === '07' ? 'NC' : 'ND'}` }
+
+    const ensureRes = await registrarEmpresaEnLycet(lycetCfg, creds)
+    if (!ensureRes.ok) {
+      await rollbackCorrelativo(p.supabase, p.ferreteriaId, p.tipoNota, p.serieBase, correlativo)
+      return { ok: false, error: `Error configurando el servicio de facturación: ${ensureRes.error}` }
+    }
+
+    const { doc, totales } = mapearNota({
+      serie: p.serieBase, correlativo,
+      emisor: buildEmisor(ferreteria, creds),
+      cliente: p.cliente,
+      items: p.itemsLycet,
+      igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
+      tipoNota: p.tipoNota,
+      tipoDocAfectado: p.tipoDocAfectado,
+      numDocAfectado: p.numDocAfectado,
+      codMotivo: p.codMotivo, desMotivo: p.desMotivo,
+    })
+
+    if (p.totalMaximo !== undefined && totales.mtoImpVenta > p.totalMaximo + 0.01) {
+      await rollbackCorrelativo(p.supabase, p.ferreteriaId, p.tipoNota, p.serieBase, correlativo)
+      return {
+        ok: false,
+        error: `El monto de la nota (${totales.mtoImpVenta.toFixed(2)}) supera lo disponible para devolver/ajustar (${p.totalMaximo.toFixed(2)}). Ya existen notas de crédito previas sobre este comprobante.`,
+      }
+    }
+
+    const resultado = await enviarNota(lycetCfg, doc)
+    const clasif = clasificarResultado(resultado)
+    const numeroCompleto = `${p.serieBase}-${padCorrelativo(correlativo)}`
+    const fechaEmision = fechaEmisionHoy()
+
+    // Solo se libera el correlativo ante un rechazo DEFINITIVO — una falla de
+    // infraestructura mantiene la reserva para que el reintento la reuse.
+    if (!resultado.aceptado && !clasif.reintentable) {
+      await rollbackCorrelativo(p.supabase, p.ferreteriaId, p.tipoNota, p.serieBase, correlativo)
+    }
+
+    const { data: comp } = await p.supabase
       .from('comprobantes')
       .insert({
-        ferreteria_id:             opts.ferreteriaId,
-        pedido_id:                 ref.pedido_id,
-        tipo:                      'nota_credito',
-        serie,
+        ferreteria_id:             p.ferreteriaId,
+        pedido_id:                 p.pedidoId,
+        tipo:                      tipoDocLabel,
+        serie:                     p.serieBase,
         numero:                    correlativo,
         numero_completo:           numeroCompleto,
         numero_comprobante:        numeroCompleto,
-        estado:                    resultado.aceptado ? 'emitido' : 'error',
-        estado_sunat:              estadoFinal,
+        estado:                    clasif.estado,
+        estado_sunat:              clasif.estadoSunatFinal,
         fecha_emision:             fechaEmision,
         moneda:                    'PEN',
         subtotal:                  totales.mtoOperGravadas,
@@ -613,38 +832,40 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         cdr_notas:                 resultado.cdrNotas ?? null,
         hash_cpe:                  resultado.hash ?? null,
         qr_cadena:                 qrSunat({
-          rucEmisor: creds.ruc, tipoDoc: '07', serie, correlativo,
+          rucEmisor: creds.ruc, tipoDoc: p.tipoNota, serie: p.serieBase, correlativo,
           igv: totales.mtoIGV, total: totales.mtoImpVenta, fecha: fechaEmision,
-          clienteTipoDoc: cliente.tipoDoc, clienteNumDoc: cliente.numDoc,
+          clienteTipoDoc: p.cliente.tipoDoc, clienteNumDoc: p.cliente.numDoc,
         }),
-        cliente_nombre:            ref.cliente_nombre,
-        cliente_ruc_dni:           ref.cliente_ruc_dni,
-        emitido_por:               opts.emitidoPor,
-        comprobante_referencia_id: ref.id,
+        cliente_nombre:            p.cliente.rznSocial,
+        cliente_ruc_dni:           p.cliente.numDoc,
+        emitido_por:               p.emitidoPor,
+        comprobante_referencia_id: p.referenciaId,
+        intentos_envio:            clasif.reintentable ? 1 : 0,
+        proximo_intento_at:        clasif.reintentable ? calcularProximoIntento(1) : null,
+        ultimo_error_sunat:        !resultado.aceptado ? (resultado.error ?? resultado.cdrDescripcion ?? null) : null,
+        requiere_atencion:         clasif.requiereAtencion,
+        detalle_emision: {
+          tipoNota: p.tipoNota, serie: p.serieBase,
+          tipoDocAfectado: p.tipoDocAfectado, numDocAfectado: p.numDocAfectado,
+          cliente: p.cliente, itemsLycet: p.itemsLycet,
+          codMotivo: p.codMotivo, desMotivo: p.desMotivo,
+        },
       })
       .select('id')
       .single()
 
     await escribirLog(
-      opts.supabase, opts.ferreteriaId, comp?.id ?? null,
+      p.supabase, p.ferreteriaId, comp?.id ?? null,
       'envio', 'note/send', resultado,
-      { serie, correlativo, ruc: creds.ruc, tipoDoc: '07' },
+      { serie: p.serieBase, correlativo, ruc: creds.ruc, tipoDoc: p.tipoNota },
     )
 
-    if (!resultado.ok)       return { ok: false, error: resultado.error ?? 'Error enviando NC a SUNAT' }
-    if (!resultado.aceptado) return { ok: false, error: resultado.cdrDescripcion ?? `SUNAT rechazó la NC (código ${resultado.cdrCodigo})` }
-
-    // Devolver el stock de los items anulados/devueltos (mismo comportamiento
-    // que tenía la ruta de NC antes de unificar proveedores).
-    for (const item of originalItems) {
-      if (item.producto_id) {
-        const { error: rpcErr } = await opts.supabase.rpc('restaurar_stock_parcial', {
-          p_producto_id: item.producto_id,
-          p_cantidad:    item.cantidad,
-        })
-        if (rpcErr) console.error('[NotaCredito] Error ajustando stock:', rpcErr)
-      }
+    const etiqueta = p.tipoNota === '07' ? 'NC' : 'ND'
+    if (clasif.reintentable) {
+      return { ok: true, comprobanteId: comp?.id, numeroCompleto, error: `${etiqueta} en cola de reintento (SUNAT/servicio no disponible momentáneamente)` }
     }
+    if (!resultado.ok)       return { ok: false, comprobanteId: comp?.id, error: resultado.error ?? `Error enviando ${etiqueta} a SUNAT` }
+    if (!resultado.aceptado) return { ok: false, comprobanteId: comp?.id, error: resultado.cdrDescripcion ?? `SUNAT rechazó la ${etiqueta} (código ${resultado.cdrCodigo})` }
 
     return { ok: true, comprobanteId: comp?.id, numeroCompleto }
   }

@@ -13,7 +13,6 @@ export async function POST(request: Request) {
     comprobanteReferenciaId?: string
     motivoCodigo?: string
     motivoDescripcion?: string
-    itemsDevueltos?: { itemId: string; cantidad: number }[]
     montoAjuste?: number
   }
 
@@ -29,19 +28,21 @@ export async function POST(request: Request) {
   if (!body.motivoCodigo || !body.motivoDescripcion?.trim()) {
     return NextResponse.json({ error: 'motivoCodigo y motivoDescripcion son requeridos' }, { status: 400 })
   }
+  if (!body.montoAjuste || body.montoAjuste <= 0) {
+    return NextResponse.json({ error: 'montoAjuste debe ser mayor a 0' }, { status: 400 })
+  }
 
   const supabase = await createClient()
 
   const proveedor = await resolverProveedor(supabase, session.ferreteriaId)
-  const resultado = await proveedor.emitirNotaCredito({
+  const resultado = await proveedor.emitirNotaDebito({
     supabase,
     comprobanteReferenciaId: body.comprobanteReferenciaId,
-    ferreteriaId:   session.ferreteriaId,
-    motivoCodigo:   body.motivoCodigo,
+    ferreteriaId:      session.ferreteriaId,
+    motivoCodigo:      body.motivoCodigo,
     motivoDescripcion: body.motivoDescripcion,
-    emitidoPor:     'dashboard',
-    itemsDevueltos: body.itemsDevueltos,
-    montoAjuste:    body.montoAjuste,
+    montoAjuste:       body.montoAjuste,
+    emitidoPor:        'dashboard',
   })
 
   if (!resultado.ok) {
