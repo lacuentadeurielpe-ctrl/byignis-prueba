@@ -57,7 +57,7 @@ export default function SuperadminLoginPage() {
         {/* Logo / Header */}
         <div className="text-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/uintegrus_logo_dark.svg" alt="Uintegrus" className="mx-auto w-44 h-auto mb-2" />
+          <img src="/uintegrus_logo_dark.png" alt="Uintegrus" className="mx-auto w-44 h-auto mb-2" />
           <p className="text-gray-400 text-sm mt-1">Panel de Superadmin</p>
         </div>
 

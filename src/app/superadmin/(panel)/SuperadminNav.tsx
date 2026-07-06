@@ -47,7 +47,7 @@ export default function SuperadminNav({ session }: Props) {
         {/* Logo */}
         <div className="flex items-center gap-3 shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/uintegrus_favicon.svg" alt="Uintegrus" className="w-7 h-7 rounded-lg" />
+          <img src="/uintegrus_favicon.png" alt="Uintegrus" className="w-7 h-7 rounded-lg" />
           <span className="font-bold text-white">Uintegrus</span>
           <span className="text-gray-600 text-xs border border-gray-700 rounded px-1.5 py-0.5">Superadmin</span>
         </div>

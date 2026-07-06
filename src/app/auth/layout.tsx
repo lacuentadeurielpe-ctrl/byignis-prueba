@@ -6,7 +6,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {/* Logo / Marca */}
         <div className="text-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/uintegrus_logo.svg" alt="Uintegrus" className="mx-auto w-44 h-auto" />
+          <img src="/uintegrus_logo.png" alt="Uintegrus" className="mx-auto w-44 h-auto" />
           <p className="text-sm text-gray-500 mt-2">Sistema de atención al cliente con IA</p>
         </div>
 
