@@ -9,11 +9,19 @@ interface Empleado {
   email: string
   rol: string
   estado: string
+  local_id?: string | null
+}
+
+interface LocalOption {
+  id: string
+  nombre: string
 }
 
 export default function EmpleadosTab() {
   const [empleados, setEmpleados] = useState<Empleado[]>([])
   const [loading, setLoading] = useState(true)
+  const [locales, setLocales] = useState<LocalOption[]>([])
+  const [multiSucursal, setMultiSucursal] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
@@ -23,7 +31,36 @@ export default function EmpleadosTab() {
 
   useEffect(() => {
     fetchEmpleados()
+    // Sucursales del tenant (para asignar empleados) — solo si multi_sucursal
+    fetch('/api/sucursales')
+      .then(r => r.ok ? r.json() : null)
+      .then(ctx => {
+        if (ctx?.multiSucursal) {
+          setMultiSucursal(true)
+          setLocales(ctx.localesVisibles ?? [])
+        }
+      })
+      .catch(() => {})
   }, [])
+
+  const handleAsignarSucursal = async (empleadoId: string, localId: string) => {
+    try {
+      const res = await fetch('/api/settings-2/equipo/empleados', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: empleadoId, local_id: localId || null }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        setEmpleados(prev => prev.map(e => (e.id === empleadoId ? { ...e, local_id: updated.local_id } : e)))
+      } else {
+        const err = await res.json()
+        setError(err.error || 'Error al asignar sucursal')
+      }
+    } catch {
+      setError('Error en la conexión')
+    }
+  }
 
   const fetchEmpleados = async () => {
     try {
@@ -173,6 +210,9 @@ export default function EmpleadosTab() {
                 <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Nombre</th>
                 <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Email</th>
                 <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Rol</th>
+                {multiSucursal && (
+                  <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Sucursal</th>
+                )}
                 <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Acción</th>
               </tr>
             </thead>
@@ -184,6 +224,21 @@ export default function EmpleadosTab() {
                   <td className="px-5 py-3.5">
                     <span className="px-2.5 py-1.5 text-xs font-semibold bg-blue-100 text-blue-700 rounded-lg capitalize">{emp.rol}</span>
                   </td>
+                  {multiSucursal && (
+                    <td className="px-5 py-3.5">
+                      <select
+                        value={emp.local_id ?? ''}
+                        onChange={e => handleAsignarSucursal(emp.id, e.target.value)}
+                        className="px-2 py-1.5 text-xs border border-zinc-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        title="Sucursal asignada — el empleado solo verá y operará esta sucursal"
+                      >
+                        <option value="">Todas</option>
+                        {locales.map(l => (
+                          <option key={l.id} value={l.id}>{l.nombre}</option>
+                        ))}
+                      </select>
+                    </td>
+                  )}
                   <td className="px-5 py-3.5">
                     <button
                       onClick={() => handleDelete(emp.id)}

@@ -18,7 +18,7 @@ export async function GET() {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('miembros_ferreteria')
-    .select('id, user_id, nombre, email, rol, activo, permisos, created_at')
+    .select('id, user_id, nombre, email, rol, activo, permisos, local_id, created_at')
     .eq('ferreteria_id', session.ferreteriaId)
     .order('created_at', { ascending: true })
 
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       permisos,
       contrasena_temporal: password,
     })
-    .select('id, user_id, nombre, email, rol, activo, permisos, created_at')
+    .select('id, user_id, nombre, email, rol, activo, permisos, local_id, created_at')
     .single()
 
   if (miembroError) {

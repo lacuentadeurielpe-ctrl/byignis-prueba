@@ -45,6 +45,22 @@ export async function PATCH(request: Request, { params }: Props) {
     update.permisos = normalizarPermisos(body.permisos as Partial<PermisoMap>)
   }
 
+  // Asignar sucursal (null = acceso a todas). Validar pertenencia al tenant.
+  if ('local_id' in body) {
+    if (body.local_id === null) {
+      update.local_id = null
+    } else if (typeof body.local_id === 'string') {
+      const { data: local } = await admin
+        .from('locales_ferreteria')
+        .select('id')
+        .eq('id', body.local_id)
+        .eq('ferreteria_id', session.ferreteriaId)
+        .single()
+      if (!local) return NextResponse.json({ error: 'Sucursal no encontrada' }, { status: 404 })
+      update.local_id = body.local_id
+    }
+  }
+
   // Resetear contraseña
   if (body.nueva_password) {
     if (String(body.nueva_password).length < 6) {
@@ -65,7 +81,7 @@ export async function PATCH(request: Request, { params }: Props) {
     .from('miembros_ferreteria')
     .update(update)
     .eq('id', id)
-    .select('id, user_id, nombre, email, rol, activo, permisos, created_at')
+    .select('id, user_id, nombre, email, rol, activo, permisos, local_id, created_at')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
