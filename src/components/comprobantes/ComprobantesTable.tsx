@@ -151,6 +151,7 @@ const labelTipo = (tipo: string) => {
     case 'boleta':       return <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-bold border border-blue-100">Boleta</span>
     case 'factura':      return <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-xs font-bold border border-purple-100">Factura</span>
     case 'nota_credito': return <span className="bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-xs font-bold border border-orange-100">N. Crédito</span>
+    case 'nota_debito':  return <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-xs font-bold border border-amber-100">N. Débito</span>
     case 'nota_venta':   return <span className="bg-zinc-50 text-zinc-700 px-2 py-0.5 rounded text-xs font-bold border border-zinc-200">Nota Venta</span>
     default: return tipo
   }
@@ -252,8 +253,8 @@ export default function ComprobantesTable({
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center shrink-0">
-                          {comp.tipo === 'nota_credito'
-                            ? <RefreshCcw className="w-4 h-4 text-orange-500" />
+                          {comp.tipo === 'nota_credito' || comp.tipo === 'nota_debito'
+                            ? <RefreshCcw className={cn('w-4 h-4', comp.tipo === 'nota_credito' ? 'text-orange-500' : 'text-amber-500')} />
                             : <Receipt className="w-4 h-4 text-zinc-600" />
                           }
                         </div>
@@ -315,7 +316,9 @@ export default function ComprobantesTable({
                             <Download className="w-4 h-4" />
                           </a>
                         )}
-                        {puedeNc && (
+                        {/* NC necesita los ítems del pedido original (el modal los lista);
+                            sin el join de pedidos el modal no puede abrir, así que se oculta */}
+                        {puedeNc && comp.pedidos && (
                           <button
                             onClick={() => setNcTarget(comp)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 ml-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-bold transition shadow-sm"
