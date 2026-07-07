@@ -1,6 +1,7 @@
 // Middleware de Next.js — protege rutas y refresca sesión de Supabase
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isModuleEnabled, type ModuleName } from '@/lib/config/modules'
 
 // Rutas que NO requieren autenticación de ferretería
 const RUTAS_PUBLICAS = [
@@ -74,13 +75,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Control de Acceso por Módulos Activos (Feature Flags)
-  const ROUTE_MODULES: { [key: string]: string } = {
-    '/dashboard/crm': 'crm',
-    '/dashboard/creditos': 'creditos',
+  // Control de Acceso por Módulos Activos (Feature Flags).
+  // La lista de módulos vive SOLO en lib/config/modules.ts — este middleware
+  // tenía una copia hardcodeada que se desincronizó y bloqueaba rutas ya activas.
+  const ROUTE_MODULES: { [key: string]: ModuleName } = {
     '/dashboard/delivery': 'delivery',
     '/dashboard/comprobantes': 'comprobantes',
-    '/dashboard/salud': 'salud',
     '/dashboard/catalog': 'catalog',
     '/dashboard/clientes': 'clientes',
     '/dashboard/finanzas': 'finanzas',
@@ -91,18 +91,10 @@ export async function proxy(request: NextRequest) {
   }
 
   const matchedRoute = Object.keys(ROUTE_MODULES).find(route => pathname.startsWith(route))
-  if (matchedRoute) {
-    const moduleName = ROUTE_MODULES[matchedRoute]
-    const envVar = process.env.NEXT_PUBLIC_ACTIVE_MODULES
-    const activeList = envVar
-      ? envVar.split(',').map(m => m.trim())
-      : ['dashboard', 'pos', 'ventas', 'chat', 'catalog', 'clientes', 'delivery', 'finanzas', 'settings', 'settings-2']
-
-    if (!activeList.includes(moduleName)) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/dashboard'
-      return NextResponse.redirect(url)
-    }
+  if (matchedRoute && !isModuleEnabled(ROUTE_MODULES[matchedRoute])) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
   }
 
   return supabaseResponse

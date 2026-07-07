@@ -555,7 +555,7 @@ export default function OrdersTable({ pedidos: inicial, productos = [], zonas = 
                             )
                           ) : pedido.metodo_pago === 'credito' && pedido.estado_pago === 'credito_activo' ? (
                             <a
-                              href="/dashboard/creditos"
+                              href="/dashboard/ventas?tab=deudas"
                               className="text-xs text-blue-600 font-medium hover:underline"
                             >
                               Ver crédito activo →

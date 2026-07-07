@@ -6,11 +6,8 @@ export type ModuleName =
   | 'catalog'
   | 'clientes'
   | 'finanzas'
-  | 'crm'
-  | 'creditos'
   | 'delivery'
   | 'comprobantes'
-  | 'salud'
   | 'settings'
   | 'settings-2';
 
