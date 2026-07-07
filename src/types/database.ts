@@ -171,7 +171,38 @@ export interface Ferreteria {
   permitir_venta_sin_stock: boolean
   requiere_aprobacion_credito: boolean
   margen_minimo_descuento: number
+  // ── Sucursales (migración 106) ──────────────────────────────────
+  multi_sucursal: boolean            // apagado = tienda única (comportamiento clásico)
   // ────────────────────────────────────────────────────────────────
+  created_at: string
+  updated_at: string
+}
+
+// ── Sucursal / local del tenant (migraciones 047 + 106) ────────────
+// NULL en las columnas serie_* = el local usa las series del tenant.
+export interface LocalFerreteria {
+  id: string
+  ferreteria_id: string
+  nombre: string
+  codigo: string | null
+  descripcion: string | null
+  direccion: string
+  lat: number | null
+  lng: number | null
+  place_id: string | null
+  telefono: string | null
+  horario_apertura: string | null   // HH:MM:SS
+  horario_cierre: string | null
+  dias_atencion: DiaSemana[]
+  es_principal: boolean
+  activo: boolean
+  codigo_sunat: string              // establecimiento anexo Ficha RUC ('0000' = domicilio fiscal)
+  serie_boletas: string | null
+  serie_facturas: string | null
+  serie_nc_boleta: string | null
+  serie_nc_factura: string | null
+  serie_nd_boleta: string | null
+  serie_nd_factura: string | null
   created_at: string
   updated_at: string
 }
@@ -220,6 +251,7 @@ export interface Comprobante {
   anulacion_solicitada_at: string | null
   anulacion_solicitada_por: string | null
   comunicacion_baja_id: string | null
+  local_id: string | null            // sucursal emisora (migración 106); NULL = local principal/legado
   created_at: string
 }
 
@@ -229,6 +261,7 @@ export interface ZonaDelivery {
   nombre: string
   tiempo_estimado_min: number
   activo: boolean
+  local_id: string | null            // sucursal que cubre la zona (migración 106)
 }
 
 export interface Categoria {
@@ -595,6 +628,7 @@ export interface Pedido {
   eta_minutos: number | null
   /** ETA calculado al crear el pedido (espejo de entregas, migración 070) */
   eta_timestamp: string | null
+  local_id: string | null            // sucursal que atiende el pedido (migración 051)
   created_at: string
   updated_at: string
   // joins
@@ -644,6 +678,7 @@ export interface Rendicion {
   notas: string | null
   confirmado_por: string | null
   confirmado_at: string | null
+  local_id: string | null            // sucursal de la caja (migración 106)
   created_at: string
 }
 
