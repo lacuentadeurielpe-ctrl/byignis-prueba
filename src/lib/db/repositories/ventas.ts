@@ -26,6 +26,8 @@ export interface PedidoInput {
   total: number
   costoTotal: number | null
   fechaEntregaProgramada?: string | null
+  /** Sucursal que atiende el pedido. null = local principal/legado. */
+  localId?: string | null
 }
 
 export interface ItemPedidoInput {
@@ -157,6 +159,7 @@ export class VentasRepository {
         // registrar monto_pagado = total para que finanzas lo contabilice correctamente.
         monto_pagado: input.estadoPago === 'pagado' ? input.total : 0,
         fecha_entrega_programada: input.fechaEntregaProgramada ?? null,
+        ...(input.localId ? { local_id: input.localId } : {}),
       })
       .select()
       .single()

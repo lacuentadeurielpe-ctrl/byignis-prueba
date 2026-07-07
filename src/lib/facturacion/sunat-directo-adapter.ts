@@ -36,6 +36,7 @@ import type {
   ResultadoEmisionUnificado,
 } from './types'
 import { buscarMotivo, CATALOGO_09_NOTA_CREDITO, CATALOGO_10_NOTA_DEBITO } from './catalogos-sunat'
+import { resolverSerie } from '@/lib/sucursales/series'
 
 async function mapearItemsDePedido(supabase: any, pedidoId: string): Promise<any[]> {
   const { data } = await supabase
@@ -155,7 +156,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
     if (!ferreteria) return { ok: false, error: 'Negocio no encontrado' }
 
-    const serie = ferreteria.serie_boletas ?? 'B001'
+    // Serie por sucursal (fallback: serie del tenant — comportamiento clásico)
+    const serieRes = await resolverSerie(opts.supabase, opts.ferreteriaId, 'boleta', opts.localId ?? null)
+    const serie = serieRes.serie
 
     const todosLosItems = await mapearItemsDePedido(opts.supabase, opts.pedidoId)
     const itemsFormales   = todosLosItems.filter((i: any) => i.productos?.facturable !== false)
@@ -181,7 +184,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     const { doc, totales } = mapearInvoice('03', {
       serie, correlativo,
-      emisor:      buildEmisor(ferreteria, creds),
+      emisor:      { ...buildEmisor(ferreteria, creds), codLocal: serieRes.codigoSunat },
       cliente,
       items:       toItemsLycet(itemsFormales),
       igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
@@ -204,6 +207,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         ferreteria_id:         opts.ferreteriaId,
         pedido_id:             opts.pedidoId,
         tipo:                  'boleta',
+        local_id:              serieRes.localId,
         serie,
         numero:                correlativo,
         numero_completo:       numeroCompleto,
@@ -285,7 +289,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     const ferreteria = await obtenerFerreteria(opts.supabase, opts.ferreteriaId)
     if (!ferreteria) return { ok: false, error: 'Negocio no encontrado' }
 
-    const serie = ferreteria.serie_facturas ?? 'F001'
+    // Serie por sucursal (fallback: serie del tenant — comportamiento clásico)
+    const serieRes = await resolverSerie(opts.supabase, opts.ferreteriaId, 'factura', opts.localId ?? null)
+    const serie = serieRes.serie
 
     const todosLosItems = await mapearItemsDePedido(opts.supabase, opts.pedidoId)
     const itemsFormales   = todosLosItems.filter((i: any) => i.productos?.facturable !== false)
@@ -309,7 +315,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     const { doc, totales } = mapearInvoice('01', {
       serie, correlativo,
-      emisor:      buildEmisor(ferreteria, creds),
+      emisor:      { ...buildEmisor(ferreteria, creds), codLocal: serieRes.codigoSunat },
       cliente,
       items:       toItemsLycet(itemsFormales),
       igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
@@ -330,6 +336,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         ferreteria_id:         opts.ferreteriaId,
         pedido_id:             opts.pedidoId,
         tipo:                  'factura',
+        local_id:              serieRes.localId,
         serie,
         numero:                correlativo,
         numero_completo:       numeroCompleto,
@@ -440,10 +447,21 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
           rznSocial: comp.cliente_nombre || 'CLIENTES VARIOS',
         }
 
+    // Mismo codLocal del intento original (si el comprobante nació en una sucursal)
+    let codLocal = '0000'
+    if (comp.local_id) {
+      const { data: loc } = await opts.supabase
+        .from('locales_ferreteria')
+        .select('codigo_sunat')
+        .eq('id', comp.local_id)
+        .single()
+      codLocal = loc?.codigo_sunat ?? '0000'
+    }
+
     const { doc, totales } = mapearInvoice(tipoDoc, {
       serie:       comp.serie,
       correlativo: comp.numero,
-      emisor:      buildEmisor(ferreteria, creds),
+      emisor:      { ...buildEmisor(ferreteria, creds), codLocal },
       cliente,
       items:       toItemsLycet(itemsFormales),
       igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
@@ -705,6 +723,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       tipoDocAfectado, numDocAfectado, cliente, itemsLycet,
       codMotivo: opts.motivoCodigo, desMotivo: opts.motivoDescripcion,
       pedidoId: ref.pedido_id, referenciaId: ref.id, emitidoPor: opts.emitidoPor,
+      localId: ref.local_id ?? null, // la NC hereda la sucursal del original
       // Siempre acotado: una NC (o la suma de varias) jamás puede superar el
       // total del comprobante original.
       totalMaximo: Number(ref.total) - sumaPrevia,
@@ -770,6 +789,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       itemsLycet,
       codMotivo: opts.motivoCodigo, desMotivo: opts.motivoDescripcion,
       pedidoId: ref.pedido_id, referenciaId: ref.id, emitidoPor: opts.emitidoPor,
+      localId: ref.local_id ?? null, // la ND hereda la sucursal del original
     })
   }
 
@@ -784,6 +804,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     codMotivo: string; desMotivo: string
     pedidoId: string | null; referenciaId: string
     emitidoPor: 'dashboard' | 'bot'
+    localId?: string | null   // sucursal heredada del comprobante original
     totalMaximo?: number   // si se pasa, valida antes de enviar (guard anti-doble-NC)
   }): Promise<ResultadoEmisionUnificado> {
     const creds = await cargarCredencialesSunat(p.supabase, p.ferreteriaId)
@@ -843,6 +864,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         ferreteria_id:             p.ferreteriaId,
         pedido_id:                 p.pedidoId,
         tipo:                      tipoDocLabel,
+        local_id:                  p.localId ?? null,
         serie:                     p.serieBase,
         numero:                    correlativo,
         numero_completo:           numeroCompleto,

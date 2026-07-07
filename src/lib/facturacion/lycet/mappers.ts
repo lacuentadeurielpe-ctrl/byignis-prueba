@@ -14,6 +14,8 @@ export interface EmisorLycet {
   departamento?: string
   provincia?:   string
   distrito?:    string
+  /** Código de establecimiento anexo (Ficha RUC). '0000' = domicilio fiscal. */
+  codLocal?:    string
 }
 
 export interface ClienteLycet {
@@ -145,6 +147,9 @@ function crearCompany(e: EmisorLycet) {
       distrito:     (e.distrito ?? 'LIMA').toUpperCase(),
       urbanizacion: '-',
       direccion:    e.direccion ?? '-',
+      // Establecimiento anexo del emisor (Greenter Address::codLocal).
+      // '0000' = domicilio fiscal — el comportamiento histórico.
+      codLocal:     e.codLocal ?? '0000',
     },
   }
 }

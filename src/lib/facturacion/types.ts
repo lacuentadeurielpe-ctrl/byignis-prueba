@@ -26,6 +26,8 @@ export interface OpcionesEmisionBoleta {
   clienteNombre:  string
   clienteDni:     string
   emitidoPor:     'dashboard' | 'bot'
+  /** Sucursal emisora (resuelta por el servidor). null = local principal/series del tenant. */
+  localId?:       string | null
 }
 
 export interface OpcionesEmisionFactura {
@@ -35,6 +37,8 @@ export interface OpcionesEmisionFactura {
   clienteNombre: string
   clienteRuc:    string
   emitidoPor:    'dashboard' | 'bot'
+  /** Sucursal emisora (resuelta por el servidor). null = local principal/series del tenant. */
+  localId?:      string | null
 }
 
 export interface OpcionesNotaCredito {

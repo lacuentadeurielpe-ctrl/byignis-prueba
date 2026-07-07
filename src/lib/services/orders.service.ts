@@ -29,6 +29,8 @@ export interface PedidoPayload {
   venta_directa?: boolean
   estado_pago?: string
   metodo_pago?: string
+  /** Sucursal de escritura (resuelta por el servidor desde el contexto, nunca del cliente). */
+  local_id?: string | null
 }
 
 export class OrdersService {
@@ -100,6 +102,7 @@ export class OrdersService {
         total,
         costoTotal: costo_total,
         fechaEntregaProgramada: payload.fecha_entrega_programada ?? null,
+        localId: payload.local_id ?? null,
         ...(payload.estado_pago ? { estadoPago: payload.estado_pago } : {}),
         ...(payload.metodo_pago ? { metodoPago: payload.metodo_pago } : {}),
       },

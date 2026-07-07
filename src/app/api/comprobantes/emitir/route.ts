@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
 import { resolverProveedor } from '@/lib/facturacion/resolver'
+import { getContextoSucursal } from '@/lib/sucursales/contexto'
 
 export async function POST(request: Request) {
   const session = await getSessionInfo()
@@ -39,6 +40,23 @@ export async function POST(request: Request) {
   // El adapter internamente carga credenciales — el endpoint es agnóstico.
   const proveedor = await resolverProveedor(supabase, session.ferreteriaId)
 
+  // Sucursal emisora: la del pedido; si no tiene (legado), la del contexto
+  // del usuario. Siempre resuelta por el servidor — nunca del body.
+  let localId: string | null = null
+  if (session.multiSucursal) {
+    const { data: ped } = await supabase
+      .from('pedidos')
+      .select('local_id')
+      .eq('id', body.pedido_id)
+      .eq('ferreteria_id', session.ferreteriaId)
+      .single()
+    localId = ped?.local_id ?? null
+    if (!localId) {
+      const contexto = await getContextoSucursal(supabase, session)
+      localId = contexto.localEscrituraId || null
+    }
+  }
+
   const tipo = body.tipo ?? 'boleta'
 
   if (tipo === 'factura') {
@@ -64,6 +82,7 @@ export async function POST(request: Request) {
       clienteNombre: body.cliente_nombre.trim(),
       clienteRuc:    rucLimpio,
       emitidoPor:    'dashboard',
+      localId,
     })
 
     if (!resultado.ok) {
@@ -96,6 +115,7 @@ export async function POST(request: Request) {
     clienteNombre: (body.cliente_nombre ?? '').trim() || 'CLIENTE VARIOS',
     clienteDni:    (body.cliente_dni    ?? '').trim(),
     emitidoPor:    'dashboard',
+    localId,
   })
 
   if (!resultado.ok) {
