@@ -15,6 +15,8 @@ export default function LocalesForm() {
   const [loading, setLoading] = useState(true)
   const [multiSucursal, setMultiSucursal] = useState<boolean | null>(null)
   const [togglingMulti, setTogglingMulti] = useState(false)
+  const [stockPorLocal, setStockPorLocal] = useState<boolean | null>(null)
+  const [togglingStock, setTogglingStock] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingLocal, setEditingLocal] = useState<Local | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
@@ -26,9 +28,41 @@ export default function LocalesForm() {
     fetchLocales()
     fetch('/api/sucursales')
       .then(r => r.ok ? r.json() : null)
-      .then(ctx => { if (ctx) setMultiSucursal(ctx.multiSucursal) })
+      .then(ctx => {
+        if (ctx) {
+          setMultiSucursal(ctx.multiSucursal)
+          setStockPorLocal(ctx.stockPorLocal ?? false)
+        }
+      })
       .catch(() => {})
   }, [])
+
+  const toggleStockPorLocal = async () => {
+    if (stockPorLocal === null || togglingStock) return
+    if (!stockPorLocal && !confirm(
+      'Al activar el stock por sucursal, todo tu stock actual se asignará al local principal y podrás transferir a las demás sucursales. ¿Continuar?'
+    )) return
+    setTogglingStock(true)
+    try {
+      const res = await fetch('/api/sucursales', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stockPorLocal: !stockPorLocal }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error)
+      }
+      setStockPorLocal(!stockPorLocal)
+      toast.success(!stockPorLocal
+        ? 'Stock por sucursal activado — tu stock actual quedó en el local principal'
+        : 'Stock por sucursal desactivado — vuelves al stock global compartido')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al cambiar el modo de stock')
+    } finally {
+      setTogglingStock(false)
+    }
+  }
 
   const toggleMultiSucursal = async () => {
     if (multiSucursal === null || togglingMulti) return
@@ -157,6 +191,33 @@ export default function LocalesForm() {
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                     multiSucursal ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
+
+          {/* Toggle stock por sucursal — solo tiene sentido en modo multi-sucursal */}
+          {multiSucursal === true && stockPorLocal !== null && (
+            <div className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="min-w-0 pr-4">
+                <p className="text-sm font-medium text-amber-900">Stock por sucursal</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Cada sucursal maneja su propio inventario y puedes transferir stock entre
+                  locales. Apagado = un solo stock compartido para todo el negocio.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={toggleStockPorLocal}
+                disabled={togglingStock}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                  stockPorLocal ? 'bg-amber-600' : 'bg-zinc-300'
+                } ${togglingStock ? 'opacity-50' : ''}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    stockPorLocal ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
               </button>

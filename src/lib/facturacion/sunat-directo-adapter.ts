@@ -738,6 +738,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
           const { error: rpcErr } = await opts.supabase.rpc('restaurar_stock_parcial', {
             p_producto_id: item.producto_id,
             p_cantidad:    item.cantidad,
+            p_local_id:    ref.local_id ?? null, // restaura al local del comprobante
           })
           if (rpcErr) console.error('[NotaCredito] Error ajustando stock:', rpcErr)
         }
