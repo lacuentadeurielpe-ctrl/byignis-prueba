@@ -22,6 +22,7 @@ const DEFAULT_ACTIVE_MODULES: ModuleName[] = [
   'catalog',
   'clientes',
   'delivery',
+  'comprobantes',   // hub Facturación Electrónica (boletas, facturas, NC/ND)
   'finanzas',
   'settings',
   'settings-2'
