@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatPEN, formatFechaHoraLima, cn } from '@/lib/utils'
 import {
   Search, FileText, Download, CheckCircle2, AlertTriangle,
-  RefreshCcw, Receipt, Clock, CheckCheck, XCircle, Ban,
+  RefreshCcw, Receipt, Clock, CheckCheck, XCircle, Ban, MoreVertical,
 } from 'lucide-react'
 import ModalNotaCredito from './ModalNotaCredito'
 import ModalNotaDebito from './ModalNotaDebito'
@@ -144,18 +144,30 @@ function guiaSunat(codigo: string | null | undefined): string | null {
   return null
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
+// ── Etiqueta de tipo de documento ─────────────────────────────────────────────
+
+const TIPO_STYLES: Record<string, { label: string; className: string }> = {
+  boleta:       { label: 'Boleta',     className: 'bg-blue-50 text-blue-700 border-blue-100' },
+  factura:      { label: 'Factura',    className: 'bg-purple-50 text-purple-700 border-purple-100' },
+  nota_credito: { label: 'N. Crédito', className: 'bg-orange-50 text-orange-700 border-orange-100' },
+  nota_debito:  { label: 'N. Débito',  className: 'bg-amber-50 text-amber-700 border-amber-100' },
+  nota_venta:   { label: 'Nota Venta', className: 'bg-zinc-50 text-zinc-700 border-zinc-200' },
+}
 
 const labelTipo = (tipo: string) => {
-  switch (tipo) {
-    case 'boleta':       return <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-bold border border-blue-100">Boleta</span>
-    case 'factura':      return <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-xs font-bold border border-purple-100">Factura</span>
-    case 'nota_credito': return <span className="bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-xs font-bold border border-orange-100">N. Crédito</span>
-    case 'nota_debito':  return <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-xs font-bold border border-amber-100">N. Débito</span>
-    case 'nota_venta':   return <span className="bg-zinc-50 text-zinc-700 px-2 py-0.5 rounded text-xs font-bold border border-zinc-200">Nota Venta</span>
-    default: return tipo
-  }
+  const s = TIPO_STYLES[tipo]
+  if (!s) return <span className="text-xs text-zinc-500">{tipo}</span>
+  return <span className={cn('px-2 py-0.5 rounded text-xs font-bold border', s.className)}>{s.label}</span>
 }
+
+// Filtros rápidos de la barra superior — 'todos' + un tab por tipo presente en los datos.
+const FILTROS_TIPO = [
+  { id: 'todos',        label: 'Todos' },
+  { id: 'boleta',       label: 'Boletas' },
+  { id: 'factura',      label: 'Facturas' },
+  { id: 'nota_credito', label: 'N. Crédito' },
+  { id: 'nota_debito',  label: 'N. Débito' },
+] as const
 
 // Si tiene estado_sunat (Lycet), el PDF se pide on-demand a nuestro route.
 // Si tiene pdf_url externa, usamos la URL directa.
@@ -175,6 +187,63 @@ function puedeAnular(comp: ComprobanteExt): boolean {
   return comp.estado_sunat === 'aceptado' || comp.estado_sunat === 'aceptado_obs'
 }
 
+// ── Menú de acciones secundarias (NC / ND / Anular) ───────────────────────────
+// Antes estos 3 eran botones con texto completo en línea — con 5 acciones
+// posibles por fila la columna se disparaba de ancho y desalineaba toda la
+// tabla. Ahora viven en un menú compacto que solo aparece si hay algo que ofrecer.
+
+interface AccionMenu {
+  label: string
+  icon: React.ElementType
+  className: string
+  onClick: () => void
+}
+
+function MenuAcciones({ acciones }: { acciones: AccionMenu[] }) {
+  const [abierto, setAbierto] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!abierto) return
+    function onClickFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false)
+    }
+    document.addEventListener('mousedown', onClickFuera)
+    return () => document.removeEventListener('mousedown', onClickFuera)
+  }, [abierto])
+
+  if (acciones.length === 0) return null
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setAbierto(v => !v)}
+        className={cn(
+          'inline-flex items-center justify-center w-8 h-8 rounded-lg transition',
+          abierto ? 'bg-zinc-100 text-zinc-900' : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700'
+        )}
+        title="Más acciones"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+      {abierto && (
+        <div className="absolute right-0 top-9 z-20 w-52 bg-white rounded-xl shadow-xl border border-zinc-200 py-1.5 overflow-hidden">
+          {acciones.map((a, i) => (
+            <button
+              key={i}
+              onClick={() => { a.onClick(); setAbierto(false) }}
+              className={cn('w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-medium hover:bg-zinc-50 transition text-left', a.className)}
+            >
+              <a.icon className="w-4 h-4 shrink-0" />
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ComprobantesTable({
   comprobantes,
   facturacionConfigurada,
@@ -183,12 +252,20 @@ export default function ComprobantesTable({
   facturacionConfigurada: boolean
 }) {
   const [busqueda, setBusqueda] = useState('')
+  const [tipoFiltro, setTipoFiltro] = useState<string>('todos')
   const [ncTarget, setNcTarget] = useState<ComprobanteExt | null>(null)
   const [ndTarget, setNdTarget] = useState<ComprobanteExt | null>(null)
   const [anularTarget, setAnularTarget] = useState<ComprobanteExt | null>(null)
 
+  const conteoTipos = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const c of comprobantes) m[c.tipo ?? ''] = (m[c.tipo ?? ''] ?? 0) + 1
+    return m
+  }, [comprobantes])
+
   const filtrados = useMemo(() => {
     return comprobantes.filter(c => {
+      if (tipoFiltro !== 'todos' && c.tipo !== tipoFiltro) return false
       if (!busqueda) return true
       const b = busqueda.toLowerCase()
       return (
@@ -198,7 +275,7 @@ export default function ComprobantesTable({
         c.pedidos?.numero_pedido?.toLowerCase().includes(b)
       )
     })
-  }, [comprobantes, busqueda])
+  }, [comprobantes, busqueda, tipoFiltro])
 
   // Alerta si hay boletas/facturas rechazadas definitivamente por SUNAT
   const rechazados = comprobantes.filter(c => c.estado_sunat === 'rechazado').length
@@ -218,7 +295,7 @@ export default function ComprobantesTable({
 
       <div className="bg-white rounded-3xl shadow-sm border border-zinc-200 overflow-hidden">
         {/* Toolbar */}
-        <div className="p-4 border-b border-zinc-100 flex flex-col sm:flex-row gap-4 items-center justify-between bg-zinc-50/50">
+        <div className="p-4 border-b border-zinc-100 flex flex-col gap-3 bg-zinc-50/50">
           <div className="relative w-full sm:max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <input
@@ -227,6 +304,26 @@ export default function ComprobantesTable({
               placeholder="Buscar comprobante, cliente o N° Pedido..."
               className="w-full pl-9 pr-4 py-2 bg-white border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 transition"
             />
+          </div>
+
+          {/* Filtro rápido por tipo — solo tabs con al menos 1 documento */}
+          <div className="flex gap-1.5 overflow-x-auto">
+            {FILTROS_TIPO.filter(f => f.id === 'todos' || conteoTipos[f.id] > 0).map(f => {
+              const activo = tipoFiltro === f.id
+              const count = f.id === 'todos' ? comprobantes.length : conteoTipos[f.id] ?? 0
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setTipoFiltro(f.id)}
+                  className={cn(
+                    'shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition',
+                    activo ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-500 border border-zinc-200 hover:bg-zinc-100'
+                  )}
+                >
+                  {f.label} <span className={cn('tabular-nums', activo ? 'text-zinc-300' : 'text-zinc-400')}>({count})</span>
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -247,6 +344,19 @@ export default function ComprobantesTable({
                 const href = pdfHref(comp)
                 const puedeNc = (comp.estado === 'emitido' || comp.estado_sunat === 'aceptado' || comp.estado_sunat === 'aceptado_obs')
                   && (comp.tipo === 'boleta' || comp.tipo === 'factura')
+
+                const acciones: AccionMenu[] = []
+                // NC necesita los ítems del pedido original (el modal los lista);
+                // sin el join de pedidos el modal no puede abrir, así que se omite.
+                if (puedeNc && comp.pedidos) {
+                  acciones.push({ label: 'Nota de Crédito', icon: RefreshCcw, className: 'text-red-600', onClick: () => setNcTarget(comp) })
+                }
+                if (puedeNc) {
+                  acciones.push({ label: 'Nota de Débito', icon: RefreshCcw, className: 'text-amber-600', onClick: () => setNdTarget(comp) })
+                }
+                if (puedeAnular(comp)) {
+                  acciones.push({ label: 'Anular comprobante', icon: Ban, className: 'text-zinc-600', onClick: () => setAnularTarget(comp) })
+                }
 
                 return (
                   <tr key={comp.id} className="hover:bg-zinc-50/50 transition-colors group">
@@ -293,7 +403,7 @@ export default function ComprobantesTable({
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         {href && (
                           <a
                             href={href}
@@ -316,33 +426,7 @@ export default function ComprobantesTable({
                             <Download className="w-4 h-4" />
                           </a>
                         )}
-                        {/* NC necesita los ítems del pedido original (el modal los lista);
-                            sin el join de pedidos el modal no puede abrir, así que se oculta */}
-                        {puedeNc && comp.pedidos && (
-                          <button
-                            onClick={() => setNcTarget(comp)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 ml-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-bold transition shadow-sm"
-                          >
-                            Nota de Crédito
-                          </button>
-                        )}
-                        {puedeNc && (
-                          <button
-                            onClick={() => setNdTarget(comp)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 ml-2 bg-white border border-amber-200 text-amber-600 hover:bg-amber-50 rounded-lg text-xs font-bold transition shadow-sm"
-                          >
-                            Nota de Débito
-                          </button>
-                        )}
-                        {puedeAnular(comp) && (
-                          <button
-                            onClick={() => setAnularTarget(comp)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 ml-2 bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50 rounded-lg text-xs font-bold transition shadow-sm"
-                            title="Anular comprobante"
-                          >
-                            <Ban className="w-3.5 h-3.5" /> Anular
-                          </button>
-                        )}
+                        <MenuAcciones acciones={acciones} />
                       </div>
                     </td>
                   </tr>
@@ -353,7 +437,9 @@ export default function ComprobantesTable({
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center">
                     <Receipt className="w-12 h-12 text-zinc-200 mx-auto mb-3" />
-                    <p className="text-zinc-500 font-medium">No se encontraron comprobantes</p>
+                    <p className="text-zinc-500 font-medium">
+                      {busqueda || tipoFiltro !== 'todos' ? 'No hay comprobantes que coincidan con el filtro' : 'No se encontraron comprobantes'}
+                    </p>
                   </td>
                 </tr>
               )}
