@@ -11,6 +11,10 @@ export interface SessionInfo {
   nombreFerreteria: string
   onboardingCompleto: boolean
   permisos: PermisoMap
+  /** Flag multi-sucursal del tenant (migración 106). */
+  multiSucursal: boolean
+  /** Sucursal fija del empleado (miembros_ferreteria.local_id). null = todas. */
+  localAsignadoId: string | null
 }
 
 /**
@@ -29,7 +33,7 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   // 1. ¿Es dueño?
   const { data: ferreteria } = await supabase
     .from('ferreterias')
-    .select('id, nombre, onboarding_completo')
+    .select('id, nombre, onboarding_completo, multi_sucursal')
     .eq('owner_id', session.user.id)
     .single()
 
@@ -41,13 +45,15 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       nombreFerreteria: ferreteria.nombre,
       onboardingCompleto: ferreteria.onboarding_completo ?? false,
       permisos: PERMISOS_DUENO,
+      multiSucursal: ferreteria.multi_sucursal ?? false,
+      localAsignadoId: null, // el dueño nunca está fijado a una sucursal
     }
   }
 
   // 2. ¿Es empleado invitado?
   const { data: miembro } = await supabase
     .from('miembros_ferreteria')
-    .select('ferreteria_id, rol, nombre, permisos, ferreterias(id, nombre, onboarding_completo)')
+    .select('ferreteria_id, rol, nombre, permisos, local_id, ferreterias(id, nombre, onboarding_completo, multi_sucursal)')
     .eq('user_id', user.id)
     .eq('activo', true)
     .single()
@@ -61,6 +67,8 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       nombreFerreteria: ferr?.nombre ?? 'Ferretería',
       onboardingCompleto: ferr?.onboarding_completo ?? true,
       permisos: normalizarPermisos((miembro.permisos as Record<string, unknown>) ?? {}),
+      multiSucursal: ferr?.multi_sucursal ?? false,
+      localAsignadoId: miembro.local_id ?? null,
     }
   }
 

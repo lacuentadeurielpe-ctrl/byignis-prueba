@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { LocalFormData } from '@/types/locales'
+import { validarCamposSunatLocal } from '@/lib/sucursales/series'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nombre y dirección requeridos' }, { status: 400 })
     }
 
+    const errorSunat = await validarCamposSunatLocal(supabase, session.ferreteriaId, body, null)
+    if (errorSunat) return NextResponse.json({ error: errorSunat }, { status: 400 })
+
     // Si es principal, desactiva otros
     if (body.es_principal) {
       await supabase
@@ -68,6 +72,9 @@ export async function POST(request: Request) {
         dias_atencion: body.dias_atencion || [],
         es_principal: body.es_principal ?? false,
         activo: true,
+        codigo_sunat:   body.codigo_sunat?.trim() || '0000',
+        serie_boletas:  body.serie_boletas?.trim().toUpperCase() || null,
+        serie_facturas: body.serie_facturas?.trim().toUpperCase() || null,
       })
       .select()
       .single()

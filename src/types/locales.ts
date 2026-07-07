@@ -14,6 +14,10 @@ export interface Local {
   dias_atencion?: string[]
   es_principal: boolean
   activo: boolean
+  // ── Facturación por sucursal (migración 106) ──
+  codigo_sunat?: string          // establecimiento anexo Ficha RUC ('0000' = domicilio fiscal)
+  serie_boletas?: string | null  // NULL = usa la serie del tenant
+  serie_facturas?: string | null
   created_at: string
   updated_at: string
 }
@@ -31,6 +35,9 @@ export interface LocalFormData {
   horario_cierre?: string
   dias_atencion?: string[]
   es_principal?: boolean
+  codigo_sunat?: string
+  serie_boletas?: string | null
+  serie_facturas?: string | null
 }
 
 export interface GooglePlacesResult {

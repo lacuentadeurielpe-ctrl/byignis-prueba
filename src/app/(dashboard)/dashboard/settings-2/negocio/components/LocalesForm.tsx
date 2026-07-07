@@ -13,6 +13,8 @@ import type { Local } from '@/types/locales'
 export default function LocalesForm() {
   const [locales, setLocales] = useState<Local[]>([])
   const [loading, setLoading] = useState(true)
+  const [multiSucursal, setMultiSucursal] = useState<boolean | null>(null)
+  const [togglingMulti, setTogglingMulti] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingLocal, setEditingLocal] = useState<Local | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
@@ -22,7 +24,36 @@ export default function LocalesForm() {
 
   useEffect(() => {
     fetchLocales()
+    fetch('/api/sucursales')
+      .then(r => r.ok ? r.json() : null)
+      .then(ctx => { if (ctx) setMultiSucursal(ctx.multiSucursal) })
+      .catch(() => {})
   }, [])
+
+  const toggleMultiSucursal = async () => {
+    if (multiSucursal === null || togglingMulti) return
+    setTogglingMulti(true)
+    try {
+      const res = await fetch('/api/sucursales', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ multiSucursal: !multiSucursal }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error)
+      }
+      setMultiSucursal(!multiSucursal)
+      toast.success(!multiSucursal
+        ? 'Modo multi-sucursal activado — verás el selector en el menú lateral'
+        : 'Modo multi-sucursal desactivado')
+      setTimeout(() => window.location.reload(), 800)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al cambiar el modo')
+    } finally {
+      setTogglingMulti(false)
+    }
+  }
 
   const fetchLocales = async () => {
     try {
@@ -104,6 +135,34 @@ export default function LocalesForm() {
         isDirty={false}
       >
         <div className="space-y-4">
+          {/* Toggle multi-sucursal (solo visible cuando la API respondió; el
+              endpoint solo permite el cambio al dueño) */}
+          {multiSucursal !== null && (
+            <div className="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+              <div className="min-w-0 pr-4">
+                <p className="text-sm font-medium text-indigo-900">Operación multi-sucursal</p>
+                <p className="text-xs text-indigo-700 mt-0.5">
+                  Activa el selector de sucursal, las series de facturación por local y el
+                  scoping de empleados por sucursal.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={toggleMultiSucursal}
+                disabled={togglingMulti}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                  multiSucursal ? 'bg-indigo-600' : 'bg-zinc-300'
+                } ${togglingMulti ? 'opacity-50' : ''}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    multiSucursal ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
+
           {locales.length === 0 ? (
             <div className="p-6 text-center border-2 border-dashed border-zinc-200 rounded-xl">
               <MapPin className="w-12 h-12 text-zinc-300 mx-auto mb-3" />

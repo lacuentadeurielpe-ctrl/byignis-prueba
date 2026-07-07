@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, MapPin, Clock, Phone, Tag } from 'lucide-react'
+import { X, MapPin, Clock, Phone, Tag, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import LocalMapPicker from './LocalMapPicker'
@@ -38,6 +38,9 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
     horario_cierre: local?.horario_cierre || '18:00',
     dias_atencion: local?.dias_atencion || ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'],
     es_principal: local?.es_principal || false,
+    codigo_sunat: local?.codigo_sunat || '0000',
+    serie_boletas: local?.serie_boletas || '',
+    serie_facturas: local?.serie_facturas || '',
   })
   const [isSaving, setIsSaving] = useState(false)
   const [hasCoordinates, setHasCoordinates] = useState(!!local?.lat && !!local?.lng)
@@ -238,6 +241,52 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
                     {DIAS_SEMANA_LABELS[dia]}
                   </button>
                 ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Facturación SUNAT por sucursal */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1 flex items-center gap-2">
+              <FileText className="w-4 h-4" /> Facturación electrónica (opcional)
+            </label>
+            <p className="text-xs text-zinc-500 mb-3">
+              Si este local emite con series propias, decláralas aquí. Vacío = usa las series
+              generales del negocio. El código de establecimiento sale de tu Ficha RUC.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-zinc-600 mb-1.5 block">Cód. establecimiento</label>
+                <input
+                  type="text"
+                  value={formData.codigo_sunat || ''}
+                  onChange={e => handleChange('codigo_sunat', e.target.value)}
+                  placeholder="0000"
+                  maxLength={4}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-600 mb-1.5 block">Serie boletas</label>
+                <input
+                  type="text"
+                  value={formData.serie_boletas || ''}
+                  onChange={e => handleChange('serie_boletas', e.target.value.toUpperCase())}
+                  placeholder="B002"
+                  maxLength={4}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-600 mb-1.5 block">Serie facturas</label>
+                <input
+                  type="text"
+                  value={formData.serie_facturas || ''}
+                  onChange={e => handleChange('serie_facturas', e.target.value.toUpperCase())}
+                  placeholder="F002"
+                  maxLength={4}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
               </div>
             </div>
           </div>

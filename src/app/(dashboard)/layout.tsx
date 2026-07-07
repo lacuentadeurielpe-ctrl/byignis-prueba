@@ -4,6 +4,7 @@ import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarWrapper from '@/components/layout/MobileSidebarWrapper'
+import { getContextoSucursal } from '@/lib/sucursales/contexto'
 
 export default async function DashboardLayout({
   children,
@@ -51,6 +52,12 @@ export default async function DashboardLayout({
       .single(),
   ])
 
+  // Contexto de sucursal: null si el tenant no activó multi_sucursal
+  // (el selector no se renderiza y todo se comporta como tienda única).
+  const contexto = session.multiSucursal
+    ? await getContextoSucursal(supabase, session)
+    : null
+
   const sidebarNode = (
     <Sidebar
       nombreFerreteria={session.nombreFerreteria}
@@ -61,6 +68,7 @@ export default async function DashboardLayout({
       cotizacionesPendientes={cotizacionesPendientes ?? 0}
       rol={session.rol}
       permisos={session.permisos}
+      contextoSucursal={contexto}
     />
   )
 

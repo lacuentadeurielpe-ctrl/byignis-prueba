@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { LocalFormData } from '@/types/locales'
+import { validarCamposSunatLocal } from '@/lib/sucursales/series'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: 'Local no encontrado' }, { status: 404 })
     }
 
+    const errorSunat = await validarCamposSunatLocal(supabase, session.ferreteriaId, body, id)
+    if (errorSunat) return NextResponse.json({ error: errorSunat }, { status: 400 })
+
     // Si es principal, desactiva otros
     if (body.es_principal === true) {
       await supabase
@@ -51,6 +55,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         horario_cierre: body.horario_cierre,
         dias_atencion: body.dias_atencion,
         es_principal: body.es_principal,
+        ...(body.codigo_sunat   !== undefined && { codigo_sunat:   body.codigo_sunat?.trim() || '0000' }),
+        ...(body.serie_boletas  !== undefined && { serie_boletas:  body.serie_boletas?.trim().toUpperCase() || null }),
+        ...(body.serie_facturas !== undefined && { serie_facturas: body.serie_facturas?.trim().toUpperCase() || null }),
       })
       .eq('id', id)
       .select()

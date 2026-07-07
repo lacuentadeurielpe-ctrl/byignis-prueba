@@ -23,6 +23,8 @@ import {
   LayoutTemplate,
 } from 'lucide-react'
 import NotificationBadge from '@/components/layout/NotificationBadge'
+import SucursalSelector from '@/components/sucursales/SucursalSelector'
+import type { ContextoSucursal } from '@/lib/sucursales/contexto'
 import type { Rol } from '@/lib/auth/roles'
 import { checkPermiso, type Permiso, type PermisoMap } from '@/lib/auth/permisos'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -79,6 +81,7 @@ interface SidebarProps {
   cotizacionesPendientes: number
   rol: Rol
   permisos: PermisoMap
+  contextoSucursal?: ContextoSucursal | null
 }
 
 export default function Sidebar({
@@ -90,6 +93,7 @@ export default function Sidebar({
   cotizacionesPendientes,
   rol,
   permisos,
+  contextoSucursal,
 }: SidebarProps) {
   const pathname = usePathname()
   const router   = useRouter()
@@ -205,6 +209,13 @@ export default function Sidebar({
           </div>
         </div>
       </div>
+
+      {/* ── Sucursal activa (solo con multi_sucursal) ──────────────────── */}
+      {contextoSucursal && (
+        <div className="pt-2">
+          <SucursalSelector contexto={contextoSucursal} />
+        </div>
+      )}
 
       {/* ── Navegación ─────────────────────────────────────────────────── */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
