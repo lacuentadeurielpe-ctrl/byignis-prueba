@@ -35,7 +35,7 @@ import type {
   ResultadoAnulacion,
   ResultadoEmisionUnificado,
 } from './types'
-import { buscarMotivo, CATALOGO_09_NOTA_CREDITO } from './catalogos-sunat'
+import { buscarMotivo, CATALOGO_09_NOTA_CREDITO, CATALOGO_10_NOTA_DEBITO } from './catalogos-sunat'
 
 async function mapearItemsDePedido(supabase: any, pedidoId: string): Promise<any[]> {
   const { data } = await supabase
@@ -111,6 +111,21 @@ function qrSunat(p: {
     p.igv.toFixed(2), p.total.toFixed(2), p.fecha,
     p.clienteTipoDoc, p.clienteNumDoc,
   ].join('|') + '|'
+}
+
+// Cliente de una NC/ND derivado del comprobante original. Para boletas sin
+// documento (CLIENTES VARIOS) el tipoDoc debe ser '0' — SUNAT rechaza DNI
+// "00000000" como tipoDoc '1'.
+function clienteDeReferencia(ref: any): ClienteLycet {
+  if (ref.tipo === 'factura') {
+    return { tipoDoc: '6', numDoc: ref.cliente_ruc_dni || '00000000', rznSocial: ref.cliente_nombre || 'CLIENTES VARIOS' }
+  }
+  const doc = (ref.cliente_ruc_dni ?? '').replace(/\D/g, '')
+  return {
+    tipoDoc:   doc.length === 8 && doc !== '00000000' ? '1' : '0',
+    numDoc:    doc || '00000000',
+    rznSocial: ref.cliente_nombre || 'CLIENTES VARIOS',
+  }
 }
 
 function superoPlazoLegal(fechaEmisionISO: string | null | undefined): boolean {
@@ -620,17 +635,23 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     if (!ref || ref.estado !== 'emitido') {
       return { ok: false, error: 'Comprobante original no encontrado o no emitido' }
     }
+    if (ref.tipo !== 'boleta' && ref.tipo !== 'factura') {
+      return { ok: false, error: 'Una Nota de Crédito solo puede referenciar una boleta o factura' }
+    }
 
     // ── Guard anti-doble-NC ───────────────────────────────────────────────────
     // Suma las NC ya emitidas contra este comprobante; si junto con la nueva
     // se pasan del total original, se bloquea (evita devolver/anular de más).
+    // Cuentan también las NC en cola de reintento: tienen correlativo reservado
+    // y pueden ser aceptadas por SUNAT después.
     const { data: ncPrevias } = await opts.supabase
       .from('comprobantes')
-      .select('total')
+      .select('total, estado, estado_sunat')
       .eq('comprobante_referencia_id', ref.id)
       .eq('tipo', 'nota_credito')
-      .eq('estado', 'emitido')
-    const sumaPrevia = (ncPrevias ?? []).reduce((s: number, c: any) => s + (Number(c.total) || 0), 0)
+    const sumaPrevia = (ncPrevias ?? [])
+      .filter((c: any) => c.estado === 'emitido' || c.estado_sunat === 'error_reintentable')
+      .reduce((s: number, c: any) => s + (Number(c.total) || 0), 0)
 
     const todosLosItems = (ref.pedidos?.items_pedido ?? []) as any[]
 
@@ -639,6 +660,12 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     if (motivo.comportamiento === 'items') {
       if (!opts.itemsDevueltos?.length) {
         return { ok: false, error: 'Selecciona al menos un ítem a devolver' }
+      }
+      for (const dev of opts.itemsDevueltos) {
+        const oi = todosLosItems.find((i: any) => i.id === dev.itemId)
+        if (oi && (dev.cantidad <= 0 || dev.cantidad > Number(oi.cantidad))) {
+          return { ok: false, error: `Cantidad inválida para "${oi.nombre_producto}": máximo ${oi.cantidad}` }
+        }
       }
       itemsParaNota = todosLosItems
         .map((oi: any) => {
@@ -670,11 +697,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     const isBoleta        = ref.tipo === 'boleta'
     const tipoDocAfectado = isBoleta ? '03' : '01'
     const numDocAfectado  = `${ref.serie}-${padCorrelativo(ref.numero)}`
-    const cliente: ClienteLycet = {
-      tipoDoc:   isBoleta ? '1' : '6',
-      numDoc:    ref.cliente_ruc_dni || '00000000',
-      rznSocial: ref.cliente_nombre  || 'CLIENTES VARIOS',
-    }
+    const cliente = clienteDeReferencia(ref)
 
     const resultado = await this.construirYEnviarNota({
       supabase: opts.supabase, ferreteriaId: opts.ferreteriaId,
@@ -682,7 +705,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       tipoDocAfectado, numDocAfectado, cliente, itemsLycet,
       codMotivo: opts.motivoCodigo, desMotivo: opts.motivoDescripcion,
       pedidoId: ref.pedido_id, referenciaId: ref.id, emitidoPor: opts.emitidoPor,
-      totalMaximo: sumaPrevia > 0 ? Number(ref.total) - sumaPrevia : undefined,
+      // Siempre acotado: una NC (o la suma de varias) jamás puede superar el
+      // total del comprobante original.
+      totalMaximo: Number(ref.total) - sumaPrevia,
     })
 
     if (!resultado.ok) return resultado
@@ -707,6 +732,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
   // Siempre es un cargo adicional directo (intereses, aumento de valor,
   // penalidad) — no toca ítems del pedido original ni el stock.
   async emitirNotaDebito(opts: OpcionesNotaDebito): Promise<ResultadoEmisionUnificado> {
+    if (!buscarMotivo(CATALOGO_10_NOTA_DEBITO, opts.motivoCodigo)) {
+      return { ok: false, error: `Motivo de ND desconocido: "${opts.motivoCodigo}"` }
+    }
     if (!opts.montoAjuste || opts.montoAjuste <= 0) {
       return { ok: false, error: 'Ingresa el monto del cargo' }
     }
@@ -720,6 +748,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     if (!ref || ref.estado !== 'emitido') {
       return { ok: false, error: 'Comprobante original no encontrado o no emitido' }
+    }
+    if (ref.tipo !== 'boleta' && ref.tipo !== 'factura') {
+      return { ok: false, error: 'Una Nota de Débito solo puede referenciar una boleta o factura' }
     }
 
     const isBoleta = ref.tipo === 'boleta'
@@ -735,11 +766,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       tipoNota: '08', serieBase: isBoleta ? 'BD01' : 'FD01',
       tipoDocAfectado: isBoleta ? '03' : '01',
       numDocAfectado:  `${ref.serie}-${padCorrelativo(ref.numero)}`,
-      cliente: {
-        tipoDoc:   isBoleta ? '1' : '6',
-        numDoc:    ref.cliente_ruc_dni || '00000000',
-        rznSocial: ref.cliente_nombre  || 'CLIENTES VARIOS',
-      },
+      cliente: clienteDeReferencia(ref),
       itemsLycet,
       codMotivo: opts.motivoCodigo, desMotivo: opts.motivoDescripcion,
       pedidoId: ref.pedido_id, referenciaId: ref.id, emitidoPor: opts.emitidoPor,
