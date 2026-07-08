@@ -583,15 +583,20 @@ export class VentasRepository {
    * Obtiene los KPIs de ventas para el dashboard.
    * Calcula directamente sin necesidad de una función SQL personalizada.
    */
-  async obtenerKPIsRango(ferreteriaId: string, inicio: string, fin: string) {
-    // Todos los pedidos del período (excepto cancelados) para el conteo total
-    const { data: pedidos, error: pedidosError } = await this.supabase
+  async obtenerKPIsRango(ferreteriaId: string, inicio: string, fin: string, localId?: string) {
+    let query = this.supabase
       .from('pedidos')
-      .select('id, estado, total')
+      .select('id, estado, total, costo_total, local_id')
       .eq('ferreteria_id', ferreteriaId)
       .neq('estado', 'cancelado')
       .gte('created_at', inicio)
       .lt('created_at', fin)
+
+    if (localId) {
+      query = query.eq('local_id', localId)
+    }
+
+    const { data: pedidos, error: pedidosError } = await query
 
     if (pedidosError) throw pedidosError
 

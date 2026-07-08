@@ -47,6 +47,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const p = searchParams.get('p') || 'semana'
+  const localId = searchParams.get('s') || undefined
   const per = calcPeriodo(p)
 
   const supabase = await createClient()
@@ -63,7 +64,7 @@ export async function GET(request: Request) {
       clientesNuevosPer,
       convActivas
     ] = await Promise.all([
-      ventasRepo.obtenerKPIsRango(fid, per.inicio, per.fin),
+      ventasRepo.obtenerKPIsRango(fid, per.inicio, per.fin, localId),
       chatRepo.contarConversacionesActivasRango(fid, per.inicio, per.fin),
       clientesRepo.contarClientesNuevosRango(fid, per.inicio, per.fin),
       chatRepo.contarConversacionesPausadas(fid),

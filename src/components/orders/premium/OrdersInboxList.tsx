@@ -18,12 +18,14 @@ export default function OrdersInboxList({
   pedidos,
   selectedOrderId,
   onSelectOrder,
-  filters
+  filters,
+  locales = []
 }: {
   pedidos: Pedido[]
   selectedOrderId: string | null
   onSelectOrder: (id: string) => void
   filters: any
+  locales?: any[]
 }) {
 
   return (
@@ -70,6 +72,19 @@ export default function OrdersInboxList({
               </button>
             )
           })}
+          
+          {locales.length > 0 && (
+            <select
+              value={filters.filtroSucursal || ''}
+              onChange={(e) => filters.setFiltroSucursal(e.target.value)}
+              className="ml-auto px-2 py-1 text-[11px] font-medium bg-white border border-zinc-200 rounded-md text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-900"
+            >
+              <option value="">Todas las sucursales</option>
+              {locales.map(l => (
+                <option key={l.id} value={l.id}>{l.nombre}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 

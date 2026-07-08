@@ -11,8 +11,12 @@ import DashboardGanancias from './DashboardGanancias'
 const fetcher = (url: string) =>
   fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
 
-export default function DashboardHero({ esDueno, periodo }: { esDueno: boolean; periodo: string }) {
-  const { data: kpi, error: kpiError, isLoading } = useSWR(`/api/dashboard/kpi?p=${periodo}`, fetcher, { revalidateOnFocus: false })
+export default function DashboardHero({ esDueno, periodo, sucursalId }: { esDueno: boolean; periodo: string; sucursalId?: string }) {
+  const query = new URLSearchParams()
+  if (periodo) query.set('p', periodo)
+  if (sucursalId) query.set('s', sucursalId)
+  
+  const { data: kpi, error: kpiError, isLoading } = useSWR(`/api/dashboard/kpi?${query.toString()}`, fetcher, { revalidateOnFocus: false })
   const { data: snap } = useSWR('/api/dashboard/snapshot', fetcher, { revalidateOnFocus: false })
   const { data: charts } = useSWR('/api/dashboard/charts', fetcher, { revalidateOnFocus: false })
 

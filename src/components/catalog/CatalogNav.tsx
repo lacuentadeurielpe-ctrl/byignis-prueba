@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Package, Bot, Upload, ClipboardList, Sparkles } from 'lucide-react'
+import { Package, Bot, Upload, ClipboardList, Sparkles, ArrowRightLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const TABS = [
@@ -10,6 +10,7 @@ const TABS = [
   { href: '/dashboard/catalog/digital',     label: 'Digital',          icon: Sparkles,      badge: 'NUEVO' },
   { href: '/dashboard/catalog/scanner',     label: 'Escanear Factura', icon: Bot,           badge: 'IA' },
   { href: '/dashboard/catalog/reabastecer', label: 'Reabastecer',      icon: ClipboardList },
+  { href: '/dashboard/catalog/transferencias',label:'Transferencias',  icon: ArrowRightLeft },
   { href: '/dashboard/catalog/upload',      label: 'Importar',         icon: Upload },
 ]
 

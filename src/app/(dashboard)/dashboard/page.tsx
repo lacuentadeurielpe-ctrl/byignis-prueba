@@ -8,19 +8,28 @@ import DashboardHero from '@/components/dashboard/v2/DashboardHero'
 import DashboardAtencion from '@/components/dashboard/v2/DashboardAtencion'
 import DashboardPipeline from '@/components/dashboard/v2/DashboardPipeline'
 import DashboardFeed from '@/components/dashboard/v2/DashboardFeed'
+import SucursalSelector from '@/components/dashboard/SucursalSelector'
+import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ p?: string }>
+  searchParams: Promise<{ p?: string; s?: string }>
 }) {
-  const { p: periodo = 'semana' } = await searchParams
+  const { p: periodo = 'semana', s: sucursalId } = await searchParams
   const session = await getSessionInfo()
   if (!session) redirect('/auth/login')
 
   const esDueno = session.rol !== 'vendedor'
+
+  const supabase = await createClient()
+  let locales: any[] = []
+  if (session.multiSucursal) {
+    const { data } = await supabase.from('locales_ferreteria').select('id, nombre').eq('ferreteria_id', session.ferreteriaId).eq('activo', true)
+    locales = data ?? []
+  }
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
@@ -38,13 +47,20 @@ export default async function DashboardPage({
             {new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
-        <Suspense fallback={<div className="h-9 w-44 bg-zinc-100 dark:bg-zinc-800 rounded-lg animate-pulse" />}>
-          <PeriodSelector />
-        </Suspense>
+        <div className="flex items-center gap-2">
+          {session.multiSucursal && (
+            <Suspense fallback={<div className="h-9 w-32 bg-zinc-100 dark:bg-zinc-800 rounded-lg animate-pulse" />}>
+              <SucursalSelector locales={locales} />
+            </Suspense>
+          )}
+          <Suspense fallback={<div className="h-9 w-44 bg-zinc-100 dark:bg-zinc-800 rounded-lg animate-pulse" />}>
+            <PeriodSelector />
+          </Suspense>
+        </div>
       </div>
 
       {/* ── 1. HERO — ingresos + gráfico 30d + stats strip ─────── */}
-      <DashboardHero esDueno={esDueno} periodo={periodo} />
+      <DashboardHero esDueno={esDueno} periodo={periodo} sucursalId={sucursalId} />
 
       {/* ── 2. NECESITA ATENCIÓN ─────────────────────────────────── */}
       <DashboardAtencion />

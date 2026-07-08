@@ -14,7 +14,7 @@ export default async function CatalogPage() {
   const supabase = await createClient()
 
   // Cargar productos, categorías, config y ajuste IGV global en paralelo
-  const [{ data: productos }, { data: categorias }, { data: configBot }, { data: ferreteria }] = await Promise.all([
+  const [{ data: productos }, { data: categorias }, { data: configBot }, { data: ferreteria }, { data: locales }, { data: stockLocales }] = await Promise.all([
     supabase
       .from('productos')
       .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*)')
@@ -35,6 +35,8 @@ export default async function CatalogPage() {
       .select('igv_incluido_en_precios, bot_modo_catalogo')
       .eq('id', session.ferreteriaId)
       .single(),
+    session.multiSucursal ? supabase.from('locales_ferreteria').select('*').eq('ferreteria_id', session.ferreteriaId).eq('activo', true) : Promise.resolve({ data: null }),
+    session.multiSucursal ? supabase.from('stock_locales').select('*').eq('ferreteria_id', session.ferreteriaId) : Promise.resolve({ data: null })
   ])
 
   const igvGlobal = ferreteria?.igv_incluido_en_precios ?? false
@@ -78,6 +80,9 @@ export default async function CatalogPage() {
         categorias={categorias ?? []}
         margenMinimo={configBot?.margen_minimo_porcentaje ?? 10}
         igvGlobal={igvGlobal}
+        multiSucursal={session.multiSucursal}
+        locales={locales ?? []}
+        stockLocales={stockLocales ?? []}
       />
     </div>
   )

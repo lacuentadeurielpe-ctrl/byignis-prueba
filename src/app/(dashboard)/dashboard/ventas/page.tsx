@@ -66,6 +66,7 @@ export default async function VentasPage({
       repartidores,
       ferreteriaData,
       facturacionConfigurada,
+      localesReq
     ] = await Promise.all([
       ventasRepo.obtenerPedidosDashboard(session.ferreteriaId),
       catalogRepo.listarProductosActivos(session.ferreteriaId),
@@ -73,6 +74,7 @@ export default async function VentasPage({
       deliveryRepo.listarRepartidores(session.ferreteriaId),
       facturacionRepo.obtenerDatosFerreteriaDashboard(session.ferreteriaId),
       tieneFacturacionActiva(supabase, session.ferreteriaId),
+      session.multiSucursal ? supabase.from('locales_ferreteria').select('*').eq('ferreteria_id', session.ferreteriaId).eq('activo', true) : Promise.resolve({ data: [] }),
     ])
 
     pedidosContent = (
@@ -80,6 +82,7 @@ export default async function VentasPage({
         pedidos={pedidos as any[] ?? []}
         productos={productos as any[] ?? []}
         zonas={zonas as any[] ?? []}
+        locales={localesReq.data ?? []}
         ferreteriaId={session.ferreteriaId}
         rol={session.rol}
         repartidores={repartidores as any[] ?? []}

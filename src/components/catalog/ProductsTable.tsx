@@ -72,9 +72,20 @@ interface ProductsTableProps {
   categorias: Categoria[]
   margenMinimo?: number
   igvGlobal?: boolean
+  multiSucursal?: boolean
+  locales?: any[]
+  stockLocales?: any[]
 }
 
-export default function ProductsTable({ productos: initialProductos, categorias: initialCategorias, margenMinimo = 10, igvGlobal = false }: ProductsTableProps) {
+export default function ProductsTable({
+  productos: initialProductos,
+  categorias: initialCategorias,
+  margenMinimo = 10,
+  igvGlobal = false,
+  multiSucursal = false,
+  locales = [],
+  stockLocales = []
+}: ProductsTableProps) {
   const router = useRouter()
 
   const [productos, setProductos] = useState(initialProductos)
@@ -344,6 +355,18 @@ export default function ProductsTable({ productos: initialProductos, categorias:
                         {isOutOfStock && <span className="block text-[9px] font-semibold text-red-400">Agotado</span>}
                         {!isOutOfStock && isLowStock && <span className="block text-[9px] font-semibold text-amber-500">Stock bajo</span>}
                       </p>
+                      {multiSucursal && (
+                        <div className="mt-1 flex flex-col items-center gap-0.5">
+                          {locales.map(loc => {
+                            const stockLocal = stockLocales.find(sl => sl.local_id === loc.id && sl.producto_id === producto.id)?.stock || 0
+                            return (
+                              <span key={loc.id} className="text-[9px] text-zinc-500 font-medium whitespace-nowrap">
+                                {loc.nombre}: <b className="text-zinc-700">{stockLocal}</b>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                     <div className="p-3 text-center">
                       <p className="text-[10px] text-zinc-400 uppercase font-semibold mb-0.5">Unidad</p>
@@ -480,6 +503,18 @@ export default function ProductsTable({ productos: initialProductos, categorias:
                             {producto.stock_minimo !== null && <span className="text-[9px] text-zinc-400 font-normal">mín. {producto.stock_minimo}</span>}
                             {isOutOfStock && <span className="text-[9px] font-semibold text-red-500 flex items-center gap-0.5 mt-0.5"><AlertTriangle className="w-2.5 h-2.5 shrink-0" /> Agotado</span>}
                             {!isOutOfStock && isLowStock && <span className="text-[9px] font-semibold text-amber-600 flex items-center gap-0.5 mt-0.5"><AlertTriangle className="w-2.5 h-2.5 shrink-0" /> Stock bajo</span>}
+                            {multiSucursal && (
+                              <div className="mt-1.5 pt-1.5 border-t border-zinc-100/50 flex flex-col items-end gap-0.5 w-full">
+                                {locales.map(loc => {
+                                  const stockLocal = stockLocales.find(sl => sl.local_id === loc.id && sl.producto_id === producto.id)?.stock || 0
+                                  return (
+                                    <span key={loc.id} className="text-[9px] text-zinc-500 font-medium whitespace-nowrap">
+                                      {loc.nombre}: <b className="text-zinc-700">{stockLocal}</b>
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            )}
                           </div>
                         )
                       })()}

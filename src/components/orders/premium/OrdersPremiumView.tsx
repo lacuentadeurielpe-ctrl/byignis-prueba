@@ -66,10 +66,11 @@ export interface Pedido {
 export interface Producto { id: string; nombre: string; unidad: string; precio_base: number; precio_compra: number; stock: number }
 export interface Zona { id: string; nombre: string; tiempo_estimado_min: number }
 
-export default function OrdersPremiumView({ pedidos: inicial, productos: productosIniciales = [], zonas = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, facturacionConfigurada = false, tieneRuc = false, initEstado, initPedidoId }: {
+export default function OrdersPremiumView({ pedidos: inicial, productos: productosIniciales = [], zonas = [], locales = [], ferreteriaId, rol = 'dueno', repartidores = [], permisos, facturacionConfigurada = false, tieneRuc = false, initEstado, initPedidoId }: {
   pedidos: Pedido[]
   productos?: Producto[]
   zonas?: Zona[]
+  locales?: any[]
   ferreteriaId?: string
   rol?: Rol
   repartidores?: Repartidor[]
@@ -199,6 +200,7 @@ export default function OrdersPremiumView({ pedidos: inicial, productos: product
             selectedOrderId={selectedOrderId} 
             onSelectOrder={(id) => setSelectedOrderId(id === selectedOrderId ? null : id)} 
             filters={filters}
+            locales={locales}
           />
         </div>
 

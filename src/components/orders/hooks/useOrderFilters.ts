@@ -5,6 +5,7 @@ export function useOrderFilters(pedidos: any[]) {
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroFecha, setFiltroFecha] = useState('')
+  const [filtroSucursal, setFiltroSucursal] = useState('')
 
   // Debounce la búsqueda 200ms para no correr Levenshtein en cada tecla (BUG-007)
   const [busquedaDelay, setBusquedaDelay] = useState('')
@@ -44,12 +45,13 @@ export function useOrderFilters(pedidos: any[]) {
 
       const matchEstado = !filtroEstado || p.estado === filtroEstado
       const matchFecha = estaEnRango(p.created_at, filtroFecha)
+      const matchSucursal = !filtroSucursal || p.local_id === filtroSucursal
 
-      return matchBusqueda && matchEstado && matchFecha
+      return matchBusqueda && matchEstado && matchFecha && matchSucursal
     })
-  }, [pedidos, busquedaDelay, filtroEstado, filtroFecha])
+  }, [pedidos, busquedaDelay, filtroEstado, filtroFecha, filtroSucursal])
 
-  const hayFiltros = busqueda || filtroEstado || filtroFecha
+  const hayFiltros = busqueda || filtroEstado || filtroFecha || filtroSucursal
 
   const conteosEstados = useMemo(() => {
     const conteos: Record<string, number> = {}
@@ -67,6 +69,8 @@ export function useOrderFilters(pedidos: any[]) {
     setFiltroEstado,
     filtroFecha,
     setFiltroFecha,
+    filtroSucursal,
+    setFiltroSucursal,
     filtrados,
     hayFiltros,
     conteosEstados
