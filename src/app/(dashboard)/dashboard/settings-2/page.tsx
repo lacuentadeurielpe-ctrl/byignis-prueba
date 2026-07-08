@@ -46,13 +46,7 @@ const CHECKLIST: ChecklistItem[] = [
     completed: false,
     href: '/dashboard/settings-2/finanzas',
   },
-  {
-    id: '4',
-    title: 'Agrega tu equipo',
-    description: 'Empleados y repartidores',
-    completed: false,
-    href: '/dashboard/settings-2/equipo',
-  },
+
   {
     id: '5',
     title: 'Carga tu catálogo',
@@ -81,15 +75,7 @@ const MODULES: ModuleStatus[] = [
     icon: '🔗',
     count: '3',
   },
-  {
-    id: 'equipo',
-    name: 'Equipo',
-    status: 'incompleto',
-    statusLabel: '○',
-    statusDetail: 'Falta agregar empleados',
-    href: '/dashboard/settings-2/equipo',
-    icon: '👥',
-  },
+
   {
     id: 'finanzas',
     name: 'Finanzas',

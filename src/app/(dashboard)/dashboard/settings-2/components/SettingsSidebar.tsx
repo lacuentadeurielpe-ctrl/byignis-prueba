@@ -32,13 +32,7 @@ const SECTIONS: NavItem[] = [
     status: 'alerta',
     count: 3,
   },
-  {
-    id: 'equipo',
-    label: 'Equipo',
-    href: `${BASE}/equipo`,
-    icon: <Users className="w-5 h-5" />,
-    status: 'completo',
-  },
+
   {
     id: 'finanzas',
     label: 'Finanzas',

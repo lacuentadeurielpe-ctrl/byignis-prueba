@@ -58,6 +58,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Catálogo',  href: '/dashboard/catalog',   icon: Package,    permiso: 'ver_stock', moduleName: 'catalog' },
       { label: 'Clientes',  href: '/dashboard/clientes',  icon: Users,      permiso: 'ver_historial_clientes', moduleName: 'clientes' },
+      { label: 'Equipo',    href: '/dashboard/equipo',    icon: Users,      permiso: 'configurar_ferreteria' },
       { label: 'Difusiones', href: '/dashboard/difusiones', icon: Megaphone, permiso: 'ver_pedidos', moduleName: 'chat' },
       { label: 'Plantillas WA', href: '/dashboard/plantillas-wa', icon: LayoutTemplate, permiso: 'ver_pedidos', moduleName: 'chat' },
       { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos', moduleName: 'delivery' },
