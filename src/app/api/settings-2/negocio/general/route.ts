@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     // Obtener datos de ferreterias
     const { data, error } = await supabase
       .from('ferreterias')
-      .select('nombre, telefono_whatsapp, direccion, email, logo_url, color_comprobante, tipo_establecimiento, ruc, mensaje_comprobante, pdf_color_secundario, pdf_formato_boleta, pdf_formato_factura, pdf_formato_nota_venta')
+      .select('nombre, telefono_whatsapp, direccion, email, logo_url, color_comprobante, tipo_establecimiento, ruc, mensaje_comprobante, pdf_color_secundario, pdf_formato_boleta, pdf_formato_factura, pdf_formato_nota_venta, catalogo_slug, catalogo_config')
       .eq('id', session.ferreteriaId)
       .single()
 
@@ -67,12 +67,14 @@ export async function PATCH(request: Request) {
     if (body.pdf_formato_boleta !== undefined) updateData.pdf_formato_boleta = body.pdf_formato_boleta
     if (body.pdf_formato_factura !== undefined) updateData.pdf_formato_factura = body.pdf_formato_factura
     if (body.pdf_formato_nota_venta !== undefined) updateData.pdf_formato_nota_venta = body.pdf_formato_nota_venta
+    if (body.catalogo_slug !== undefined) updateData.catalogo_slug = body.catalogo_slug || null
+    if (body.catalogo_config !== undefined) updateData.catalogo_config = body.catalogo_config
 
     const { data, error } = await supabase
       .from('ferreterias')
       .update(updateData)
       .eq('id', session.ferreteriaId)
-      .select('nombre, telefono_whatsapp, direccion, email, logo_url, color_comprobante, tipo_establecimiento, ruc, mensaje_comprobante, pdf_color_secundario, pdf_formato_boleta, pdf_formato_factura, pdf_formato_nota_venta')
+      .select('nombre, telefono_whatsapp, direccion, email, logo_url, color_comprobante, tipo_establecimiento, ruc, mensaje_comprobante, pdf_color_secundario, pdf_formato_boleta, pdf_formato_factura, pdf_formato_nota_venta, catalogo_slug, catalogo_config')
       .single()
 
     if (error) {

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Loader2, TrendingUp, AlertTriangle, Copy, Plus, Trash2, Package2, Receipt, ScanLine } from 'lucide-react'
 import { type Producto, type Categoria } from '@/types/database'
 import DiscountRulesEditor, { type ReglaForm } from './DiscountRulesEditor'
+import ProductImagesEditor from './ProductImagesEditor'
 import ScannerModal from '@/components/ui/ScannerModal'
 import { cn, formatPEN } from '@/lib/utils'
 import { UNIDADES_SUNAT, normalizarUnidad, labelUnidad, UNIDAD_DEFAULT } from '@/lib/constantes/unidades'
@@ -74,6 +75,8 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
     marca: producto?.marca ?? '',
   })
 
+  const [imagenes, setImagenes] = useState<string[]>(producto?.imagenes ?? [])
+
   const [reglas, setReglas] = useState<ReglaForm[]>(
     producto?.reglas_descuento?.map((r) => ({
       id: r.id,
@@ -97,7 +100,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [seccion, setSeccion] = useState<'basico' | 'descuentos' | 'unidades'>('basico')
+  const [seccion, setSeccion] = useState<'basico' | 'imagenes' | 'descuentos' | 'unidades'>('basico')
   const [showScanner, setShowScanner] = useState(false)
 
   // ── Dedup: solo para nuevo producto ─────────────────────────────────────────
@@ -200,6 +203,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
       facturable: form.facturable,
       proveedor: form.proveedor.trim() || null,
       marca: form.marca.trim() || null,
+      imagenes,
       reglas_descuento: reglas.map(({ id: _, ...r }) => r),
       unidades_producto: unidades.map(({ id, ...u }) => ({
         ...(id ? { id } : {}),
@@ -239,6 +243,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
       <div className="flex border-b border-zinc-100 overflow-x-auto">
         {[
           { key: 'basico', label: 'Datos del producto' },
+          { key: 'imagenes', label: `Imágenes${imagenes.length > 0 ? ` (${imagenes.length})` : ''}` },
           { key: 'descuentos', label: `Descuentos${reglas.length > 0 ? ` (${reglas.length})` : ''}` },
           { key: 'unidades', label: `Unidades adicionales${unidades.length > 0 ? ` (${unidades.length})` : ''}` },
         ].map(({ key, label }) => (
@@ -666,6 +671,14 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
             </label>
           </div>
         </div>
+      )}
+
+      {/* ── SECCIÓN: Imágenes ── */}
+      {seccion === 'imagenes' && (
+        <ProductImagesEditor
+          imagenes={imagenes}
+          onChange={setImagenes}
+        />
       )}
 
       {/* ── SECCIÓN: Descuentos por volumen ── */}

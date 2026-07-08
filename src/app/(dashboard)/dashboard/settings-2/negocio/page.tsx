@@ -7,6 +7,7 @@ import PagosMetodosForm from './components/PagosMetodosForm'
 import LocalesForm from './components/LocalesForm'
 import WelcomeBanner from './components/WelcomeBanner'
 import ComprobanteAparienciaForm from './components/ComprobanteAparienciaForm'
+import CatalogoPublicoForm from './components/CatalogoPublicoForm'
 
 export default function NegocioPage() {
   return (
@@ -20,6 +21,7 @@ export default function NegocioPage() {
       <div className="p-6 max-w-4xl space-y-6">
         <WelcomeBanner />
         <GeneralForm />
+        <CatalogoPublicoForm />
         <ComprobanteAparienciaForm />
         <LocalesForm />
         <HorariosForm />

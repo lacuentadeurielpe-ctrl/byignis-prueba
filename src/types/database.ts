@@ -173,6 +173,15 @@ export interface Ferreteria {
   margen_minimo_descuento: number
   // ── Sucursales (migración 106) ──────────────────────────────────
   multi_sucursal: boolean            // apagado = tienda única (comportamiento clásico)
+  // ── Catálogo Público (migración 109) ────────────────────────────
+  catalogo_slug: string | null
+  catalogo_config: {
+    mostrar_precios?: boolean
+    mostrar_sin_stock?: boolean
+    mostrar_descripciones?: boolean
+    mostrar_imagenes?: boolean
+    mostrar_bulk_pricing?: boolean
+  } | null
   // ────────────────────────────────────────────────────────────────
   created_at: string
   updated_at: string
@@ -292,6 +301,7 @@ export interface Producto {
   activo: boolean
   proveedor?: string | null
   marca?: string | null
+  imagenes?: string[]
   created_at: string
   updated_at: string
   // joins
