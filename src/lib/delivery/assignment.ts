@@ -23,6 +23,8 @@ export async function seleccionarVehiculo(
   repartidorId: string | null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any>,
+  /** Sucursal del pedido: prioriza vehículos de ese local (los sin local sirven a todos). */
+  localId?: string | null,
 ): Promise<string | null> {
   // Prioridad 1: vehículo asignado al repartidor en este momento
   if (repartidorId) {
@@ -36,14 +38,18 @@ export async function seleccionarVehiculo(
     if (rep?.vehiculo_actual_id) return rep.vehiculo_actual_id as string
   }
 
-  // Prioridad 2: vehículo disponible (estado = disponible | en_uso) con menos carga
-  const { data: vehiculos } = await supabase
+  // Prioridad 2: vehículo disponible (estado = disponible | en_uso) con menos carga.
+  // Con sucursal: solo vehículos de ese local o sin local asignado (flota común).
+  let query = supabase
     .from('vehiculos_delivery')
     .select('id')
     .eq('ferreteria_id', ferreteriaId)
     .eq('activo', true)
     .in('estado', ['disponible', 'en_uso'])
-    .order('nombre')
+
+  if (localId) query = query.or(`local_id.is.null,local_id.eq.${localId}`)
+
+  const { data: vehiculos } = await query.order('nombre')
 
   if (!vehiculos?.length) return null
 
@@ -196,8 +202,16 @@ export async function crearEntrega(params: ParamsCrearEntrega): Promise<string |
 
     if (existente) return existente.id as string
 
+    // Sucursal del pedido: la entrega la hereda y acota la flota candidata
+    const { data: pedidoRow } = await supabase
+      .from('pedidos')
+      .select('local_id')
+      .eq('id', pedidoId)
+      .single()
+    const localId = (pedidoRow?.local_id as string | null) ?? null
+
     // ── 1. Seleccionar vehículo ──────────────────────────────────────────────
-    const vehiculoId = await seleccionarVehiculo(ferreteriaId, repartidorId, supabase)
+    const vehiculoId = await seleccionarVehiculo(ferreteriaId, repartidorId, supabase, localId)
 
     // ── 2. Encolar pedido en delivery_queue ──────────────────────────────────
     const queueParams: ParamsEncolar = {
@@ -240,6 +254,7 @@ export async function crearEntrega(params: ParamsCrearEntrega): Promise<string |
         intentos_entrega:      0,
         max_intentos:          3,
         peso_total_kg:         pesoTotalKg,
+        local_id:              localId,
       })
       .select('id')
       .single()

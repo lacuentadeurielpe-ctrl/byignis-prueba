@@ -19,11 +19,22 @@ export async function PATCH(
   // Campos editables — no permitir cambiar ferreteria_id
   const {
     nombre, tipo, capacidad_kg, capacidad_m3,
-    velocidad_promedio_kmh, costo_por_km, activo,
+    velocidad_promedio_kmh, costo_por_km, activo, local_id,
   } = body
 
   const supabase = await createClient()
   const deliveryRepo = new DeliveryRepository(supabase)
+
+  // Sucursal base del vehículo (null = flota común, sirve a todas)
+  if (local_id !== undefined && local_id !== null) {
+    const { data: local } = await supabase
+      .from('locales_ferreteria')
+      .select('id')
+      .eq('id', local_id)
+      .eq('ferreteria_id', session.ferreteriaId)
+      .single()
+    if (!local) return NextResponse.json({ error: 'Sucursal no encontrada' }, { status: 404 })
+  }
 
   try {
     const data = await deliveryRepo.actualizarVehiculo(session.ferreteriaId, id, {
@@ -34,6 +45,7 @@ export async function PATCH(
       ...(velocidad_promedio_kmh !== undefined && { velocidad_promedio_kmh }),
       ...(costo_por_km           !== undefined && { costo_por_km }),
       ...(activo                 !== undefined && { activo }),
+      ...(local_id               !== undefined && { local_id }),
     })
 
     if (!data) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
