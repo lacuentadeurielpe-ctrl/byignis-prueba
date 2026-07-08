@@ -1,5 +1,6 @@
-﻿import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSessionInfo } from '@/lib/auth/roles'
 
 export const dynamic = 'force-dynamic'
@@ -38,23 +39,46 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
 
-    if (!body.email || !body.nombre) {
-      return NextResponse.json({ error: 'Email y nombre son requeridos' }, { status: 400 })
+    if (!body.email || !body.nombre || !body.password) {
+      return NextResponse.json({ error: 'Email, nombre y contraseña son requeridos' }, { status: 400 })
     }
+
+    const admin = createAdminClient()
+
+    // 1. Crear usuario en Auth
+    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+      email: body.email.trim().toLowerCase(),
+      password: body.password,
+      email_confirm: true,
+      user_metadata: { nombre: body.nombre.trim() },
+    })
+
+    if (authError) {
+      const msg = authError.message.includes('already registered')
+        ? 'Ya existe una cuenta con ese correo'
+        : authError.message
+      return NextResponse.json({ error: msg }, { status: 400 })
+    }
+
+    const userId = authData.user.id
 
     const { data, error } = await supabase
       .from('miembros_ferreteria')
       .insert({
         ferreteria_id: session.ferreteriaId,
+        user_id: userId,
         nombre: body.nombre,
         email: body.email,
         rol: body.rol || 'vendedor',
         estado: 'activo',
+        contrasena_temporal: body.password,
       })
       .select()
       .single()
 
     if (error) {
+      // Rollback Auth user
+      await admin.auth.admin.deleteUser(userId)
       console.error('Error creating empleado:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }

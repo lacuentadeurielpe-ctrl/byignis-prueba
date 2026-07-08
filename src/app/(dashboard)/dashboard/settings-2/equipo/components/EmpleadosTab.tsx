@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { Mail, Plus, Trash2 } from 'lucide-react'
@@ -25,6 +25,7 @@ export default function EmpleadosTab() {
   const [showForm, setShowForm] = useState(false)
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [rol, setRol] = useState('vendedor')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
@@ -77,8 +78,12 @@ export default function EmpleadosTab() {
   }
 
   const handleAdd = async () => {
-    if (!nombre || !email) {
-      setError('Nombre y email son requeridos')
+    if (!nombre || !email || !password) {
+      setError('Nombre, email y contraseña son requeridos')
+      return
+    }
+    if (password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres')
       return
     }
 
@@ -89,7 +94,7 @@ export default function EmpleadosTab() {
       const res = await fetch('/api/settings-2/equipo/empleados', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, email, rol }),
+        body: JSON.stringify({ nombre, email, password, rol }),
       })
 
       if (res.ok) {
@@ -97,6 +102,7 @@ export default function EmpleadosTab() {
         setEmpleados([newEmpleado, ...empleados])
         setNombre('')
         setEmail('')
+        setPassword('')
         setRol('vendedor')
         setShowForm(false)
       } else {
@@ -167,6 +173,13 @@ export default function EmpleadosTab() {
             placeholder="Email"
             value={email}
             onChange={e => setEmail(e.target.value)}
+            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          />
+          <input
+            type="text"
+            placeholder="Contraseña (mín 6 caracteres)"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
             className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
           <select
