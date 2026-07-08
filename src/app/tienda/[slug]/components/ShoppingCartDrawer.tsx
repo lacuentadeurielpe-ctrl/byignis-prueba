@@ -24,17 +24,17 @@ export default function ShoppingCartDrawer({ storePhone, storeName }: ShoppingCa
   const handleSendWhatsApp = () => {
     if (!storePhone) return
     
-    let text = `👋 Hola *${storeName}*, me interesan estos productos:\n\n`
+    let text = `Hola *${storeName}*, me interesan estos productos:\n\n`
     
     items.forEach(item => {
-      const icon = item.tipo === 'digital' ? '💻' : '📦'
+      const typeLabel = item.tipo === 'digital' ? '[Digital] ' : ''
       const priceText = item.precio_base ? `(${formatPEN(item.precio_base)})` : ''
-      text += `${icon} ${item.cantidad}x ${item.nombre} ${priceText}\n`
+      text += `- ${item.cantidad}x ${typeLabel}${item.nombre} ${priceText}\n`
     })
 
     const total = getTotal()
     if (total > 0) {
-      text += `\n💰 *Total aproximado: ${formatPEN(total)}*\n`
+      text += `\n*Total aproximado: ${formatPEN(total)}*\n`
     }
 
     text += `\n¿Me pueden confirmar stock y disponibilidad?`
