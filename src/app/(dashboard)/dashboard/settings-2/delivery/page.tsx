@@ -25,7 +25,7 @@ export default function DeliveryPage() {
         breadcrumbs={[{ label: 'Configuración' }, { label: 'Delivery' }]}
       />
 
-      <div className="p-6 max-w-6xl space-y-6">
+      <div className="p-4 md:p-6 max-w-6xl space-y-4 md:space-y-6">
         <div className="border-b border-zinc-200">
           <div className="flex gap-1">
             {TABS.map(tab => (

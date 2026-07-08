@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import { Package } from 'lucide-react'
@@ -26,7 +26,7 @@ export default function CatalogoPage() {
         breadcrumbs={[{ label: 'Configuración' }, { label: 'Catálogo' }]}
       />
 
-      <div className="p-6 max-w-6xl space-y-6">
+      <div className="p-4 md:p-6 max-w-6xl space-y-4 md:space-y-6">
         <div className="border-b border-zinc-200">
           <div className="flex gap-1">
             {TABS.map(tab => (

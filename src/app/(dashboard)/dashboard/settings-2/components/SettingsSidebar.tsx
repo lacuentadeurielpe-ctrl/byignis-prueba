@@ -92,9 +92,9 @@ export default function SettingsSidebar() {
   const pathname = usePathname()
 
   return (
-    <nav className="w-64 bg-white border-r border-zinc-200 overflow-y-auto flex flex-col">
+    <nav className="w-full md:w-64 shrink-0 bg-white border-b md:border-b-0 md:border-r border-zinc-200 overflow-x-auto md:overflow-y-auto flex flex-row md:flex-col no-scrollbar">
       {/* Header */}
-      <div className="sticky top-0 bg-gradient-to-b from-white to-zinc-50 border-b border-zinc-200 p-5">
+      <div className="hidden md:block sticky top-0 bg-gradient-to-b from-white to-zinc-50 border-b border-zinc-200 p-5">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-2 h-2 rounded-full bg-indigo-600" />
           <h2 className="text-sm font-bold text-zinc-900">Configuración</h2>
@@ -103,7 +103,7 @@ export default function SettingsSidebar() {
       </div>
 
       {/* Navigation Items */}
-      <div className="flex-1 px-3 py-4 space-y-1">
+      <div className="flex flex-row md:flex-col flex-1 px-3 py-3 md:py-4 gap-2 md:gap-0 md:space-y-1 min-w-max md:min-w-0">
         {SECTIONS.map(item => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
           const statusColorMap = {
@@ -117,26 +117,26 @@ export default function SettingsSidebar() {
               key={item.id}
               href={item.href}
               className={cn(
-                'flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition relative group',
+                'flex items-center justify-between px-3 py-2 md:py-2.5 rounded-lg text-sm font-medium transition relative group whitespace-nowrap',
                 isActive
                   ? `bg-indigo-50 text-indigo-700 border border-indigo-200`
                   : 'text-zinc-700 hover:bg-zinc-50 border border-transparent'
               )}
             >
-              <div className="flex items-center gap-3 flex-1">
+              <div className="flex items-center gap-2 md:gap-3 flex-1">
                 <div className={cn('transition', isActive ? 'text-indigo-600' : 'text-zinc-400 group-hover:text-zinc-600')}>
                   {item.icon}
                 </div>
                 <span className="flex-1">{item.label}</span>
               </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex items-center gap-1.5 flex-shrink-0 ml-2 md:ml-0">
                 {item.count && (
                   <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full">
                     {item.count}
                   </span>
                 )}
                 {item.status && (
-                  <span className={`text-sm font-bold ${statusColorMap[item.status] || 'text-zinc-400'}`}>{STATUS_ICON[item.status]}</span>
+                  <span className={`text-sm font-bold hidden md:inline ${statusColorMap[item.status] || 'text-zinc-400'}`}>{STATUS_ICON[item.status]}</span>
                 )}
               </div>
             </Link>
@@ -145,7 +145,7 @@ export default function SettingsSidebar() {
       </div>
 
       {/* Footer */}
-      <div className="border-t border-zinc-200 p-4 mt-auto">
+      <div className="hidden md:block border-t border-zinc-200 p-4 mt-auto">
         <p className="text-xs text-zinc-500 text-center">
           ✓ {SECTIONS.filter(s => s.status === 'completo').length}/8 completados
         </p>

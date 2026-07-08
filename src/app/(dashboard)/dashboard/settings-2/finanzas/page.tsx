@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import SettingsHeader from '../components/SettingsHeader'
 import FacturacionForm from './components/FacturacionForm'
@@ -12,7 +12,7 @@ export default function FinanzasPage() {
         breadcrumbs={[{ label: 'Configuración' }, { label: 'Finanzas' }]}
       />
 
-      <div className="p-6 max-w-4xl space-y-6">
+      <div className="p-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
         <FacturacionForm />
       </div>
     </div>

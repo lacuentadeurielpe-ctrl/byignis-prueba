@@ -159,7 +159,7 @@ export default function Settings2Hub() {
         description="Panel de control centralizado para tu negocio"
       />
 
-      <div className="p-8 max-w-7xl mx-auto space-y-8">
+      <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 md:space-y-8">
         {/* Setup Checklist */}
         <div className="bg-white rounded-xl border border-zinc-200 shadow-sm overflow-hidden">
           <button

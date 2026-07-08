@@ -18,7 +18,7 @@ export default function NegocioPage() {
         breadcrumbs={[{ label: 'Configuración' }, { label: 'Negocio' }]}
       />
 
-      <div className="p-6 max-w-4xl space-y-6">
+      <div className="p-4 md:p-6 max-w-4xl space-y-4 md:space-y-6">
         <WelcomeBanner />
         <GeneralForm />
         <CatalogoPublicoForm />
