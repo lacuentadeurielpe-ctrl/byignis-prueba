@@ -1,16 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Mail, Plus, Trash2 } from 'lucide-react'
-
-interface Empleado {
-  id: string
-  nombre: string
-  email: string
-  rol: string
-  estado: string
-  local_id?: string | null
-}
+import { Mail, Plus, Trash2, MapPin, Shield, Building2, ExternalLink } from 'lucide-react'
+import { useEmpleados } from '@/hooks/rrhh/useEmpleados'
+import Link from 'next/link'
 
 interface LocalOption {
   id: string
@@ -18,21 +11,21 @@ interface LocalOption {
 }
 
 export default function EmpleadosTab() {
-  const [empleados, setEmpleados] = useState<Empleado[]>([])
-  const [loading, setLoading] = useState(true)
+  const { empleados, loading, error, fetchEmpleados, addEmpleado, deleteEmpleado, updateEmpleado } = useEmpleados()
   const [locales, setLocales] = useState<LocalOption[]>([])
   const [multiSucursal, setMultiSucursal] = useState(false)
+  
   const [showForm, setShowForm] = useState(false)
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [rol, setRol] = useState('vendedor')
   const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [formError, setFormError] = useState('')
 
   useEffect(() => {
     fetchEmpleados()
-    // Sucursales del tenant (para asignar empleados) — solo si multi_sucursal
+    // Sucursales del tenant (para asignar empleados)
     fetch('/api/sucursales')
       .then(r => r.ok ? r.json() : null)
       .then(ctx => {
@@ -42,7 +35,7 @@ export default function EmpleadosTab() {
         }
       })
       .catch(() => {})
-  }, [])
+  }, [fetchEmpleados])
 
   const handleAsignarSucursal = async (empleadoId: string, localId: string) => {
     try {
@@ -52,156 +45,132 @@ export default function EmpleadosTab() {
         body: JSON.stringify({ id: empleadoId, local_id: localId || null }),
       })
       if (res.ok) {
-        const updated = await res.json()
-        setEmpleados(prev => prev.map(e => (e.id === empleadoId ? { ...e, local_id: updated.local_id } : e)))
+        // En un futuro cercano migraremos esto al uso de empleado_sucursal pivot,
+        // por ahora mantenemos compatibilidad con local_id
+        await updateEmpleado(empleadoId, { local_id: localId || null } as any)
       } else {
         const err = await res.json()
-        setError(err.error || 'Error al asignar sucursal')
+        alert(err.error || 'Error al asignar sucursal')
       }
     } catch {
-      setError('Error en la conexión')
-    }
-  }
-
-  const fetchEmpleados = async () => {
-    try {
-      const res = await fetch('/api/settings-2/equipo/empleados')
-      if (res.ok) {
-        const data = await res.json()
-        setEmpleados(data)
-      }
-    } catch (err) {
-      setError('Error al cargar empleados')
-    } finally {
-      setLoading(false)
+      alert('Error en la conexión')
     }
   }
 
   const handleAdd = async () => {
     if (!nombre || !email || !password) {
-      setError('Nombre, email y contraseña son requeridos')
+      setFormError('Nombre, email y contraseña son requeridos')
       return
     }
     if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres')
+      setFormError('La contraseña debe tener al menos 6 caracteres')
       return
     }
 
     setIsSaving(true)
-    setError('')
+    setFormError('')
 
-    try {
-      const res = await fetch('/api/settings-2/equipo/empleados', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre, email, password, rol }),
-      })
-
-      if (res.ok) {
-        const newEmpleado = await res.json()
-        setEmpleados([newEmpleado, ...empleados])
-        setNombre('')
-        setEmail('')
-        setPassword('')
-        setRol('vendedor')
-        setShowForm(false)
-      } else {
-        const err = await res.json()
-        setError(err.error || 'Error al agregar')
-      }
-    } catch (err) {
-      setError('Error en la conexión')
-    } finally {
-      setIsSaving(false)
+    const res = await addEmpleado({ nombre, email, password, rol })
+    if (res.success) {
+      setNombre('')
+      setEmail('')
+      setPassword('')
+      setRol('vendedor')
+      setShowForm(false)
+    } else {
+      setFormError(res.error || 'Error al agregar')
     }
+    setIsSaving(false)
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('¿Eliminar empleado?')) return
-
-    try {
-      const res = await fetch(`/api/settings-2/equipo/empleados?id=${id}`, {
-        method: 'DELETE',
-      })
-
-      if (res.ok) {
-        setEmpleados(empleados.filter(e => e.id !== id))
-      } else {
-        setError('Error al eliminar')
-      }
-    } catch (err) {
-      setError('Error en la conexión')
+    const res = await deleteEmpleado(id)
+    if (!res.success) {
+      alert(res.error || 'Error al eliminar')
     }
   }
 
-  if (loading) return <div className="text-sm text-zinc-500 py-8 text-center">Cargando...</div>
+  if (loading) return (
+    <div className="flex justify-center items-center py-20">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+    </div>
+  )
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {error && (
-        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg flex items-start gap-3">
-          <span className="flex-shrink-0 font-bold">⚠️</span>
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl flex items-start gap-3">
+          <span className="flex-shrink-0 font-bold mt-0.5">⚠️</span>
           <span>{error}</span>
         </div>
       )}
 
-      <div className="flex justify-between items-center">
+      {/* Cabecera */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h3 className="font-semibold text-zinc-900">Empleados</h3>
-          <p className="text-xs text-zinc-500 mt-1">{empleados.length} empleado{empleados.length !== 1 ? 's' : ''} en el equipo</p>
+          <h3 className="text-lg font-bold text-zinc-900 tracking-tight">Directorio de Empleados</h3>
+          <p className="text-sm text-zinc-500 mt-1">{empleados.length} empleado{empleados.length !== 1 ? 's' : ''} en tu organización</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 transition"
+          className="w-full sm:w-auto px-4 py-2.5 text-sm font-semibold bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95"
         >
           <Plus className="w-4 h-4" />
-          Agregar
+          Nuevo Empleado
         </button>
       </div>
 
+      {/* Formulario (Desplegable) */}
       {showForm && (
-        <div className="p-5 bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl space-y-4">
-          <input
-            type="text"
-            placeholder="Nombre completo"
-            value={nombre}
-            onChange={e => setNombre(e.target.value)}
-            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-          <input
-            type="text"
-            placeholder="Contraseña (mín 6 caracteres)"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          />
-          <select
-            value={rol}
-            onChange={e => setRol(e.target.value)}
-            className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-          >
-            <option value="vendedor">Vendedor</option>
-            <option value="gerente">Gerente</option>
-            <option value="admin">Admin</option>
-          </select>
-          <div className="flex gap-3">
+        <div className="p-5 sm:p-6 bg-white border border-zinc-200 shadow-sm rounded-2xl space-y-4 animate-in slide-in-from-top-2 fade-in duration-200">
+          <h4 className="font-semibold text-zinc-900">Agregar Empleado</h4>
+          {formError && <p className="text-xs text-rose-600 bg-rose-50 p-2 rounded-lg">{formError}</p>}
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <input
+              type="text"
+              placeholder="Nombre completo"
+              value={nombre}
+              onChange={e => setNombre(e.target.value)}
+              className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+            />
+            <input
+              type="email"
+              placeholder="Correo electrónico"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+            />
+            <input
+              type="text"
+              placeholder="Contraseña temporal"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+            />
+            <select
+              value={rol}
+              onChange={e => setRol(e.target.value)}
+              className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+            >
+              <option value="vendedor">Vendedor (Mostrador)</option>
+              <option value="gerente">Gerente de Sucursal</option>
+              <option value="admin">Administrador General</option>
+            </select>
+          </div>
+          
+          <div className="flex gap-3 pt-2">
             <button
               onClick={handleAdd}
               disabled={isSaving}
-              className="flex-1 px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:bg-zinc-300 disabled:cursor-not-allowed text-white rounded-lg transition"
+              className="flex-1 sm:flex-none sm:w-32 px-4 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl transition-all shadow-sm"
             >
               {isSaving ? 'Guardando...' : 'Guardar'}
             </button>
             <button
               onClick={() => setShowForm(false)}
-              className="flex-1 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 border border-zinc-200 rounded-lg transition"
+              className="flex-1 sm:flex-none sm:w-32 px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 border border-zinc-200 rounded-xl transition-all"
             >
               Cancelar
             </button>
@@ -209,62 +178,83 @@ export default function EmpleadosTab() {
         </div>
       )}
 
+      {/* Grid de Tarjetas (Mobile-First) */}
       {empleados.length === 0 ? (
-        <div className="p-12 text-center border border-zinc-200 rounded-xl bg-zinc-50">
-          <Mail className="w-10 h-10 mx-auto mb-3 text-zinc-400" />
-          <p className="text-sm text-zinc-600 font-medium">No hay empleados aún</p>
-          <p className="text-xs text-zinc-500 mt-1">Agrega tu primer empleado para comenzar</p>
+        <div className="p-12 flex flex-col items-center justify-center text-center border-2 border-dashed border-zinc-200 rounded-2xl bg-zinc-50/50">
+          <div className="w-16 h-16 bg-white shadow-sm border border-zinc-100 rounded-2xl flex items-center justify-center mb-4">
+            <Mail className="w-8 h-8 text-zinc-300" />
+          </div>
+          <p className="text-zinc-900 font-semibold">Tu equipo está vacío</p>
+          <p className="text-sm text-zinc-500 mt-1 max-w-sm">Comienza agregando a tu primer empleado para darle acceso al punto de venta y gestionar su nómina.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-zinc-200 shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="bg-gradient-to-r from-zinc-50 to-white border-b border-zinc-200">
-              <tr>
-                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Nombre</th>
-                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Email</th>
-                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Rol</th>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {empleados.map(emp => (
+            <div key={emp.id} className="bg-white border border-zinc-200 rounded-2xl p-5 hover:shadow-md transition-shadow group flex flex-col h-full relative overflow-hidden">
+              {/* Círculo decorativo fondo */}
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-50/50 rounded-full blur-2xl pointer-events-none"></div>
+
+              <div className="flex justify-between items-start mb-4 relative z-10">
+                <div>
+                  <h4 className="font-bold text-zinc-900 text-lg leading-tight">{emp.nombre}</h4>
+                  <p className="text-sm text-zinc-500 font-mono mt-0.5">{emp.email}</p>
+                </div>
+                <button
+                  onClick={() => handleDelete(emp.id)}
+                  className="p-2 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors shrink-0"
+                  title="Eliminar empleado"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3 flex-grow relative z-10">
+                {/* Rol */}
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                    <Shield className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Rol en Sistema</p>
+                    <p className="text-sm font-semibold text-zinc-900 capitalize">{emp.rol}</p>
+                  </div>
+                </div>
+
+                {/* Sucursal (Si es multi) */}
                 {multiSucursal && (
-                  <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Sucursal</th>
-                )}
-                <th className="px-5 py-3.5 text-left font-semibold text-zinc-700">Acción</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {empleados.map(emp => (
-                <tr key={emp.id} className="hover:bg-zinc-50 transition">
-                  <td className="px-5 py-3.5 font-semibold text-zinc-900">{emp.nombre}</td>
-                  <td className="px-5 py-3.5 text-zinc-600 font-mono text-xs">{emp.email}</td>
-                  <td className="px-5 py-3.5">
-                    <span className="px-2.5 py-1.5 text-xs font-semibold bg-blue-100 text-blue-700 rounded-lg capitalize">{emp.rol}</span>
-                  </td>
-                  {multiSucursal && (
-                    <td className="px-5 py-3.5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center shrink-0">
+                      <Building2 className="w-4 h-4 text-orange-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Sucursal Base</p>
                       <select
                         value={emp.local_id ?? ''}
                         onChange={e => handleAsignarSucursal(emp.id, e.target.value)}
-                        className="px-2 py-1.5 text-xs border border-zinc-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        title="Sucursal asignada — el empleado solo verá y operará esta sucursal"
+                        className="mt-0.5 block w-full py-1 px-2 -ml-2 text-sm font-medium text-zinc-900 bg-transparent hover:bg-zinc-100 rounded-md border-transparent focus:border-indigo-500 focus:ring-indigo-500 cursor-pointer transition-colors"
                       >
-                        <option value="">Todas</option>
+                        <option value="">Todas (Acceso Global)</option>
                         {locales.map(l => (
                           <option key={l.id} value={l.id}>{l.nombre}</option>
                         ))}
                       </select>
-                    </td>
-                  )}
-                  <td className="px-5 py-3.5">
-                    <button
-                      onClick={() => handleDelete(emp.id)}
-                      className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                      title="Eliminar empleado"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Botón ver perfil 360 */}
+              <div className="pt-5 mt-auto border-t border-zinc-100 relative z-10">
+                <Link 
+                  href={`/dashboard/equipo/empleados/${emp.id}`}
+                  className="flex items-center justify-center w-full gap-2 py-2.5 px-4 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-sm font-semibold rounded-xl transition-colors group-hover:bg-indigo-50 group-hover:text-indigo-700"
+                >
+                  Ver Perfil 360°
+                  <ExternalLink className="w-4 h-4" />
+                </Link>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
