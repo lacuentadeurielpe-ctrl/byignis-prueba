@@ -27,8 +27,18 @@ export default function ShoppingCartDrawer({ storePhone, storeName }: ShoppingCa
     let text = `Hola *${storeName}*, me interesan estos productos:\n\n`
     
     items.forEach(item => {
+      let unitPrice = item.precio_base || 0
+      
+      if (item.descuentos && item.descuentos.length > 0) {
+        const descuentosOrdenados = [...item.descuentos].sort((a, b) => b.cantidad_minima - a.cantidad_minima)
+        const descuentoAplicable = descuentosOrdenados.find(d => item.cantidad >= d.cantidad_minima)
+        if (descuentoAplicable) {
+          unitPrice = descuentoAplicable.precio_unitario
+        }
+      }
+
       const typeLabel = item.tipo === 'digital' ? '[Digital] ' : ''
-      const priceText = item.precio_base ? `(${formatPEN(item.precio_base)})` : ''
+      const priceText = item.precio_base ? `(${formatPEN(unitPrice)})` : ''
       text += `- ${item.cantidad}x ${typeLabel}${item.nombre} ${priceText}\n`
     })
 
@@ -123,7 +133,15 @@ export default function ShoppingCartDrawer({ storePhone, storeName }: ShoppingCa
                                           {item.nombre}
                                         </h3>
                                         <p className="ml-4 whitespace-nowrap">
-                                          {item.precio_base ? formatPEN(item.precio_base * item.cantidad) : 'S/ --'}
+                                          {item.precio_base ? (() => {
+                                            let p = item.precio_base || 0
+                                            if (item.descuentos && item.descuentos.length > 0) {
+                                              const descOrd = [...item.descuentos].sort((a, b) => b.cantidad_minima - a.cantidad_minima)
+                                              const d = descOrd.find(d => item.cantidad >= d.cantidad_minima)
+                                              if (d) p = d.precio_unitario
+                                            }
+                                            return formatPEN(p * item.cantidad)
+                                          })() : 'S/ --'}
                                         </p>
                                       </div>
                                     </div>

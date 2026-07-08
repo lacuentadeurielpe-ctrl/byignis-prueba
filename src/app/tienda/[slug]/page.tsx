@@ -403,7 +403,8 @@ export default function TiendaPage() {
                               precio_base: p.precio_base,
                               unidad: p.unidad,
                               imagen: hasImages ? p.imagenes[0] : undefined,
-                              tipo: p.tipo
+                              tipo: p.tipo,
+                              descuentos: p.descuentos
                             })}
                             disabled={p.stock === 0 && store?.config.mostrar_sin_stock && p.tipo === 'fisico'}
                             className="w-full h-11 bg-gray-50 hover:bg-indigo-50 text-indigo-600 border border-indigo-100 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed group-hover:bg-indigo-600 group-hover:text-white"

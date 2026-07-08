@@ -8,6 +8,10 @@ export interface CartItem {
   unidad: string
   imagen?: string
   tipo: 'fisico' | 'digital'
+  descuentos?: Array<{
+    cantidad_minima: number
+    precio_unitario: number
+  }>
 }
 
 interface CartState {
@@ -59,7 +63,19 @@ export const useCart = create<CartState>((set, get) => ({
   clearCart: () => set({ items: [] }),
   getTotal: () => {
     return get().items.reduce((total, item) => {
-      const p = item.precio_base || 0
+      let p = item.precio_base || 0
+      
+      // Aplicar reglas de descuento por volumen si existen
+      if (item.descuentos && item.descuentos.length > 0) {
+        // Ordenar descuentos por cantidad_minima descendente para encontrar el mejor tramo aplicable
+        const descuentosOrdenados = [...item.descuentos].sort((a, b) => b.cantidad_minima - a.cantidad_minima)
+        const descuentoAplicable = descuentosOrdenados.find(d => item.cantidad >= d.cantidad_minima)
+        
+        if (descuentoAplicable) {
+          p = descuentoAplicable.precio_unitario
+        }
+      }
+
       return total + p * item.cantidad
     }, 0)
   },
