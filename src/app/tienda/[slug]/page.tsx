@@ -2,8 +2,11 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { Loader2, Search, Store, ShoppingBag, PackageX, ChevronDown, Package2 } from 'lucide-react'
+import { Loader2, Search, Store, ShoppingBag, PackageX, Package2, Plus, Minus, ShoppingCart } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { formatPEN } from '@/lib/utils'
+import { useCart, CartItem } from './store/useCart'
+import ShoppingCartDrawer from './components/ShoppingCartDrawer'
 
 interface StoreInfo {
   id: string
@@ -34,6 +37,12 @@ interface Product {
     cantidad_minima: number
     precio_unitario: number
   }>
+  tipo: 'fisico' | 'digital'
+}
+
+interface Categoria {
+  id: string
+  nombre: string
 }
 
 export default function TiendaPage() {
@@ -41,15 +50,21 @@ export default function TiendaPage() {
   
   const [store, setStore] = useState<StoreInfo | null>(null)
   const [products, setProducts] = useState<Product[]>([])
+  const [categorias, setCategorias] = useState<Categoria[]>([])
   
   const [loadingInit, setLoadingInit] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
   const [search, setSearch] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
+  const [activeTab, setActiveTab] = useState<'fisico' | 'digital'>('fisico')
+  
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   
+  const { items: cartItems, addItem, updateQuantity, getTotalItems, setIsOpen } = useCart()
+
   const observerRef = useRef<IntersectionObserver | null>(null)
   const lastElementRef = useCallback((node: HTMLDivElement | null) => {
     if (loadingMore) return
@@ -64,7 +79,7 @@ export default function TiendaPage() {
     if (node) observerRef.current.observe(node)
   }, [loadingMore, hasMore])
 
-  // Load store info
+  // Load store info & categories
   useEffect(() => {
     const fetchStore = async () => {
       try {
@@ -72,6 +87,13 @@ export default function TiendaPage() {
         if (!res.ok) throw new Error('Tienda no encontrada')
         const data = await res.json()
         setStore(data)
+        
+        // Cargar categorías
+        const catRes = await fetch(`/api/settings-2/catalogo/categorias`)
+        if (catRes.ok) {
+          const catData = await catRes.json()
+          setCategorias(catData)
+        }
       } catch (err: any) {
         setError(err.message)
       }
@@ -79,7 +101,7 @@ export default function TiendaPage() {
     fetchStore()
   }, [slug])
 
-  // Load products when page/search changes
+  // Load products
   useEffect(() => {
     if (!store) return
 
@@ -88,7 +110,13 @@ export default function TiendaPage() {
         if (page === 1) setLoadingInit(true)
         else setLoadingMore(true)
 
-        const res = await fetch(`/api/public/tienda/${slug}/productos?page=${page}&q=${encodeURIComponent(search)}`)
+        const url = new URL(window.location.origin + `/api/public/tienda/${slug}/productos`)
+        url.searchParams.set('page', page.toString())
+        url.searchParams.set('tipo', activeTab)
+        if (search) url.searchParams.set('q', search)
+        if (selectedCategory) url.searchParams.set('cat', selectedCategory)
+
+        const res = await fetch(url.toString())
         if (!res.ok) throw new Error('Error al cargar productos')
         const data = await res.json()
 
@@ -102,30 +130,33 @@ export default function TiendaPage() {
       }
     }
 
-    // Debounce search if page is 1
     const timeout = setTimeout(() => {
       fetchProducts()
     }, page === 1 ? 400 : 0)
 
     return () => clearTimeout(timeout)
-  }, [slug, store, page, search])
+  }, [slug, store, page, search, selectedCategory, activeTab])
 
-  // Reset page when search changes
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value)
     setPage(1)
   }
 
-  const handlePedir = (product: Product) => {
-    if (!store?.telefono_whatsapp) return
-    const texto = `Hola, vengo del catálogo digital. Me interesa el producto: *${product.nombre}*. ¿Podría darme más información?`
-    const wpUrl = `https://wa.me/${store.telefono_whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`
-    window.open(wpUrl, '_blank')
+  const handleTabChange = (tab: 'fisico' | 'digital') => {
+    setActiveTab(tab)
+    setPage(1)
+    setProducts([])
+  }
+
+  const handleCategorySelect = (id: string) => {
+    setSelectedCategory(prev => prev === id ? '' : id)
+    setPage(1)
+    setProducts([])
   }
 
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-screen p-6 text-center">
         <Store className="w-16 h-16 text-gray-300 mb-4" />
         <h1 className="text-xl font-semibold text-gray-900 mb-2">Oops</h1>
         <p className="text-gray-500">{error}</p>
@@ -133,39 +164,123 @@ export default function TiendaPage() {
     )
   }
 
+  const totalItemsInCart = getTotalItems()
+
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-gray-50">
+      <ShoppingCartDrawer storePhone={store?.telefono_whatsapp || null} storeName={store?.nombre || ''} />
+
+      {/* Floating Action Button */}
+      <AnimatePresence>
+        {totalItemsInCart > 0 && (
+          <motion.button
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            onClick={() => setIsOpen(true)}
+            className="fixed bottom-6 right-6 z-40 bg-gray-900 text-white p-4 rounded-full shadow-2xl hover:bg-gray-800 transition-all flex items-center gap-3 pr-6 group"
+          >
+            <div className="relative">
+              <ShoppingCart className="w-6 h-6" />
+              <span className="absolute -top-2 -right-2 bg-emerald-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-gray-900">
+                {totalItemsInCart}
+              </span>
+            </div>
+            <span className="font-semibold text-sm">Ver Carrito</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              {store?.logo_url ? (
-                <img src={store.logo_url} alt={store.nombre} className="w-10 h-10 rounded-lg object-cover" />
-              ) : (
-                <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
-                  <Store className="w-5 h-5 text-indigo-600" />
-                </div>
-              )}
-              <div>
-                <h1 className="font-bold text-gray-900 text-lg sm:text-xl">
-                  {store?.nombre || <span className="w-32 h-6 bg-gray-200 animate-pulse block rounded" />}
-                </h1>
-                {store?.mensaje_bienvenida && (
-                  <p className="text-xs text-gray-500 line-clamp-1">{store.mensaje_bienvenida}</p>
+          <div className="flex flex-col gap-4">
+            {/* Top row */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {store?.logo_url ? (
+                  <img src={store.logo_url} alt={store.nombre} className="w-10 h-10 rounded-xl object-cover shadow-sm" />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shadow-sm">
+                    <Store className="w-5 h-5 text-indigo-600" />
+                  </div>
                 )}
+                <div>
+                  <h1 className="font-bold text-gray-900 text-lg sm:text-xl">
+                    {store?.nombre || <span className="w-32 h-6 bg-gray-200 animate-pulse block rounded" />}
+                  </h1>
+                  {store?.mensaje_bienvenida && (
+                    <p className="text-xs text-gray-500 line-clamp-1">{store.mensaje_bienvenida}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Tabs Fisico/Digital */}
+              <div className="hidden sm:flex bg-gray-100 p-1 rounded-xl">
+                <button
+                  onClick={() => handleTabChange('fisico')}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${activeTab === 'fisico' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  📦 Físicos
+                </button>
+                <button
+                  onClick={() => handleTabChange('digital')}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${activeTab === 'digital' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  💻 Digitales
+                </button>
               </div>
             </div>
 
-            <div className="relative w-full md:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={handleSearch}
-                placeholder="Buscar productos..."
-                className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
-              />
+            {/* Mobile Tabs */}
+            <div className="flex sm:hidden bg-gray-100 p-1 rounded-xl w-full">
+              <button
+                onClick={() => handleTabChange('fisico')}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'fisico' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              >
+                📦 Físicos
+              </button>
+              <button
+                onClick={() => handleTabChange('digital')}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'digital' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              >
+                💻 Digitales
+              </button>
+            </div>
+
+            {/* Search and Categories row */}
+            <div className="flex flex-col sm:flex-row gap-3 items-center">
+              <div className="relative w-full sm:w-80 flex-shrink-0">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={handleSearch}
+                  placeholder="Buscar productos..."
+                  className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-inner"
+                />
+              </div>
+
+              {/* Categorias scroll horizontal */}
+              <div className="w-full overflow-x-auto pb-1 scrollbar-hide">
+                <div className="flex gap-2 min-w-max px-1">
+                  <button
+                    onClick={() => handleCategorySelect('')}
+                    className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${!selectedCategory ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    Todos
+                  </button>
+                  {categorias.map(cat => (
+                    <button
+                      key={cat.id}
+                      onClick={() => handleCategorySelect(cat.id)}
+                      className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${selectedCategory === cat.id ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {cat.nombre}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -178,101 +293,132 @@ export default function TiendaPage() {
             <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
           </div>
         ) : products.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-20 text-center"
+          >
             <PackageX className="w-16 h-16 text-gray-300 mb-4" />
             <h3 className="text-lg font-medium text-gray-900">No encontramos productos</h3>
-            <p className="text-sm text-gray-500 mt-1">Intenta con otra búsqueda o contacta a la tienda.</p>
-          </div>
+            <p className="text-sm text-gray-500 mt-1">Intenta con otra búsqueda o categoría.</p>
+          </motion.div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.map((p, i) => {
-              const hasImages = p.imagenes && p.imagenes.length > 0
-              
-              return (
-                <div 
-                  key={`${p.id}-${i}`} 
-                  ref={i === products.length - 1 ? lastElementRef : null}
-                  className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group flex flex-col"
-                >
-                  {store?.config.mostrar_imagenes && (
-                    <div className="aspect-square bg-gray-50 border-b border-gray-100 relative overflow-hidden">
-                      {hasImages ? (
-                        <img 
-                          src={p.imagenes[0]} 
-                          alt={p.nombre} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
-                          <Package2 className="w-12 h-12 mb-2 opacity-50" />
-                        </div>
+          <motion.div 
+            layout
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+          >
+            <AnimatePresence>
+              {products.map((p, i) => {
+                const hasImages = p.imagenes && p.imagenes.length > 0
+                const cartItem = cartItems.find(item => item.id === p.id)
+                const qtyInCart = cartItem?.cantidad || 0
+                
+                return (
+                  <motion.div 
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    key={`${p.id}`} 
+                    ref={i === products.length - 1 ? lastElementRef : null}
+                    className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col"
+                  >
+                    {store?.config.mostrar_imagenes && (
+                      <div className="aspect-square bg-gray-50 border-b border-gray-100 relative overflow-hidden">
+                        {hasImages ? (
+                          <img 
+                            src={p.imagenes[0]} 
+                            alt={p.nombre} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
+                            <Package2 className="w-12 h-12 mb-2 opacity-50" />
+                          </div>
+                        )}
+                        
+                        {p.stock === 0 && store?.config.mostrar_sin_stock && p.tipo === 'fisico' && (
+                          <div className="absolute top-3 right-3 bg-red-500/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm uppercase tracking-wider">
+                            Agotado
+                          </div>
+                        )}
+                        {p.tipo === 'digital' && (
+                          <div className="absolute top-3 left-3 bg-indigo-500/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm uppercase tracking-wider flex items-center gap-1">
+                            💻 Digital
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    <div className="p-5 flex flex-col flex-1">
+                      {p.categoria && (
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600 mb-1.5">
+                          {p.categoria}
+                        </span>
+                      )}
+                      <h3 className="font-semibold text-gray-900 line-clamp-2 leading-tight mb-2">
+                        {p.nombre}
+                      </h3>
+                      
+                      {store?.config.mostrar_descripciones && p.descripcion && (
+                         <p className="text-xs text-gray-500 line-clamp-2 mb-4 flex-1">
+                          {p.descripcion}
+                        </p>
                       )}
                       
-                      {p.stock === 0 && store?.config.mostrar_sin_stock && (
-                        <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">
-                          Agotado
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  
-                  <div className="p-4 flex flex-col flex-1">
-                    {p.categoria && (
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600 mb-1">
-                        {p.categoria}
-                      </span>
-                    )}
-                    <h3 className="font-semibold text-gray-900 line-clamp-2 leading-tight mb-2">
-                      {p.nombre}
-                    </h3>
-                    
-                    {store?.config.mostrar_descripciones && p.descripcion && (
-                      <p className="text-xs text-gray-500 line-clamp-2 mb-3">
-                        {p.descripcion}
-                      </p>
-                    )}
-                    
-                    <div className="mt-auto">
-                      {store?.config.mostrar_precios ? (
-                        <div className="flex items-end justify-between mb-4">
-                          <div>
-                            <span className="text-xl font-bold text-gray-900">
-                              {p.precio_base ? formatPEN(p.precio_base) : 'S/ --'}
-                            </span>
-                            <span className="text-xs text-gray-500 ml-1">/ {p.unidad}</span>
+                      <div className="mt-auto pt-2">
+                        {store?.config.mostrar_precios ? (
+                          <div className="flex items-end justify-between mb-4">
+                            <div>
+                              <span className="text-xl font-black text-gray-900">
+                                {p.precio_base ? formatPEN(p.precio_base) : 'S/ --'}
+                              </span>
+                              <span className="text-xs text-gray-500 ml-1 font-medium">/ {p.unidad}</span>
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="h-4" />
-                      )}
+                        ) : (
+                          <div className="h-4" />
+                        )}
 
-                      {store?.config.mostrar_precios && store?.config.mostrar_bulk_pricing && p.descuentos && p.descuentos.length > 0 && (
-                        <div className="mb-4 bg-emerald-50 rounded-lg p-2.5 border border-emerald-100">
-                          <p className="text-[10px] font-semibold text-emerald-800 uppercase tracking-wider mb-1.5">Precios por Mayor</p>
-                          <div className="space-y-1">
-                            {p.descuentos.map((d, idx) => (
-                              <div key={idx} className="flex justify-between text-xs">
-                                <span className="text-emerald-700">Desde {d.cantidad_minima} un.</span>
-                                <span className="font-semibold text-emerald-800">{formatPEN(d.precio_unitario)}</span>
-                              </div>
-                            ))}
+                        {qtyInCart > 0 ? (
+                          <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1 border border-emerald-100 h-11">
+                            <button
+                              onClick={() => updateQuantity(p.id, -1)}
+                              className="w-9 h-9 flex items-center justify-center hover:bg-white rounded-lg hover:shadow-sm transition-all text-emerald-700"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <span className="font-bold text-emerald-900">{qtyInCart}</span>
+                            <button
+                              onClick={() => updateQuantity(p.id, 1)}
+                              className="w-9 h-9 flex items-center justify-center hover:bg-white rounded-lg hover:shadow-sm transition-all text-emerald-700"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
                           </div>
-                        </div>
-                      )}
-
-                      <button
-                        onClick={() => handlePedir(p)}
-                        className="w-full py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-xl flex items-center justify-center gap-2 transition-colors"
-                      >
-                        <ShoppingBag className="w-4 h-4" />
-                        Pedir por WhatsApp
-                      </button>
+                        ) : (
+                          <button
+                            onClick={() => addItem({
+                              id: p.id,
+                              nombre: p.nombre,
+                              precio_base: p.precio_base,
+                              unidad: p.unidad,
+                              imagen: hasImages ? p.imagenes[0] : undefined,
+                              tipo: p.tipo
+                            })}
+                            disabled={p.stock === 0 && store?.config.mostrar_sin_stock && p.tipo === 'fisico'}
+                            className="w-full h-11 bg-gray-50 hover:bg-indigo-50 text-indigo-600 border border-indigo-100 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed group-hover:bg-indigo-600 group-hover:text-white"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Agregar
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
+          </motion.div>
         )}
 
         {loadingMore && (
@@ -282,9 +428,9 @@ export default function TiendaPage() {
         )}
       </main>
 
-      <footer className="bg-white border-t border-gray-200 py-6 text-center">
+      <footer className="bg-white border-t border-gray-200 py-8 text-center">
         <p className="text-xs text-gray-400">
-          Catálogo creado con <span className="font-semibold text-gray-500">Byignis</span>
+          Catálogo creado con <span className="font-semibold text-gray-900">Byignis</span>
         </p>
       </footer>
     </div>
