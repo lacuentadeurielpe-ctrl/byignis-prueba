@@ -75,7 +75,7 @@ export default function CatalogoPublicoForm() {
       if (!res.ok) {
         const d = await res.json()
         if (d.error?.includes('unique') || d.error?.includes('llave duplicada')) {
-          throw new Error('Ese enlace ya está siendo usado por otra ferretería')
+          throw new Error('Ese enlace ya está siendo usado por otro negocio')
         }
         throw new Error(d.error || 'Error al guardar')
       }
@@ -126,11 +126,11 @@ export default function CatalogoPublicoForm() {
               type="text"
               value={slug}
               onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-              placeholder="mi-ferreteria"
+              placeholder="mi-negocio"
               className="flex-1 block w-full min-w-0 rounded-none rounded-r-lg border-gray-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500"
             />
           </div>
-          <p className="mt-1.5 text-xs text-gray-500">Usa minúsculas y guiones (ej. ferreteria-los-pino)</p>
+          <p className="mt-1.5 text-xs text-gray-500">Usa minúsculas y guiones (ej. mi-tienda-genial)</p>
         </div>
 
         {slug && (
