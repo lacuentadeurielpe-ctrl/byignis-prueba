@@ -78,7 +78,7 @@ export default async function VentasPage({
       ventasRepo.obtenerPedidosDashboard(session.ferreteriaId, localActivoId),
       catalogRepo.listarProductosActivos(session.ferreteriaId),
       deliveryRepo.listarZonasDelivery(session.ferreteriaId),
-      deliveryRepo.listarRepartidores(session.ferreteriaId),
+      deliveryRepo.listarRepartidores(session.ferreteriaId, localActivoId),
       facturacionRepo.obtenerDatosFerreteriaDashboard(session.ferreteriaId),
       tieneFacturacionActiva(supabase, session.ferreteriaId),
       session.multiSucursal ? supabase.from('locales_ferreteria').select('*').eq('ferreteria_id', session.ferreteriaId).eq('activo', true) : Promise.resolve({ data: [] }),

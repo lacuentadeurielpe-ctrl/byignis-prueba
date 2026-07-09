@@ -65,7 +65,7 @@ export default function EmployeeChip({
       {...attributes}
       className={cn(
         'flex items-center gap-3 p-3 rounded-xl border bg-white cursor-grab active:cursor-grabbing',
-        'transition-all duration-150 select-none',
+        'transition-all duration-150 select-none touch-none',
         isDragging
           ? 'shadow-2xl scale-105 border-indigo-300 ring-2 ring-indigo-200 z-50 opacity-95'
           : 'border-zinc-200 hover:border-zinc-300 hover:shadow-md shadow-sm',

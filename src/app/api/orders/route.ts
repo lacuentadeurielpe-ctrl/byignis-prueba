@@ -47,7 +47,10 @@ export async function GET(request: Request) {
   const estado = searchParams.get('estado')
 
   try {
-    const data = await ventasRepo.obtenerPedidosPorFerreteria(session.ferreteriaId, estado)
+    const contextoSucursal = session.multiSucursal ? await getContextoSucursal(supabase, session) : null
+    const localActivoId = contextoSucursal?.localActivoId ?? null
+
+    const data = await ventasRepo.obtenerPedidosPorFerreteria(session.ferreteriaId, estado, localActivoId)
     return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

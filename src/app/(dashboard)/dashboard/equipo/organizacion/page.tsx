@@ -15,7 +15,7 @@ export default async function OrganizacionPage() {
   const supabase = await createClient()
 
   // Cargar empleados y locales en paralelo
-  const [{ data: empleadosData }, { data: localesData }] = await Promise.all([
+  const [{ data: empleadosData }, { data: localesData }, { data: asignacionesData }] = await Promise.all([
     supabase
       .from('miembros_ferreteria')
       .select('id, nombre, rol, activo, email, local_id')
@@ -28,8 +28,14 @@ export default async function OrganizacionPage() {
       .eq('activo', true)
       .order('es_principal', { ascending: false })
       .order('created_at', { ascending: true }),
+    supabase
+      .from('empleado_sucursal')
+      .select('empleado_id, local_id')
+      .eq('ferreteria_id', session.ferreteriaId)
   ])
 
+  const asignaciones = asignacionesData ?? []
+  
   const empleados: Empleado[] = (empleadosData ?? []).map(e => ({
     id: e.id,
     nombre: e.nombre ?? 'Sin nombre',
@@ -37,6 +43,7 @@ export default async function OrganizacionPage() {
     activo: e.activo ?? true,
     email: e.email,
     local_id: e.local_id ?? null,
+    sucursales: asignaciones.filter(a => a.empleado_id === e.id).map(a => a.local_id),
   }))
 
   const locales: Local[] = (localesData ?? []).map(l => ({

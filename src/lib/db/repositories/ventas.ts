@@ -393,7 +393,7 @@ export class VentasRepository {
     if (errItems) throw errItems
   }
 
-  async obtenerPedidosPorFerreteria(ferreteriaId: string, estado?: string | null) {
+  async obtenerPedidosPorFerreteria(ferreteriaId: string, estado?: string | null, localId?: string | null) {
     let query = this.supabase
       .from('pedidos')
       .select('*, clientes(nombre, telefono), zonas_delivery(nombre), items_pedido(*), eta_minutos, direccion_entrega, entregas(id, estado, vehiculos(nombre, tipo))')
@@ -401,6 +401,7 @@ export class VentasRepository {
       .order('created_at', { ascending: false })
 
     if (estado) query = query.eq('estado', estado)
+    if (localId) query = query.eq('local_id', localId)
 
     const { data, error } = await query
     if (error) throw error

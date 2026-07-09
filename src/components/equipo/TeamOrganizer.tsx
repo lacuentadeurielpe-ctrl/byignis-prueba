@@ -10,7 +10,7 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
-  closestCenter,
+  pointerWithin,
 } from '@dnd-kit/core'
 import { useDroppable } from '@dnd-kit/core'
 import { Building2, Users, Loader2, Check } from 'lucide-react'
@@ -93,13 +93,13 @@ function DroppableColumn({ id, title, isPrincipal, isPool, empleados, activeId }
       <div className="flex flex-col gap-2 p-3">
         {empleados.map(emp => (
           <EmployeeChip
-            key={emp.id}
-            id={emp.id}
+            key={`${emp.id}-${id}`}
+            id={`${emp.id}-${id}`} // ID único combinando empleado y columna
             nombre={emp.nombre}
             rol={emp.rol}
             activo={emp.activo}
             email={emp.email}
-            isDragging={activeId === emp.id}
+            isDragging={activeId === `${emp.id}-${id}`}
           />
         ))}
 
@@ -139,8 +139,13 @@ export default function TeamOrganizer({ empleados: initial, locales }: TeamOrgan
 
   const getColumnEmpleados = useCallback((localId: string | null) => {
     return empleados.filter(e => {
-      if (localId === null) return !e.local_id
-      return e.local_id === localId
+      const sucursales = e.sucursales ?? (e.local_id ? [e.local_id] : [])
+      
+      if (localId === null) {
+        // En el pool solo salen los que NO tienen NINGUNA sucursal
+        return sucursales.length === 0
+      }
+      return sucursales.includes(localId)
     })
   }, [empleados])
 
@@ -154,33 +159,58 @@ export default function TeamOrganizer({ empleados: initial, locales }: TeamOrgan
 
     if (!over) return
 
-    const empId = active.id as string
+    // active.id is in format "empleadoId-sourceLocalId"
+    const activeParts = (active.id as string).split('-')
+    const empId = activeParts[0]
+    let sourceLocalId: string | null = activeParts.slice(1).join('-')
+    if (sourceLocalId === 'pool') sourceLocalId = null
+
     const targetLocalId = over.id === 'pool' ? null : over.id as string
 
     const emp = empleados.find(e => e.id === empId)
     if (!emp) return
 
     // Sin cambio
-    if (emp.local_id === targetLocalId) return
+    if (sourceLocalId === targetLocalId) return
 
-    // Empleados no-multi solo pueden estar en una sucursal
     const isMultiRol = ROLES_MULTI_SUCURSAL.includes(emp.rol.toLowerCase())
-    if (!isMultiRol && targetLocalId !== null) {
-      // Verificar si ya tiene asignación distinta y avisarlo
-    }
-
+    
+    // Si no es multi-rol y trata de agregarlo a otra sin quitarlo (no debería pasar por UI)
+    // Pero si es Drag & Drop, siempre es un "MOVE" visual.
+    
     // Optimistic update
-    setEmpleados(prev => prev.map(e =>
-      e.id === empId ? { ...e, local_id: targetLocalId } : e
-    ))
+    setEmpleados(prev => prev.map(e => {
+      if (e.id !== empId) return e
+
+      let sucursales = [...(e.sucursales ?? (e.local_id ? [e.local_id] : []))]
+
+      if (!isMultiRol) {
+        // Simple swap
+        sucursales = targetLocalId ? [targetLocalId] : []
+      } else {
+        // Multi rol: Movemos de origen a destino
+        if (sourceLocalId) {
+          sucursales = sucursales.filter(s => s !== sourceLocalId)
+        }
+        if (targetLocalId && !sucursales.includes(targetLocalId)) {
+          sucursales.push(targetLocalId)
+        }
+      }
+
+      return { ...e, sucursales, local_id: sucursales[0] ?? null }
+    }))
 
     // Guardar en backend
     setSaving(empId)
     try {
-      const res = await fetch('/api/settings-2/equipo/empleados', {
-        method: 'PATCH',
+      const res = await fetch('/api/settings-2/equipo/empleados/asignar-sucursal', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: empId, local_id: targetLocalId }),
+        body: JSON.stringify({ 
+          empleadoId: empId, 
+          targetLocalId: targetLocalId, 
+          sourceLocalId: sourceLocalId 
+        }),
       })
       if (!res.ok) {
         // Rollback
@@ -198,12 +228,17 @@ export default function TeamOrganizer({ empleados: initial, locales }: TeamOrgan
     }
   }
 
-  const activeEmp = empleados.find(e => e.id === activeId)
+  // Active Emp para el overlay (el chip que flota)
+  let activeEmp: Empleado | undefined
+  if (activeId) {
+    const empId = activeId.split('-')[0]
+    activeEmp = empleados.find(e => e.id === empId)
+  }
 
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={pointerWithin}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
@@ -253,7 +288,7 @@ export default function TeamOrganizer({ empleados: initial, locales }: TeamOrgan
         {activeEmp && (
           <div className="rotate-2 opacity-95 scale-105">
             <EmployeeChip
-              id={activeEmp.id}
+              id={activeId!} // match exact ID for animation
               nombre={activeEmp.nombre}
               rol={activeEmp.rol}
               activo={activeEmp.activo}
