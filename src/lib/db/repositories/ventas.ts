@@ -240,46 +240,60 @@ export class VentasRepository {
     return data
   }
 
-  async obtenerPedidosDashboard(ferreteriaId: string) {
-    const { data, error } = await this.supabase
+  async obtenerPedidosDashboard(ferreteriaId: string, localId?: string | null) {
+    let query = this.supabase
       .from('pedidos')
       .select('*, clientes(nombre, telefono, dni_ruc), zonas_delivery(nombre), items_pedido(*), comprobantes(id, tipo, numero_completo, estado, pdf_url), metodo_pago, estado_pago, pago_confirmado_por, pago_confirmado_at')
       .eq('ferreteria_id', ferreteriaId)
       .order('created_at', { ascending: false })
       .limit(100)
 
+    if (localId) query = query.eq('local_id', localId)
+
+    const { data, error } = await query
     if (error) throw error
     return data ?? []
   }
 
-  async obtenerCotizacionesDashboard(ferreteriaId: string) {
-    const { data, error } = await this.supabase
+  async obtenerCotizacionesDashboard(ferreteriaId: string, localId?: string | null) {
+    let query = this.supabase
       .from('cotizaciones')
       .select('*, clientes(nombre, telefono), items_cotizacion(*, productos(precio_compra))')
       .eq('ferreteria_id', ferreteriaId)
       .order('created_at', { ascending: false })
       .limit(100)
 
+    // cotizaciones no tiene local_id aun, filtro via pedido no aplica aqui
+    // se omite el filtro local por ahora hasta que cotizaciones tenga local_id
+
+    const { data, error } = await query
     if (error) throw error
     return data ?? []
   }
 
-  async obtenerPagosDashboard(ferreteriaId: string) {
-    const { data, error } = await this.supabase
+  async obtenerPagosDashboard(ferreteriaId: string, localId?: string | null) {
+    let query = this.supabase
       .from('pagos_registrados')
       .select(`
         id, metodo, monto, moneda, numero_operacion, nombre_pagador,
         ultimos_digitos, fecha_pago, banco_origen, estado, url_captura,
         confianza_extraccion, notas, registrado_at,
         cliente:clientes(id, nombre, telefono),
-        pedido:pedidos(id, numero_pedido, total)
+        pedido:pedidos(id, numero_pedido, total, local_id)
       `)
       .eq('ferreteria_id', ferreteriaId)
       .order('registrado_at', { ascending: false })
       .limit(100)
 
+    const { data, error } = await query
     if (error) throw error
-    return data ?? []
+
+    // Filtrar por local_id via pedido si se especifica
+    const lista = data ?? []
+    if (localId) {
+      return lista.filter((p: any) => (p.pedido as any)?.local_id === localId || p.pedido === null)
+    }
+    return lista
   }
 
   async obtenerPedidoPorId(ferreteriaId: string, pedidoId: string) {
@@ -422,19 +436,26 @@ export class VentasRepository {
     }
   }
 
-  async listarCreditosDashboard(ferreteriaId: string) {
-    const { data, error } = await this.supabase
+  async listarCreditosDashboard(ferreteriaId: string, localId?: string | null) {
+    let query = this.supabase
       .from('creditos')
       .select(`
         *,
         clientes(id, nombre, telefono),
-        pedidos(id, numero_pedido, total),
+        pedidos(id, numero_pedido, total, local_id),
         abonos_credito(id, monto, metodo_pago, notas, registrado_por, created_at)
       `)
       .eq('ferreteria_id', ferreteriaId)
       .order('created_at', { ascending: false })
+
+    const { data, error } = await query
     if (error) throw error
-    return data ?? []
+
+    const lista = data ?? []
+    if (localId) {
+      return lista.filter((c: any) => (c.pedidos as any)?.local_id === localId || c.pedidos === null)
+    }
+    return lista
   }
 
   async crearCredito(ferreteriaId: string, input: { clienteId: string, pedidoId: string, montoTotal: number, fechaLimite: string, aprobadoPor: string, notas?: string | null }) {

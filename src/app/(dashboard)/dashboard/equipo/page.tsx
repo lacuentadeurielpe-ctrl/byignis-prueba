@@ -1,6 +1,6 @@
 'use client'
 
-import { Users, Truck, DollarSign, Activity } from 'lucide-react'
+import { Users, Truck, DollarSign, Activity, Building2 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function EquipoHub() {
@@ -79,6 +79,17 @@ export default function EquipoHub() {
             <div>
               <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">Pagos y Nóminas</h3>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">Genera recibos de pago y bonos</p>
+            </div>
+          </div>
+        </Link>
+        <Link href="/dashboard/equipo/organizacion" className="p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-violet-300 transition-colors group md:col-span-2">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg group-hover:bg-violet-50 dark:group-hover:bg-violet-900/30 transition-colors">
+              <Building2 className="w-6 h-6 text-zinc-600 dark:text-zinc-400 group-hover:text-violet-600 dark:group-hover:text-violet-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">Organización por Sucursal</h3>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">Arrastra y asigna empleados a cada sucursal de forma visual e interactiva</p>
             </div>
           </div>
         </Link>

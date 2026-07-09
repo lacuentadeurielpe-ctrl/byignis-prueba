@@ -16,6 +16,7 @@ import { CatalogRepository } from '@/lib/db/repositories/catalogo'
 import { DeliveryRepository } from '@/lib/db/repositories/logistica'
 import { FacturacionRepository } from '@/lib/db/repositories/facturacion'
 import { tieneFacturacionActiva } from '@/lib/facturacion/lycet/credenciales'
+import { getContextoSucursal } from '@/lib/sucursales/contexto'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,12 @@ export default async function VentasPage({
   const deliveryRepo = new DeliveryRepository(supabase)
   const facturacionRepo = new FacturacionRepository(supabase)
 
+  // Resolver sucursal activa del usuario (null = "Todas" = sin filtro)
+  const contextoSucursal = session.multiSucursal
+    ? await getContextoSucursal(supabase, session)
+    : null
+  const localActivoId = contextoSucursal?.localActivoId ?? null
+
   // Conteo de deudas vencidas — siempre, para mostrar badge en el tab
   const { count: deudasVencidas } = await supabase
     .from('creditos')
@@ -68,7 +75,7 @@ export default async function VentasPage({
       facturacionConfigurada,
       localesReq
     ] = await Promise.all([
-      ventasRepo.obtenerPedidosDashboard(session.ferreteriaId),
+      ventasRepo.obtenerPedidosDashboard(session.ferreteriaId, localActivoId),
       catalogRepo.listarProductosActivos(session.ferreteriaId),
       deliveryRepo.listarZonasDelivery(session.ferreteriaId),
       deliveryRepo.listarRepartidores(session.ferreteriaId),
@@ -103,7 +110,7 @@ export default async function VentasPage({
       configBot,
       productos
     ] = await Promise.all([
-      ventasRepo.obtenerCotizacionesDashboard(session.ferreteriaId),
+      ventasRepo.obtenerCotizacionesDashboard(session.ferreteriaId, localActivoId),
       catalogRepo.obtenerConfiguracionBot(session.ferreteriaId),
       catalogRepo.listarProductosActivos(session.ferreteriaId),
     ])
@@ -126,7 +133,7 @@ export default async function VentasPage({
   // ── Deudas (Créditos) ────────────────────────────────────────────────────
   let deudasContent: React.ReactNode = null
   if (tab === 'deudas') {
-    const creditos = await ventasRepo.listarCreditosDashboard(session.ferreteriaId)
+    const creditos = await ventasRepo.listarCreditosDashboard(session.ferreteriaId, localActivoId)
 
     const totalActivo  = creditos.filter(c => c.estado === 'activo').reduce((s, c) => s + (c.monto_total - c.monto_pagado), 0)
     const totalVencido = creditos.filter(c => c.estado === 'vencido').reduce((s, c) => s + (c.monto_total - c.monto_pagado), 0)
@@ -176,7 +183,7 @@ export default async function VentasPage({
   // ── Pagos ────────────────────────────────────────────────────────────────
   let pagosContent: React.ReactNode = null
   if (tab === 'pagos') {
-    const pagos = await ventasRepo.obtenerPagosDashboard(session.ferreteriaId)
+    const pagos = await ventasRepo.obtenerPagosDashboard(session.ferreteriaId, localActivoId)
 
     const porEstado = (pagos ?? []).reduce<Record<string, number>>((acc, p) => {
       acc[p.estado] = (acc[p.estado] ?? 0) + 1
