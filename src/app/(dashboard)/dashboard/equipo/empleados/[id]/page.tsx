@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { ArrowLeft, User, ReceiptText, LineChart, KeyRound } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
-
+import TabNominas from './components/TabNominas'
+import TabDesempeno from './components/TabDesempeno'
 const TABS = [
   { id: 'datos', label: 'Datos Personales', icon: User },
   { id: 'nominas', label: 'Historial de Nómina', icon: ReceiptText },
@@ -57,18 +58,22 @@ export default function EmpleadoProfilePage() {
         </div>
 
         {/* ── Contenido Tabs ── */}
-        <div className="p-6">
+        <div className="p-6 bg-zinc-50/30 dark:bg-zinc-900/50">
           {activeTab === 'datos' && (
-             <div className="text-zinc-600 dark:text-zinc-400 text-sm">Formulario de datos personales y asignación de sucursal en construcción...</div>
+             <div className="text-zinc-600 dark:text-zinc-400 text-sm p-12 text-center border-2 border-dashed border-zinc-200 rounded-2xl">
+               Formulario de datos personales y asignación de sucursal en construcción...
+             </div>
           )}
           {activeTab === 'nominas' && (
-             <div className="text-zinc-600 dark:text-zinc-400 text-sm">Historial de recibos de pago en construcción...</div>
+             <TabNominas empleadoId={id} />
           )}
           {activeTab === 'desempeno' && (
-             <div className="text-zinc-600 dark:text-zinc-400 text-sm">Métricas de rendimiento en construcción...</div>
+             <TabDesempeno empleadoId={id} />
           )}
           {activeTab === 'accesos' && (
-             <div className="text-zinc-600 dark:text-zinc-400 text-sm">Gestión de rol y permisos granulares en construcción...</div>
+             <div className="text-zinc-600 dark:text-zinc-400 text-sm p-12 text-center border-2 border-dashed border-zinc-200 rounded-2xl">
+               Gestión de rol y permisos granulares en construcción...
+             </div>
           )}
         </div>
       </div>
