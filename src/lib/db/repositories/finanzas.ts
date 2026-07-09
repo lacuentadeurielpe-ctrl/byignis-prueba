@@ -9,7 +9,7 @@ export class FinanzasRepository {
   async obtenerRendicionesDashboard(ferreteriaId: string, limite = 60) {
     const { data, error } = await this.supabase
       .from('rendiciones')
-      .select('*, repartidores(id, nombre, telefono)')
+      .select('*, miembros_ferreteria(id, nombre, telefono)')
       .eq('ferreteria_id', ferreteriaId)
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false })

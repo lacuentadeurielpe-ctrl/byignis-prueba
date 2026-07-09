@@ -28,7 +28,7 @@ export async function GET(
     if (!entrega) return NextResponse.json({ error: 'Entrega no encontrada' }, { status: 404 })
 
     const pedido     = entrega.pedidos      as any
-    const repartidor = entrega.repartidores as any
+    const repartidor = entrega.miembros_ferreteria as any
     const ferreteria = repartidor?.ferreterias as any
 
     return NextResponse.json({

@@ -26,7 +26,7 @@ export class EntregasRepository {
         gps_ultima_lat, gps_ultima_lng, gps_actualizado_at,
         pedidos(id, numero_pedido, nombre_cliente, telefono_cliente, total),
         zonas_delivery(id, nombre),
-        repartidores(id, nombre, telefono),
+        miembros_ferreteria(id, nombre, telefono),
         vehiculos_delivery(id, tipo, placa)
       `)
       .eq('ferreteria_id', ferreteriaId)
@@ -241,16 +241,12 @@ export class EntregasRepository {
    */
   async obtenerRepartidoresParaZona(ferreteriaId: string, zonaId: string) {
     const { data, error } = await this.supabase
-      .from('repartidores')
-      .select(`
-        id, nombre, telefono, activo,
-        vehiculos_delivery(id, tipo, placa)
-      `)
+      .from('miembros_ferreteria')
+      .select('id, nombre, telefono')
       .eq('ferreteria_id', ferreteriaId)
       .eq('activo', true)
-      // TODO: Filtrar por zona de cobertura cuando esté implementado
-
+      .eq('rol', 'repartidor')
     if (error) throw new Error(error.message)
-    return data
+    return data ?? []
   }
 }
