@@ -10,8 +10,10 @@ interface LocalOption {
   nombre: string
 }
 
-export default function EmpleadosTab() {
-  const { empleados, loading, error, fetchEmpleados, addEmpleado, deleteEmpleado, updateEmpleado } = useEmpleados()
+export default function EmpleadosTab({ filterRole }: { filterRole?: string } = {}) {
+  const { empleados: todosLosEmpleados, loading, error, fetchEmpleados, addEmpleado, deleteEmpleado, updateEmpleado } = useEmpleados()
+  const empleados = filterRole ? todosLosEmpleados.filter(e => e.rol === filterRole) : todosLosEmpleados
+
   const [locales, setLocales] = useState<LocalOption[]>([])
   const [multiSucursal, setMultiSucursal] = useState(false)
   
@@ -19,7 +21,7 @@ export default function EmpleadosTab() {
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [rol, setRol] = useState('vendedor')
+  const [rol, setRol] = useState(filterRole || 'vendedor')
   const [isSaving, setIsSaving] = useState(false)
   const [formError, setFormError] = useState('')
 

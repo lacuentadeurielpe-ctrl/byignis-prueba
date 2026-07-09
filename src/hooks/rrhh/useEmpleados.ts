@@ -14,6 +14,13 @@ export interface EmpleadoRow {
   salario_base?: number | null;
   tipo_contrato?: string | null;
   fecha_ingreso?: string | null;
+  roles_granulares?: string[];
+  telefono?: string | null;
+  tipo_vehiculo?: string | null;
+  placa_vehiculo?: string | null;
+  vencimiento_soat?: string | null;
+  capacidad_kg?: number | null;
+  costo_por_km?: number | null;
 }
 
 export function useEmpleados() {

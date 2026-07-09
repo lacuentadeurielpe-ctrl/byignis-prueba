@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import TabNominas from './components/TabNominas'
 import TabDesempeno from './components/TabDesempeno'
+import TabAccesosRoles from './components/TabAccesosRoles'
 const TABS = [
   { id: 'datos', label: 'Datos Personales', icon: User },
   { id: 'nominas', label: 'Historial de Nómina', icon: ReceiptText },
@@ -71,9 +72,7 @@ export default function EmpleadoProfilePage() {
              <TabDesempeno empleadoId={id} />
           )}
           {activeTab === 'accesos' && (
-             <div className="text-zinc-600 dark:text-zinc-400 text-sm p-12 text-center border-2 border-dashed border-zinc-200 rounded-2xl">
-               Gestión de rol y permisos granulares en construcción...
-             </div>
+             <TabAccesosRoles empleadoId={id} />
           )}
         </div>
       </div>
