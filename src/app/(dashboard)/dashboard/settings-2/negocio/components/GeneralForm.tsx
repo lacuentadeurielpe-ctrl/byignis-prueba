@@ -28,6 +28,10 @@ export default function GeneralForm() {
   const [isDirty, setIsDirty] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  const [deptCode, setDeptCode] = useState('')
+  const [provCode, setProvCode] = useState('')
+  const [distCode, setDistCode] = useState('')
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -35,6 +39,23 @@ export default function GeneralForm() {
         if (res.ok) {
           const result = await res.json()
           setData(result)
+
+          let dCode = ''
+          let pCode = ''
+          let dtCode = ''
+
+          if (result.ubigeo) {
+            const parsed = parseUbigeo(result.ubigeo)
+            dCode = parsed?.departmentCode || ''
+            pCode = parsed?.provinceCode || ''
+            dtCode = parsed?.districtCode || ''
+          } else if (result.departamento) {
+            dCode = getDepartments().find(d => d.name === result.departamento)?.code || ''
+          }
+
+          setDeptCode(dCode)
+          setProvCode(pCode)
+          setDistCode(dtCode)
         }
       } finally {
         setLoading(false)
@@ -48,13 +69,11 @@ export default function GeneralForm() {
     setIsDirty(true)
   }
 
-  // Extraer códigos actuales basados en el ubigeo
-  const parsed = data.ubigeo ? parseUbigeo(data.ubigeo) : null
-  const deptCode = parsed?.departmentCode || ''
-  const provCode = parsed?.provinceCode || ''
-  const distCode = parsed?.districtCode || ''
-
   const handleDeptChange = (newDeptCode: string) => {
+    setDeptCode(newDeptCode)
+    setProvCode('')
+    setDistCode('')
+
     if (!newDeptCode) {
       setData(prev => ({ ...prev, ubigeo: '', departamento: '', provincia: '', distrito: '' }))
     } else {
@@ -66,6 +85,9 @@ export default function GeneralForm() {
   }
 
   const handleProvChange = (newProvCode: string) => {
+    setProvCode(newProvCode)
+    setDistCode('')
+
     if (!newProvCode) {
       setData(prev => ({ ...prev, ubigeo: '', provincia: '', distrito: '' }))
     } else {
@@ -77,6 +99,7 @@ export default function GeneralForm() {
   }
 
   const handleDistChange = (newDistCode: string) => {
+    setDistCode(newDistCode)
     if (!newDistCode) {
       setData(prev => ({ ...prev, ubigeo: '', distrito: '' }))
     } else {
@@ -95,6 +118,12 @@ export default function GeneralForm() {
   const handleUbigeoChange = (val: string) => {
     const rawVal = val.replace(/\D/g, '').substring(0, 6)
     if (rawVal.length === 6 && validateUbigeo(rawVal)) {
+      const parsed = parseUbigeo(rawVal)
+      if (parsed) {
+        setDeptCode(parsed.departmentCode || '')
+        setProvCode(parsed.provinceCode || '')
+        setDistCode(parsed.districtCode || '')
+      }
       const uData = getUbigeoData(rawVal)
       setData(prev => ({
         ...prev,
