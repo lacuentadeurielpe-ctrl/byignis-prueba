@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building2, Upload } from 'lucide-react'
+import { Building2, Upload, ChevronDown } from 'lucide-react'
 import FormSection from '../../components/FormSection'
 import { useSettingsSave } from '../../utils/settingsHooks'
-import { getDepartments, getProvinces, getDistricts, parseUbigeo, getUbigeoData } from 'ubigeo-fns'
+import { getDepartments, getProvinces, getDistricts, parseUbigeo, getUbigeoData, validateUbigeo } from 'ubigeo-fns'
 
 interface GeneralFormData {
   nombre?: string
@@ -92,6 +92,23 @@ export default function GeneralForm() {
     setIsDirty(true)
   }
 
+  const handleUbigeoChange = (val: string) => {
+    const rawVal = val.replace(/\D/g, '').substring(0, 6)
+    if (rawVal.length === 6 && validateUbigeo(rawVal)) {
+      const uData = getUbigeoData(rawVal)
+      setData(prev => ({
+        ...prev,
+        ubigeo: rawVal,
+        departamento: uData?.department || prev.departamento,
+        provincia: uData?.province || prev.provincia,
+        distrito: uData?.district || prev.distrito,
+      }))
+    } else {
+      setData(prev => ({ ...prev, ubigeo: rawVal }))
+    }
+    setIsDirty(true)
+  }
+
   const handleSave = async () => {
     await save(data, '/api/settings-2/negocio/general')
     setIsDirty(false)
@@ -137,16 +154,21 @@ export default function GeneralForm() {
               <label className="block text-sm font-medium text-zinc-700 mb-2">
                 Tipo de establecimiento
               </label>
-              <select
-                value={data.tipo_establecimiento || 'ferreteria'}
-                onChange={e => handleChange('tipo_establecimiento', e.target.value)}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="ferreteria">Negocio / Tienda</option>
-                <option value="mayorista">Mayorista</option>
-                <option value="minorista">Minorista</option>
-                <option value="distribuidor">Distribuidor</option>
-              </select>
+              <div className="relative">
+                <select
+                  value={data.tipo_establecimiento || 'ferreteria'}
+                  onChange={e => handleChange('tipo_establecimiento', e.target.value)}
+                  className="w-full appearance-none px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white pr-10"
+                >
+                  <option value="ferreteria">Negocio / Tienda</option>
+                  <option value="mayorista">Mayorista</option>
+                  <option value="minorista">Minorista</option>
+                  <option value="distribuidor">Distribuidor</option>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500">
+                  <ChevronDown className="h-4 w-4" />
+                </div>
+              </div>
             </div>
 
             <div>
@@ -180,50 +202,65 @@ export default function GeneralForm() {
               <label className="block text-sm font-medium text-zinc-700 mb-2">
                 Departamento
               </label>
-              <select
-                value={deptCode}
-                onChange={e => handleDeptChange(e.target.value)}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-              >
-                <option value="">Seleccione...</option>
-                {getDepartments().map(d => (
-                  <option key={d.code} value={d.code}>{d.name}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={deptCode}
+                  onChange={e => handleDeptChange(e.target.value)}
+                  className="w-full appearance-none px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white pr-10"
+                >
+                  <option value="">Seleccione...</option>
+                  {getDepartments().map(d => (
+                    <option key={d.code} value={d.code}>{d.name}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500">
+                  <ChevronDown className="h-4 w-4" />
+                </div>
+              </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-2">
                 Provincia
               </label>
-              <select
-                value={provCode}
-                onChange={e => handleProvChange(e.target.value)}
-                disabled={!deptCode}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:opacity-50"
-              >
-                <option value="">Seleccione...</option>
-                {deptCode && getProvinces(deptCode).map(p => (
-                  <option key={p.code} value={p.code}>{p.name}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={provCode}
+                  onChange={e => handleProvChange(e.target.value)}
+                  disabled={!deptCode}
+                  className="w-full appearance-none px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:opacity-50 pr-10"
+                >
+                  <option value="">Seleccione...</option>
+                  {deptCode && getProvinces(deptCode).map(p => (
+                    <option key={p.code} value={p.code}>{p.name}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500">
+                  <ChevronDown className="h-4 w-4" />
+                </div>
+              </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-2">
                 Distrito
               </label>
-              <select
-                value={distCode}
-                onChange={e => handleDistChange(e.target.value)}
-                disabled={!provCode}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:opacity-50"
-              >
-                <option value="">Seleccione...</option>
-                {provCode && getDistricts(provCode).map(d => (
-                  <option key={d.code} value={d.code}>{d.name}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={distCode}
+                  onChange={e => handleDistChange(e.target.value)}
+                  disabled={!provCode}
+                  className="w-full appearance-none px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:opacity-50 pr-10"
+                >
+                  <option value="">Seleccione...</option>
+                  {provCode && getDistricts(provCode).map(d => (
+                    <option key={d.code} value={d.code}>{d.name}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500">
+                  <ChevronDown className="h-4 w-4" />
+                </div>
+              </div>
             </div>
 
             <div>
@@ -233,11 +270,14 @@ export default function GeneralForm() {
               <input
                 type="text"
                 value={data.ubigeo || ''}
-                readOnly
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg bg-zinc-50 text-zinc-500 cursor-not-allowed focus:outline-none"
+                onChange={e => handleUbigeoChange(e.target.value)}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                 placeholder="Ej: 150101"
+                maxLength={6}
               />
-              <p className="text-xs text-zinc-500 mt-1">Se autocompleta con el distrito</p>
+              <p className="text-xs text-zinc-500 mt-1">
+                Escribe 6 dígitos para autocompletar, o usa las listas de arriba.
+              </p>
             </div>
 
             <div className="md:col-span-2">
