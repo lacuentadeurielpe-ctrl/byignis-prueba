@@ -15,6 +15,10 @@ interface GeneralFormData {
   tipo_establecimiento?: string
   ruc?: string
   mensaje_comprobante?: string
+  ubigeo?: string
+  departamento?: string
+  provincia?: string
+  distrito?: string
 }
 
 export default function GeneralForm() {
@@ -116,15 +120,69 @@ export default function GeneralForm() {
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-zinc-700 mb-2">
-                Dirección
+                Dirección Fiscal
               </label>
               <input
                 type="text"
                 value={data.direccion || ''}
                 onChange={e => handleChange('direccion', e.target.value)}
                 className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Ej: Av. Principal 123, Lima, Perú"
+                placeholder="Ej: Av. Principal 123"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-2">
+                Departamento
+              </label>
+              <input
+                type="text"
+                value={data.departamento || ''}
+                onChange={e => handleChange('departamento', e.target.value)}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Ej: LIMA"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-2">
+                Provincia
+              </label>
+              <input
+                type="text"
+                value={data.provincia || ''}
+                onChange={e => handleChange('provincia', e.target.value)}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Ej: LIMA"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-2">
+                Distrito
+              </label>
+              <input
+                type="text"
+                value={data.distrito || ''}
+                onChange={e => handleChange('distrito', e.target.value)}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Ej: MIRAFLORES"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-2">
+                Código Ubigeo
+              </label>
+              <input
+                type="text"
+                value={data.ubigeo || ''}
+                onChange={e => handleChange('ubigeo', e.target.value)}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Ej: 150101"
+                maxLength={6}
+              />
+              <p className="text-xs text-zinc-500 mt-1">Código de 6 dígitos SUNAT</p>
             </div>
 
             <div className="md:col-span-2">

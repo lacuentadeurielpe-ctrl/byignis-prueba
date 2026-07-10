@@ -10,7 +10,7 @@ import type { CredencialesSunat } from './credenciales'
 export async function obtenerFerreteria(supabase: any, ferreteriaId: string) {
   const { data } = await supabase
     .from('ferreterias')
-    .select('id, ruc, razon_social, serie_boletas, serie_facturas, igv_incluido_en_precios, direccion')
+    .select('id, ruc, razon_social, serie_boletas, serie_facturas, igv_incluido_en_precios, direccion, ubigeo, departamento, provincia, distrito')
     .eq('id', ferreteriaId)
     .single()
   return data
@@ -21,10 +21,10 @@ export function buildEmisor(ferreteria: any, creds: CredencialesSunat): EmisorLy
     ruc:          creds.ruc,
     razonSocial:  creds.razonSocial,
     direccion:    ferreteria.direccion ?? '-',
-    ubigeo:       '150101',
-    departamento: 'LIMA',
-    provincia:    'LIMA',
-    distrito:     'LIMA',
+    ubigeo:       ferreteria.ubigeo ?? '150101',
+    departamento: ferreteria.departamento ?? 'LIMA',
+    provincia:    ferreteria.provincia ?? 'LIMA',
+    distrito:     ferreteria.distrito ?? 'LIMA',
   }
 }
 
