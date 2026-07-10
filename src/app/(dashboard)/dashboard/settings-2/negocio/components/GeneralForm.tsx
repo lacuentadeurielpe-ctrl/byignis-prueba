@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Building2, Upload } from 'lucide-react'
 import FormSection from '../../components/FormSection'
 import { useSettingsSave } from '../../utils/settingsHooks'
+import { getDepartments, getProvinces, getDistricts, parseUbigeo, getUbigeoData } from 'ubigeo-fns'
 
 interface GeneralFormData {
   nombre?: string
@@ -42,8 +43,52 @@ export default function GeneralForm() {
     fetchData()
   }, [])
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: keyof GeneralFormData, value: string) => {
     setData(prev => ({ ...prev, [field]: value }))
+    setIsDirty(true)
+  }
+
+  // Extraer códigos actuales basados en el ubigeo
+  const parsed = data.ubigeo ? parseUbigeo(data.ubigeo) : null
+  const deptCode = parsed?.departmentCode || ''
+  const provCode = parsed?.provinceCode || ''
+  const distCode = parsed?.districtCode || ''
+
+  const handleDeptChange = (newDeptCode: string) => {
+    if (!newDeptCode) {
+      setData(prev => ({ ...prev, ubigeo: '', departamento: '', provincia: '', distrito: '' }))
+    } else {
+      const depts = getDepartments()
+      const deptName = depts.find(d => d.code === newDeptCode)?.name || ''
+      setData(prev => ({ ...prev, departamento: deptName, provincia: '', distrito: '', ubigeo: '' }))
+    }
+    setIsDirty(true)
+  }
+
+  const handleProvChange = (newProvCode: string) => {
+    if (!newProvCode) {
+      setData(prev => ({ ...prev, ubigeo: '', provincia: '', distrito: '' }))
+    } else {
+      const provs = getProvinces(deptCode)
+      const provName = provs.find(p => p.code === newProvCode)?.name || ''
+      setData(prev => ({ ...prev, provincia: provName, distrito: '', ubigeo: '' }))
+    }
+    setIsDirty(true)
+  }
+
+  const handleDistChange = (newDistCode: string) => {
+    if (!newDistCode) {
+      setData(prev => ({ ...prev, ubigeo: '', distrito: '' }))
+    } else {
+      const uData = getUbigeoData(newDistCode)
+      setData(prev => ({
+        ...prev,
+        ubigeo: newDistCode,
+        departamento: uData?.department || prev.departamento,
+        provincia: uData?.province || prev.provincia,
+        distrito: uData?.district || prev.distrito,
+      }))
+    }
     setIsDirty(true)
   }
 
@@ -135,39 +180,50 @@ export default function GeneralForm() {
               <label className="block text-sm font-medium text-zinc-700 mb-2">
                 Departamento
               </label>
-              <input
-                type="text"
-                value={data.departamento || ''}
-                onChange={e => handleChange('departamento', e.target.value)}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Ej: LIMA"
-              />
+              <select
+                value={deptCode}
+                onChange={e => handleDeptChange(e.target.value)}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              >
+                <option value="">Seleccione...</option>
+                {getDepartments().map(d => (
+                  <option key={d.code} value={d.code}>{d.name}</option>
+                ))}
+              </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-2">
                 Provincia
               </label>
-              <input
-                type="text"
-                value={data.provincia || ''}
-                onChange={e => handleChange('provincia', e.target.value)}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Ej: LIMA"
-              />
+              <select
+                value={provCode}
+                onChange={e => handleProvChange(e.target.value)}
+                disabled={!deptCode}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:opacity-50"
+              >
+                <option value="">Seleccione...</option>
+                {deptCode && getProvinces(deptCode).map(p => (
+                  <option key={p.code} value={p.code}>{p.name}</option>
+                ))}
+              </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-2">
                 Distrito
               </label>
-              <input
-                type="text"
-                value={data.distrito || ''}
-                onChange={e => handleChange('distrito', e.target.value)}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Ej: MIRAFLORES"
-              />
+              <select
+                value={distCode}
+                onChange={e => handleDistChange(e.target.value)}
+                disabled={!provCode}
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:opacity-50"
+              >
+                <option value="">Seleccione...</option>
+                {provCode && getDistricts(provCode).map(d => (
+                  <option key={d.code} value={d.code}>{d.name}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -177,12 +233,11 @@ export default function GeneralForm() {
               <input
                 type="text"
                 value={data.ubigeo || ''}
-                onChange={e => handleChange('ubigeo', e.target.value)}
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                readOnly
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg bg-zinc-50 text-zinc-500 cursor-not-allowed focus:outline-none"
                 placeholder="Ej: 150101"
-                maxLength={6}
               />
-              <p className="text-xs text-zinc-500 mt-1">Código de 6 dígitos SUNAT</p>
+              <p className="text-xs text-zinc-500 mt-1">Se autocompleta con el distrito</p>
             </div>
 
             <div className="md:col-span-2">
