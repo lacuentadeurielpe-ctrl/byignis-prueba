@@ -7,7 +7,7 @@ import { motion } from 'framer-motion'
 import LocalMapPicker from './LocalMapPicker'
 import type { Local, LocalFormData, DIAS_SEMANA } from '@/types/locales'
 import { DIAS_SEMANA_LABELS } from '@/types/locales'
-import { getDepartments, getProvinces, getDistricts, getUbigeoData, validateUbigeo } from 'ubigeo-fns'
+import { getDepartments, getProvinces, getDistricts, getUbigeoData, validateUbigeo, parseUbigeo } from 'ubigeo-fns'
 
 interface LocalModalProps {
   local?: Local
@@ -50,17 +50,27 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
   const [isSaving, setIsSaving] = useState(false)
   const [hasCoordinates, setHasCoordinates] = useState(!!local?.lat && !!local?.lng)
 
-  const [deptCode, setDeptCode] = useState(local?.departamento || '')
-  const [provCode, setProvCode] = useState(local?.provincia || '')
-  const [distCode, setDistCode] = useState(local?.distrito || '')
+  const [deptCode, setDeptCode] = useState(() => {
+    if (local?.ubigeo) return parseUbigeo(local.ubigeo)?.departmentCode || ''
+    if (local?.departamento) return getDepartments().find(d => d.name === local.departamento)?.code || ''
+    return ''
+  })
+  const [provCode, setProvCode] = useState(() => {
+    if (local?.ubigeo) return parseUbigeo(local.ubigeo)?.provinceCode || ''
+    return ''
+  })
+  const [distCode, setDistCode] = useState(() => {
+    if (local?.ubigeo) return parseUbigeo(local.ubigeo)?.districtCode || ''
+    return ''
+  })
 
   useEffect(() => {
     if (local?.ubigeo) {
-      const uData = getUbigeoData(local.ubigeo)
-      if (uData) {
-        setDeptCode(uData.department || '')
-        setProvCode(uData.province || '')
-        setDistCode(uData.district || '')
+      const parsed = parseUbigeo(local.ubigeo)
+      if (parsed) {
+        setDeptCode(parsed.departmentCode || '')
+        setProvCode(parsed.provinceCode || '')
+        setDistCode(parsed.districtCode || '')
       }
     }
   }, [local])
@@ -69,9 +79,11 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
     setDeptCode(newDeptCode)
     setProvCode('')
     setDistCode('')
+    
+    const dName = getDepartments().find(d => d.code === newDeptCode)?.name || ''
     setFormData(prev => ({
       ...prev,
-      departamento: newDeptCode,
+      departamento: dName,
       provincia: '',
       distrito: '',
       ubigeo: ''
@@ -81,9 +93,11 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
   const handleProvChange = (newProvCode: string) => {
     setProvCode(newProvCode)
     setDistCode('')
+    
+    const pName = getProvinces(deptCode).find(p => p.code === newProvCode)?.name || ''
     setFormData(prev => ({
       ...prev,
-      provincia: newProvCode,
+      provincia: pName,
       distrito: '',
       ubigeo: ''
     }))
@@ -108,10 +122,13 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
   const handleUbigeoChange = (val: string) => {
     const rawVal = val.replace(/\D/g, '').substring(0, 6)
     if (rawVal.length === 6 && validateUbigeo(rawVal)) {
+      const parsed = parseUbigeo(rawVal)
       const uData = getUbigeoData(rawVal)
-      setDeptCode(uData?.department || '')
-      setProvCode(uData?.province || '')
-      setDistCode(uData?.district || '')
+      if (parsed) {
+        setDeptCode(parsed.departmentCode || '')
+        setProvCode(parsed.provinceCode || '')
+        setDistCode(parsed.districtCode || '')
+      }
       setFormData(prev => ({
         ...prev,
         ubigeo: rawVal,
