@@ -18,6 +18,10 @@ export interface Local {
   codigo_sunat?: string          // establecimiento anexo Ficha RUC ('0000' = domicilio fiscal)
   serie_boletas?: string | null  // NULL = usa la serie del tenant
   serie_facturas?: string | null
+  ubigeo?: string
+  departamento?: string
+  provincia?: string
+  distrito?: string
   created_at: string
   updated_at: string
 }
@@ -38,6 +42,10 @@ export interface LocalFormData {
   codigo_sunat?: string
   serie_boletas?: string | null
   serie_facturas?: string | null
+  ubigeo?: string
+  departamento?: string
+  provincia?: string
+  distrito?: string
 }
 
 export interface GooglePlacesResult {

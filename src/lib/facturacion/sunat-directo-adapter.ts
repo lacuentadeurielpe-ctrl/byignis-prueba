@@ -184,7 +184,17 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     const { doc, totales } = mapearInvoice('03', {
       serie, correlativo,
-      emisor:      { ...buildEmisor(ferreteria, creds), codLocal: serieRes.codigoSunat },
+      emisor:      { 
+        ...buildEmisor(ferreteria, creds), 
+        codLocal: serieRes.codigoSunat,
+        ...(serieRes.localUbigeo ? { 
+          ubigeo: serieRes.localUbigeo, 
+          departamento: serieRes.localDepartamento || 'LIMA',
+          provincia: serieRes.localProvincia || 'LIMA',
+          distrito: serieRes.localDistrito || 'LIMA',
+          direccion: serieRes.localDireccion || ferreteria.direccion || '-',
+        } : {}) 
+      },
       cliente,
       items:       toItemsLycet(itemsFormales),
       igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
@@ -315,7 +325,17 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     const { doc, totales } = mapearInvoice('01', {
       serie, correlativo,
-      emisor:      { ...buildEmisor(ferreteria, creds), codLocal: serieRes.codigoSunat },
+      emisor:      { 
+        ...buildEmisor(ferreteria, creds), 
+        codLocal: serieRes.codigoSunat,
+        ...(serieRes.localUbigeo ? { 
+          ubigeo: serieRes.localUbigeo, 
+          departamento: serieRes.localDepartamento || 'LIMA',
+          provincia: serieRes.localProvincia || 'LIMA',
+          distrito: serieRes.localDistrito || 'LIMA',
+          direccion: serieRes.localDireccion || ferreteria.direccion || '-',
+        } : {}) 
+      },
       cliente,
       items:       toItemsLycet(itemsFormales),
       igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
@@ -449,19 +469,31 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     // Mismo codLocal del intento original (si el comprobante nació en una sucursal)
     let codLocal = '0000'
+    let locData: any = null
     if (comp.local_id) {
       const { data: loc } = await opts.supabase
         .from('locales_ferreteria')
-        .select('codigo_sunat')
+        .select('codigo_sunat, ubigeo, departamento, provincia, distrito, direccion')
         .eq('id', comp.local_id)
         .single()
       codLocal = loc?.codigo_sunat ?? '0000'
+      locData = loc
     }
 
     const { doc, totales } = mapearInvoice(tipoDoc, {
       serie:       comp.serie,
       correlativo: comp.numero,
-      emisor:      { ...buildEmisor(ferreteria, creds), codLocal },
+      emisor:      { 
+        ...buildEmisor(ferreteria, creds), 
+        codLocal,
+        ...(locData?.ubigeo ? { 
+          ubigeo: locData.ubigeo, 
+          departamento: locData.departamento || 'LIMA',
+          provincia: locData.provincia || 'LIMA',
+          distrito: locData.distrito || 'LIMA',
+          direccion: locData.direccion || ferreteria.direccion || '-',
+        } : {}) 
+      },
       cliente,
       items:       toItemsLycet(itemsFormales),
       igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
@@ -548,9 +580,31 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       return { ok: false, error: `Error configurando el servicio de facturación: ${ensureRes.error}` }
     }
 
+    let codLocal = '0000'
+    let locData: any = null
+    if (comp.local_id) {
+      const { data: loc } = await opts.supabase
+        .from('locales_ferreteria')
+        .select('codigo_sunat, ubigeo, departamento, provincia, distrito, direccion')
+        .eq('id', comp.local_id)
+        .single()
+      codLocal = loc?.codigo_sunat ?? '0000'
+      locData = loc
+    }
+
     const { doc, totales } = mapearNota({
       serie: comp.serie, correlativo: comp.numero,
-      emisor: buildEmisor(ferreteria, creds),
+      emisor: {
+        ...buildEmisor(ferreteria, creds),
+        codLocal,
+        ...(locData?.ubigeo ? { 
+          ubigeo: locData.ubigeo, 
+          departamento: locData.departamento || 'LIMA',
+          provincia: locData.provincia || 'LIMA',
+          distrito: locData.distrito || 'LIMA',
+          direccion: locData.direccion || ferreteria.direccion || '-',
+        } : {}) 
+      },
       cliente: snap.cliente,
       items: snap.itemsLycet,
       igvIncluido: ferreteria.igv_incluido_en_precios ?? false,
@@ -828,9 +882,31 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       return { ok: false, error: `Error configurando el servicio de facturación: ${ensureRes.error}` }
     }
 
+    let codLocal = '0000'
+    let locData: any = null
+    if (p.localId) {
+      const { data: loc } = await p.supabase
+        .from('locales_ferreteria')
+        .select('codigo_sunat, ubigeo, departamento, provincia, distrito, direccion')
+        .eq('id', p.localId)
+        .single()
+      codLocal = loc?.codigo_sunat ?? '0000'
+      locData = loc
+    }
+
     const { doc, totales } = mapearNota({
       serie: p.serieBase, correlativo,
-      emisor: buildEmisor(ferreteria, creds),
+      emisor: {
+        ...buildEmisor(ferreteria, creds),
+        codLocal,
+        ...(locData?.ubigeo ? { 
+          ubigeo: locData.ubigeo, 
+          departamento: locData.departamento || 'LIMA',
+          provincia: locData.provincia || 'LIMA',
+          distrito: locData.distrito || 'LIMA',
+          direccion: locData.direccion || ferreteria.direccion || '-',
+        } : {}) 
+      },
       cliente: p.cliente,
       items: p.itemsLycet,
       igvIncluido: ferreteria.igv_incluido_en_precios ?? false,

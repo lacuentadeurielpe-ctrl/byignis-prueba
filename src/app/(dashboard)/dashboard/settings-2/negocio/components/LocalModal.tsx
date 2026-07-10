@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, MapPin, Clock, Phone, Tag, FileText } from 'lucide-react'
+import { X, MapPin, Clock, Phone, Tag, FileText, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import LocalMapPicker from './LocalMapPicker'
 import type { Local, LocalFormData, DIAS_SEMANA } from '@/types/locales'
 import { DIAS_SEMANA_LABELS } from '@/types/locales'
+import { getDepartments, getProvinces, getDistricts, getUbigeoData, validateUbigeo } from 'ubigeo-fns'
 
 interface LocalModalProps {
   local?: Local
@@ -41,9 +42,87 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
     codigo_sunat: local?.codigo_sunat || '0000',
     serie_boletas: local?.serie_boletas || '',
     serie_facturas: local?.serie_facturas || '',
+    ubigeo: local?.ubigeo || '',
+    departamento: local?.departamento || '',
+    provincia: local?.provincia || '',
+    distrito: local?.distrito || '',
   })
   const [isSaving, setIsSaving] = useState(false)
   const [hasCoordinates, setHasCoordinates] = useState(!!local?.lat && !!local?.lng)
+
+  const [deptCode, setDeptCode] = useState(local?.departamento || '')
+  const [provCode, setProvCode] = useState(local?.provincia || '')
+  const [distCode, setDistCode] = useState(local?.distrito || '')
+
+  useEffect(() => {
+    if (local?.ubigeo) {
+      const uData = getUbigeoData(local.ubigeo)
+      if (uData) {
+        setDeptCode(uData.department || '')
+        setProvCode(uData.province || '')
+        setDistCode(uData.district || '')
+      }
+    }
+  }, [local])
+
+  const handleDeptChange = (newDeptCode: string) => {
+    setDeptCode(newDeptCode)
+    setProvCode('')
+    setDistCode('')
+    setFormData(prev => ({
+      ...prev,
+      departamento: newDeptCode,
+      provincia: '',
+      distrito: '',
+      ubigeo: ''
+    }))
+  }
+
+  const handleProvChange = (newProvCode: string) => {
+    setProvCode(newProvCode)
+    setDistCode('')
+    setFormData(prev => ({
+      ...prev,
+      provincia: newProvCode,
+      distrito: '',
+      ubigeo: ''
+    }))
+  }
+
+  const handleDistChange = (newDistCode: string) => {
+    setDistCode(newDistCode)
+    if (!newDistCode) {
+      setFormData(prev => ({ ...prev, ubigeo: '', distrito: '' }))
+    } else {
+      const uData = getUbigeoData(newDistCode)
+      setFormData(prev => ({
+        ...prev,
+        ubigeo: newDistCode,
+        departamento: uData?.department || prev.departamento,
+        provincia: uData?.province || prev.provincia,
+        distrito: uData?.district || prev.distrito,
+      }))
+    }
+  }
+
+  const handleUbigeoChange = (val: string) => {
+    const rawVal = val.replace(/\D/g, '').substring(0, 6)
+    if (rawVal.length === 6 && validateUbigeo(rawVal)) {
+      const uData = getUbigeoData(rawVal)
+      setDeptCode(uData?.department || '')
+      setProvCode(uData?.province || '')
+      setDistCode(uData?.district || '')
+      setFormData(prev => ({
+        ...prev,
+        ubigeo: rawVal,
+        departamento: uData?.department || prev.departamento,
+        provincia: uData?.province || prev.provincia,
+        distrito: uData?.district || prev.distrito,
+      }))
+    } else {
+      setFormData(prev => ({ ...prev, ubigeo: rawVal }))
+    }
+  }
 
   const handleChange = (field: keyof LocalFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -162,11 +241,93 @@ export default function LocalModal({ local, onClose, onSuccess }: LocalModalProp
             />
           </div>
 
-          {/* Dirección y ubicación (opcional - para negocios digitales) */}
+          {/* Dirección y ubicación */}
           <div>
             <p className="text-xs text-zinc-500 mb-3 italic">
-              💡 La ubicación es opcional. Úsala si haces entregas desde este local.
+              💡 La ubicación es opcional, pero importante si haces entregas o emites comprobantes desde aquí.
             </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-2">
+                  Departamento
+                </label>
+                <div className="relative">
+                  <select
+                    value={deptCode}
+                    onChange={e => handleDeptChange(e.target.value)}
+                    className="w-full appearance-none px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white pr-10"
+                  >
+                    <option value="">Seleccione...</option>
+                    {getDepartments().map(d => (
+                      <option key={d.code} value={d.code}>{d.name}</option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500">
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-2">
+                  Provincia
+                </label>
+                <div className="relative">
+                  <select
+                    value={provCode}
+                    onChange={e => handleProvChange(e.target.value)}
+                    disabled={!deptCode}
+                    className="w-full appearance-none px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:opacity-50 pr-10"
+                  >
+                    <option value="">Seleccione...</option>
+                    {deptCode && getProvinces(deptCode).map(p => (
+                      <option key={p.code} value={p.code}>{p.name}</option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500">
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-2">
+                  Distrito
+                </label>
+                <div className="relative">
+                  <select
+                    value={distCode}
+                    onChange={e => handleDistChange(e.target.value)}
+                    disabled={!provCode}
+                    className="w-full appearance-none px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white disabled:opacity-50 pr-10"
+                  >
+                    <option value="">Seleccione...</option>
+                    {provCode && getDistricts(provCode).map(d => (
+                      <option key={d.code} value={d.code}>{d.name}</option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500">
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-2">
+                  Código Ubigeo
+                </label>
+                <input
+                  type="text"
+                  value={formData.ubigeo || ''}
+                  onChange={e => handleUbigeoChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  placeholder="Ej: 150101"
+                  maxLength={6}
+                />
+              </div>
+            </div>
+
             <LocalMapPicker
             onLocationChange={result => {
               handleChange('direccion', result.direccion)

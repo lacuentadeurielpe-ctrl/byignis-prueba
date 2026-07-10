@@ -62,6 +62,11 @@ export interface SerieResuelta {
   /** Código de establecimiento anexo del local emisor ('0000' si no aplica). */
   codigoSunat: string
   localId: string | null
+  localUbigeo?: string | null
+  localDepartamento?: string | null
+  localProvincia?: string | null
+  localDistrito?: string | null
+  localDireccion?: string | null
 }
 
 /**
@@ -92,7 +97,7 @@ export async function resolverSerie(
 
   const { data: local } = await supabase
     .from('locales_ferreteria')
-    .select('id, codigo_sunat, serie_boletas, serie_facturas')
+    .select('id, codigo_sunat, serie_boletas, serie_facturas, ubigeo, departamento, provincia, distrito, direccion')
     .eq('id', localId)
     .eq('ferreteria_id', ferreteriaId)
     .single()
@@ -100,10 +105,18 @@ export async function resolverSerie(
   if (!local) return fallbackTenant()
 
   const seriePropia = tipo === 'boleta' ? local.serie_boletas : local.serie_facturas
-  if (!seriePropia) {
-    const base = await fallbackTenant()
-    return { ...base, codigoSunat: local.codigo_sunat ?? '0000', localId: local.id }
+  const locationData = {
+    localUbigeo: local.ubigeo,
+    localDepartamento: local.departamento,
+    localProvincia: local.provincia,
+    localDistrito: local.distrito,
+    localDireccion: local.direccion,
   }
 
-  return { serie: seriePropia, codigoSunat: local.codigo_sunat ?? '0000', localId: local.id }
+  if (!seriePropia) {
+    const base = await fallbackTenant()
+    return { ...base, codigoSunat: local.codigo_sunat ?? '0000', localId: local.id, ...locationData }
+  }
+
+  return { serie: seriePropia, codigoSunat: local.codigo_sunat ?? '0000', localId: local.id, ...locationData }
 }

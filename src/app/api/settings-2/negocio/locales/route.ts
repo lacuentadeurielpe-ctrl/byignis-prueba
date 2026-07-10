@@ -75,6 +75,10 @@ export async function POST(request: Request) {
         codigo_sunat:   body.codigo_sunat?.trim() || '0000',
         serie_boletas:  body.serie_boletas?.trim().toUpperCase() || null,
         serie_facturas: body.serie_facturas?.trim().toUpperCase() || null,
+        ubigeo:         body.ubigeo,
+        departamento:   body.departamento,
+        provincia:      body.provincia,
+        distrito:       body.distrito,
       })
       .select()
       .single()

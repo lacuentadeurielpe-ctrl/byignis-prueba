@@ -58,6 +58,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ...(body.codigo_sunat   !== undefined && { codigo_sunat:   body.codigo_sunat?.trim() || '0000' }),
         ...(body.serie_boletas  !== undefined && { serie_boletas:  body.serie_boletas?.trim().toUpperCase() || null }),
         ...(body.serie_facturas !== undefined && { serie_facturas: body.serie_facturas?.trim().toUpperCase() || null }),
+        ...(body.ubigeo         !== undefined && { ubigeo:         body.ubigeo }),
+        ...(body.departamento   !== undefined && { departamento:   body.departamento }),
+        ...(body.provincia      !== undefined && { provincia:      body.provincia }),
+        ...(body.distrito       !== undefined && { distrito:       body.distrito }),
       })
       .eq('id', id)
       .select()
