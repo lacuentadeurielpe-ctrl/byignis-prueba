@@ -5,18 +5,36 @@ export class FinanzasRepository {
 
   /**
    * Obtiene la lista de rendiciones de repartidores de una ferretería.
+   * Nota: rendiciones.repartidor_id apunta a la tabla legacy repartidores_backup_deprecated.
+   * Como los repartidores fueron unificados en miembros_ferreteria (migración 112),
+   * resolvemos los nombres en un segundo query y los combinamos en memoria.
    */
   async obtenerRendicionesDashboard(ferreteriaId: string, limite = 60) {
-    const { data, error } = await this.supabase
+    const { data: rendiciones, error } = await this.supabase
       .from('rendiciones')
-      .select('*, miembros_ferreteria(id, nombre, telefono)')
+      .select('*')
       .eq('ferreteria_id', ferreteriaId)
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limite)
 
     if (error) throw error
-    return data ?? []
+    if (!rendiciones || rendiciones.length === 0) return []
+
+    // Obtener nombres de repartidores desde miembros_ferreteria (tabla unificada)
+    const { data: miembros } = await this.supabase
+      .from('miembros_ferreteria')
+      .select('id, nombre, telefono')
+      .eq('ferreteria_id', ferreteriaId)
+      .eq('rol', 'repartidor')
+
+    const miembrosMap = new Map((miembros ?? []).map(m => [m.id, m]))
+
+    // Combinar en memoria respetando la interfaz que espera RendicionesView
+    return rendiciones.map(r => ({
+      ...r,
+      repartidores: miembrosMap.get(r.repartidor_id) ?? null,
+    }))
   }
 
   /**

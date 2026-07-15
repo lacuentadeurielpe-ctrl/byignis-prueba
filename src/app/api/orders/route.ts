@@ -19,12 +19,10 @@ export async function POST(request: Request) {
     const body: PedidoPayload = await request.json()
     // Sucursal de escritura: SIEMPRE resuelta por el servidor desde el contexto
     // (cookie/asignación del empleado). Se ignora cualquier local_id del cliente.
-    if (session.multiSucursal) {
-      const contexto = await getContextoSucursal(supabase, session)
-      body.local_id = contexto.localEscrituraId || null
-    } else {
-      body.local_id = null
-    }
+    // Se resuelve siempre (no solo con multiSucursal) para asignar el local principal
+    // en tenants de sucursal única.
+    const contexto = await getContextoSucursal(supabase, session)
+    body.local_id = contexto.localEscrituraId ?? null
     const pedido = await ordersService.crearPedido(body)
     // Obtener el pedido completo con relaciones para la UI
     const ventasRepo = new VentasRepository(supabase)
@@ -47,7 +45,10 @@ export async function GET(request: Request) {
   const estado = searchParams.get('estado')
 
   try {
-    const contextoSucursal = session.multiSucursal ? await getContextoSucursal(supabase, session) : null
+    // Resolver sucursal activa del usuario (null = "Todas" = sin filtro de sucursal).
+    // Se resuelve siempre para que localActivoId apunte al local principal
+    // en tenants de sucursal única.
+    const contextoSucursal = await getContextoSucursal(supabase, session)
     const localActivoId = contextoSucursal?.localActivoId ?? null
 
     const data = await ventasRepo.obtenerPedidosPorFerreteria(session.ferreteriaId, estado, localActivoId)

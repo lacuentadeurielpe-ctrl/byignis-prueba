@@ -30,8 +30,13 @@ export interface ContextoSucursal {
   localesVisibles: LocalVisible[]
   /** Local sobre el que se está operando. null = "Todas" (solo dueño/sin asignación). */
   localActivoId: string | null
-  /** Local donde se ESCRIBE (ventas, caja). Nunca null: cae al principal. */
-  localEscrituraId: string
+  /**
+   * Local donde se ESCRIBE (ventas, caja, comprobantes).
+   * null solo si el tenant no tiene ningún local creado (situación imposible
+   * tras migración 106, pero tipada para que los consumidores lo manejen
+   * explícitamente en lugar de recibir '' silenciosamente).
+   */
+  localEscrituraId: string | null
   /** true si el usuario está fijado a una sucursal (empleado asignado). */
   localFijado: boolean
 }
@@ -63,12 +68,15 @@ export async function getContextoSucursal(
   const multiSucursal = (ferreteria?.multi_sucursal ?? false) && todos.length > 0
 
   // Tienda única: el contexto degrada al principal, sin cookie ni asignaciones.
+  // Siempre se resuelve (aunque multiSucursal sea false) para que localEscrituraId
+  // quede correctamente asignado al local principal y los pedidos/comprobantes
+  // no queden con local_id vacío.
   if (!multiSucursal) {
     return {
       multiSucursal: false,
       localesVisibles: principal ? [principal] : [],
       localActivoId: principal?.id ?? null,
-      localEscrituraId: principal?.id ?? '',
+      localEscrituraId: principal?.id ?? null,  // null si no hay local (caso imposible tras migración 106)
       localFijado: false,
     }
   }
@@ -96,7 +104,7 @@ export async function getContextoSucursal(
     multiSucursal: true,
     localesVisibles: todos,
     localActivoId: activo?.id ?? null,
-    localEscrituraId: (activo ?? principal)?.id ?? '',
+    localEscrituraId: (activo ?? principal)?.id ?? null,
     localFijado: false,
   }
 }

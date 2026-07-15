@@ -205,13 +205,12 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
     const fechaEmision = fechaEmisionHoy()
 
-    // Solo se libera el correlativo ante un rechazo DEFINITIVO. Una falla de
-    // infraestructura mantiene la reserva: el reintento reusa el mismo número.
-    if (!resultado.aceptado && !clasif.reintentable) {
+    const esRechazoDefinitivo = !resultado.aceptado && !clasif.reintentable
+    if (esRechazoDefinitivo) {
       await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '03', serie, correlativo)
     }
 
-    const { data: comp } = await opts.supabase
+    const { data: comp, error: upsertError } = await opts.supabase
       .from('comprobantes')
       .upsert({
         ferreteria_id:         opts.ferreteriaId,
@@ -219,9 +218,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         tipo:                  'boleta',
         local_id:              serieRes.localId,
         serie,
-        numero:                correlativo,
-        numero_completo:       numeroCompleto,
-        numero_comprobante:    numeroCompleto,
+        numero:                esRechazoDefinitivo ? null : correlativo,
+        numero_completo:       esRechazoDefinitivo ? null : numeroCompleto,
+        numero_comprobante:    esRechazoDefinitivo ? null : numeroCompleto,
         estado:                clasif.estado,
         estado_sunat:          clasif.estadoSunatFinal,
         fecha_emision:         fechaEmision,
@@ -248,6 +247,10 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       }, { onConflict: 'pedido_id,tipo' })
       .select('id')
       .single()
+
+    if (upsertError) {
+      return { ok: false, error: `Error de base de datos al guardar boleta: ${upsertError.message}` }
+    }
 
     await escribirLog(
       opts.supabase, opts.ferreteriaId, comp?.id ?? null,
@@ -346,11 +349,12 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     const numeroCompleto = `${serie}-${padCorrelativo(correlativo)}`
     const fechaEmision = fechaEmisionHoy()
 
-    if (!resultado.aceptado && !clasif.reintentable) {
+    const esRechazoDefinitivo = !resultado.aceptado && !clasif.reintentable
+    if (esRechazoDefinitivo) {
       await rollbackCorrelativo(opts.supabase, opts.ferreteriaId, '01', serie, correlativo)
     }
 
-    const { data: comp } = await opts.supabase
+    const { data: comp, error: upsertError } = await opts.supabase
       .from('comprobantes')
       .upsert({
         ferreteria_id:         opts.ferreteriaId,
@@ -358,9 +362,9 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
         tipo:                  'factura',
         local_id:              serieRes.localId,
         serie,
-        numero:                correlativo,
-        numero_completo:       numeroCompleto,
-        numero_comprobante:    numeroCompleto,
+        numero:                esRechazoDefinitivo ? null : correlativo,
+        numero_completo:       esRechazoDefinitivo ? null : numeroCompleto,
+        numero_comprobante:    esRechazoDefinitivo ? null : numeroCompleto,
         estado:                clasif.estado,
         estado_sunat:          clasif.estadoSunatFinal,
         fecha_emision:         fechaEmision,
@@ -387,6 +391,10 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       }, { onConflict: 'pedido_id,tipo' })
       .select('id')
       .single()
+
+    if (upsertError) {
+      return { ok: false, error: `Error de base de datos al guardar factura: ${upsertError.message}` }
+    }
 
     await escribirLog(
       opts.supabase, opts.ferreteriaId, comp?.id ?? null,
@@ -735,8 +743,16 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       }
       for (const dev of opts.itemsDevueltos) {
         const oi = todosLosItems.find((i: any) => i.id === dev.itemId)
-        if (oi && (dev.cantidad <= 0 || dev.cantidad > Number(oi.cantidad))) {
-          return { ok: false, error: `Cantidad inválida para "${oi.nombre_producto}": máximo ${oi.cantidad}` }
+        if (!oi) continue
+        const yaDevuelta = Number(oi.cantidad_devuelta ?? 0)
+        const disponible = Number(oi.cantidad) - yaDevuelta
+        if (dev.cantidad <= 0 || dev.cantidad > disponible) {
+          return {
+            ok: false,
+            error: disponible <= 0
+              ? `"${oi.nombre_producto}" ya fue devuelto completamente en una Nota de Crédito anterior`
+              : `Cantidad inválida para "${oi.nombre_producto}": máximo disponible ${disponible} (ya devuelto: ${yaDevuelta})`,
+          }
         }
       }
       itemsParaNota = todosLosItems
@@ -766,6 +782,11 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     const itemsLycet = toItemsLycet(itemsParaNota)
 
+    let costoRecuperado = 0
+    if (motivo.comportamiento === 'items') {
+      costoRecuperado = itemsParaNota.reduce((sum, item) => sum + (item.cantidad * Number(item.costo_unitario || 0)), 0)
+    }
+
     const isBoleta        = ref.tipo === 'boleta'
     const tipoDocAfectado = isBoleta ? '03' : '01'
     const numDocAfectado  = `${ref.serie}-${padCorrelativo(ref.numero)}`
@@ -776,6 +797,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
       tipoNota: '07', serieBase: isBoleta ? 'BC01' : 'FC01',
       tipoDocAfectado, numDocAfectado, cliente, itemsLycet,
       codMotivo: opts.motivoCodigo, desMotivo: opts.motivoDescripcion,
+      costoRecuperado,
       pedidoId: ref.pedido_id, referenciaId: ref.id, emitidoPor: opts.emitidoPor,
       localId: ref.local_id ?? null, // la NC hereda la sucursal del original
       // Siempre acotado: una NC (o la suma de varias) jamás puede superar el
@@ -785,9 +807,10 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
 
     if (!resultado.ok) return resultado
 
-    // Devolver el stock de los items devueltos (solo motivos 'items').
+    // Post-emisión exitosa: restaurar stock Y acumular cantidad_devuelta (solo 'items').
     if (motivo.comportamiento === 'items') {
       for (const item of itemsParaNota) {
+        // 1. Devolver stock al almacén
         if (item.producto_id) {
           const { error: rpcErr } = await opts.supabase.rpc('restaurar_stock_parcial', {
             p_producto_id: item.producto_id,
@@ -795,6 +818,14 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
             p_local_id:    ref.local_id ?? null, // restaura al local del comprobante
           })
           if (rpcErr) console.error('[NotaCredito] Error ajustando stock:', rpcErr)
+        }
+        // 2. Registrar la devolución para prevenir futuras NC infinitas sobre el mismo item
+        if (item.id) {
+          const { error: updErr } = await opts.supabase
+            .from('items_pedido')
+            .update({ cantidad_devuelta: (Number(item.cantidad_devuelta ?? 0)) + Number(item.cantidad) })
+            .eq('id', item.id)
+          if (updErr) console.error('[NotaCredito] Error actualizando cantidad_devuelta:', updErr)
         }
       }
     }
@@ -860,6 +891,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
     pedidoId: string | null; referenciaId: string
     emitidoPor: 'dashboard' | 'bot'
     localId?: string | null   // sucursal heredada del comprobante original
+    costoRecuperado?: number  // Costo recuperado (para NC de devolución)
     totalMaximo?: number   // si se pasa, valida antes de enviar (guard anti-doble-NC)
   }): Promise<ResultadoEmisionUnificado> {
     const creds = await cargarCredencialesSunat(p.supabase, p.ferreteriaId)
@@ -975,6 +1007,7 @@ export class SunatDirectoAdapter implements ProveedorFacturacion {
           tipoDocAfectado: p.tipoDocAfectado, numDocAfectado: p.numDocAfectado,
           cliente: p.cliente, itemsLycet: p.itemsLycet,
           codMotivo: p.codMotivo, desMotivo: p.desMotivo,
+          costoRecuperado: p.costoRecuperado,
         },
       })
       .select('id')

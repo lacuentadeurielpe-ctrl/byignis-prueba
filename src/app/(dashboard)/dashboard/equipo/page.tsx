@@ -1,99 +1,90 @@
-'use client'
+import { redirect } from 'next/navigation'
+import { getSessionInfo } from '@/lib/auth/roles'
+import { createClient } from '@/lib/supabase/server'
+import { Users } from 'lucide-react'
+import EquipoTabs from '@/components/equipo/EquipoTabs'
+import type { MiembroEquipo, LocalEquipo } from '@/components/equipo/roles/RolesBoard'
+import { normalizarPermisos } from '@/lib/auth/permisos'
 
-import { Users, Truck, DollarSign, Activity, Building2 } from 'lucide-react'
-import Link from 'next/link'
+export const dynamic = 'force-dynamic'
+export const metadata = { title: 'Equipo — Roles y Sucursales' }
 
-export default function EquipoHub() {
+export default async function EquipoPage() {
+  const session = await getSessionInfo()
+  if (!session) redirect('/auth/login')
+
+  const supabase = await createClient()
+
+  // Cargar miembros, locales y asignaciones en paralelo
+  const [{ data: miembrosData }, { data: localesData }, { data: asignacionesData }] =
+    await Promise.all([
+      supabase
+        .from('miembros_ferreteria')
+        .select('id, nombre, rol, activo, email, local_id, permisos')
+        .eq('ferreteria_id', session.ferreteriaId)
+        .eq('activo', true)
+        .order('nombre'),
+      supabase
+        .from('locales_ferreteria')
+        .select('id, nombre, es_principal')
+        .eq('ferreteria_id', session.ferreteriaId)
+        .eq('activo', true)
+        .order('es_principal', { ascending: false })
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('empleado_sucursal')
+        .select('empleado_id, local_id')
+        .eq('ferreteria_id', session.ferreteriaId),
+    ])
+
+  const asignaciones = asignacionesData ?? []
+
+  const miembros: MiembroEquipo[] = (miembrosData ?? []).map(m => ({
+    id: m.id,
+    nombre: m.nombre ?? 'Sin nombre',
+    rol: m.rol ?? 'vendedor',
+    activo: m.activo ?? true,
+    email: m.email,
+    local_id: m.local_id ?? null,
+    permisos: normalizarPermisos((m.permisos ?? {}) as Record<string, unknown>),
+    // Sucursales vienen de la tabla pivot empleado_sucursal; fallback a local_id si no hay pivot
+    sucursales: (() => {
+      const pivot = asignaciones.filter(a => a.empleado_id === m.id).map(a => a.local_id)
+      if (pivot.length > 0) return pivot
+      return m.local_id ? [m.local_id] : []
+    })(),
+  }))
+
+  // Si no hay locales, creamos un local "virtual" principal para tenants de sucursal única
+  const locales: LocalEquipo[] = localesData && localesData.length > 0
+    ? localesData.map(l => ({
+        id: l.id,
+        nombre: l.nombre,
+        es_principal: l.es_principal ?? false,
+      }))
+    : [{
+        id: 'principal',
+        nombre: 'Local Principal',
+        es_principal: true,
+      }]
+
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Recursos Humanos y Logística</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Gestiona tu equipo, nóminas y rendimiento desde un solo lugar.</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1 */}
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
-              <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            </div>
-          </div>
-          <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Empleados Activos</h3>
-          <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">--</p>
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
+          <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         </div>
-
-        {/* KPI 2 */}
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-              <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-          </div>
-          <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Repartidores Activos</h3>
-          <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">--</p>
-        </div>
-
-        {/* KPI 3 */}
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            </div>
-          </div>
-          <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Nómina del Mes</h3>
-          <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">S/ 0.00</p>
-        </div>
-
-        {/* KPI 4 */}
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 rounded-full bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center">
-              <Activity className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-            </div>
-          </div>
-          <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Evaluaciones Pendientes</h3>
-          <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mt-1">0</p>
+        <div>
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Equipo</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {miembros.length} miembro{miembros.length !== 1 ? 's' : ''} · {localesData?.length ?? 0} sucursal{(localesData?.length ?? 0) !== 1 ? 'es' : ''}
+          </p>
         </div>
       </div>
 
-      {/* Accesos Rápidos */}
-      <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mt-8 mb-4">Accesos Rápidos</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Link href="/dashboard/equipo/empleados" className="p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-indigo-300 transition-colors group">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/30 transition-colors">
-              <Users className="w-6 h-6 text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">Gestión de Empleados</h3>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">Administra roles, accesos y sucursales</p>
-            </div>
-          </div>
-        </Link>
-        <Link href="/dashboard/equipo/nominas" className="p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-emerald-300 transition-colors group">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/30 transition-colors">
-              <DollarSign className="w-6 h-6 text-zinc-600 dark:text-zinc-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">Pagos y Nóminas</h3>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">Genera recibos de pago y bonos</p>
-            </div>
-          </div>
-        </Link>
-        <Link href="/dashboard/equipo/organizacion" className="p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-violet-300 transition-colors group md:col-span-2">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg group-hover:bg-violet-50 dark:group-hover:bg-violet-900/30 transition-colors">
-              <Building2 className="w-6 h-6 text-zinc-600 dark:text-zinc-400 group-hover:text-violet-600 dark:group-hover:text-violet-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">Organización por Sucursal</h3>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">Arrastra y asigna empleados a cada sucursal de forma visual e interactiva</p>
-            </div>
-          </div>
-        </Link>
-      </div>
+      {/* Tabs */}
+      <EquipoTabs miembros={miembros} locales={locales} />
     </div>
   )
 }

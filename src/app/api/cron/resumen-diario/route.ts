@@ -94,15 +94,32 @@ export async function GET(request: Request) {
         .eq('ferreteria_id', fid)
         .gte('created_at', inicio)
 
+      // Comprobantes (NC/ND) del día
+      const { data: notas } = await supabase
+        .from('comprobantes')
+        .select('tipo, total')
+        .eq('ferreteria_id', fid)
+        .eq('estado', 'emitido')
+        .in('tipo', ['nota_credito', 'nota_debito'])
+        .gte('created_at', inicio)
+
       const pedidosHoy = pedidos ?? []
       const totalPedidos = pedidosHoy.length
       const completados = pedidosHoy.filter(p => p.estado === 'entregado').length
       const enCamino    = pedidosHoy.filter(p => ['enviado', 'en_preparacion', 'confirmado'].includes(p.estado)).length
       const pendientes  = pedidosHoy.filter(p => p.estado === 'pendiente').length
       const cancelados = pedidosHoy.filter(p => p.estado === 'cancelado').length
-      const ingresos = pedidosHoy
-        .filter(p => p.estado !== 'cancelado')
+      
+      const ESTADOS_EXCLUIR_INGRESOS = new Set(['pendiente', 'cancelado', 'programado'])
+      let ingresos = pedidosHoy
+        .filter(p => !ESTADOS_EXCLUIR_INGRESOS.has(p.estado))
         .reduce((s, p) => s + (p.total ?? 0), 0)
+
+      ;(notas ?? []).forEach(n => {
+        const v = Number(n.total || 0)
+        if (n.tipo === 'nota_debito') ingresos += v
+        else if (n.tipo === 'nota_credito') ingresos -= v
+      })
 
       // Cotizaciones del día
       const { data: cotizaciones } = await supabase

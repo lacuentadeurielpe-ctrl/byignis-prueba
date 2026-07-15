@@ -52,11 +52,10 @@ export default async function DashboardLayout({
       .single(),
   ])
 
-  // Contexto de sucursal: null si el tenant no activó multi_sucursal
-  // (el selector no se renderiza y todo se comporta como tienda única).
-  const contexto = session.multiSucursal
-    ? await getContextoSucursal(supabase, session)
-    : null
+  // Contexto de sucursal: se resuelve siempre para garantizar que localEscrituraId
+  // quede asignado al local principal incluso en tenants de sucursal única.
+  // El SucursalSelector en el sidebar solo se renderiza si contexto.multiSucursal === true.
+  const contexto = await getContextoSucursal(supabase, session)
 
   const sidebarNode = (
     <Sidebar

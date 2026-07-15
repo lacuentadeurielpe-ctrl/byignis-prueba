@@ -633,12 +633,7 @@ export class VentasRepository {
     // Ingresos: solo pedidos confirmados/en tránsito/entregados (excluye pendiente y programado que aún no son venta)
     const ESTADOS_INGRESO = new Set(['confirmado', 'en_preparacion', 'listo_para_recojo', 'enviado', 'entregado'])
     const pedidosFacturables = pedidosList.filter((p: any) => ESTADOS_INGRESO.has(p.estado))
-    const ingresos_total = pedidosFacturables.reduce((sum: number, p: any) => sum + Number(p.total ?? 0), 0)
-
-    // COGS solo sobre pedidos facturables
-    if (pedidosFacturables.length === 0) {
-      return { pedidos_n, entregados_n, ingresos_total: 0, ganancia_total: 0 }
-    }
+    let ingresos_total = pedidosFacturables.reduce((sum: number, p: any) => sum + Number(p.total ?? 0), 0)
 
     // Obtener configuración de la ferretería para IGV
     const { data: ferrData } = await this.supabase
@@ -648,15 +643,45 @@ export class VentasRepository {
       .single()
     const igvIncluido = ferrData?.igv_incluido_en_precios ?? false
 
+    // Fetch comprobantes (NC y ND) emitidos en el periodo
+    let queryComprobantes = this.supabase
+      .from('comprobantes')
+      .select('tipo, total, detalle_emision')
+      .eq('ferreteria_id', ferreteriaId)
+      .eq('estado', 'emitido')
+      .in('tipo', ['nota_credito', 'nota_debito'])
+      .gte('created_at', inicio)
+      .lt('created_at', fin)
+
+    if (localId) queryComprobantes = queryComprobantes.eq('local_id', localId)
+    const { data: comprobantes } = await queryComprobantes
+    const comps = comprobantes ?? []
+
+    // Ajustar ingresos con NC/ND
+    comps.forEach((c: any) => {
+      const val = Number(c.total || 0)
+      if (c.tipo === 'nota_debito') ingresos_total += val
+      if (c.tipo === 'nota_credito') ingresos_total -= val
+    })
+
+    // COGS solo sobre pedidos facturables
+    if (pedidosFacturables.length === 0 && comps.length === 0) {
+      return { pedidos_n, entregados_n, ingresos_total: 0, ganancia_total: 0 }
+    }
+
     const pedidoIds = pedidosFacturables.map((p: any) => p.id)
-    const { data: items } = await this.supabase
-      .from('items_pedido')
-      .select('pedido_id, cantidad, precio_unitario, producto_id, productos(precio_compra, facturable, afecto_igv)')
-      .in('pedido_id', pedidoIds)
+    let items: any[] = []
+    if (pedidoIds.length > 0) {
+      const { data: resItems } = await this.supabase
+        .from('items_pedido')
+        .select('pedido_id, cantidad, precio_unitario, producto_id, productos(precio_compra, facturable, afecto_igv)')
+        .in('pedido_id', pedidoIds)
+      items = resItems ?? []
+    }
 
     let ganancia_total = 0
 
-    ;(items ?? []).forEach((item: any) => {
+    items.forEach((item: any) => {
       const precioUnitario = Number(item.precio_unitario ?? 0)
       const costo = Number(item.productos?.precio_compra ?? 0)
       const cant = Number(item.cantidad ?? 0)
@@ -668,18 +693,37 @@ export class VentasRepository {
       const gananciaBruta = (precioUnitario - costo) * cant
       
       if (esFacturable && afectoIgv && igvIncluido) {
-        // El precio de venta incluye IGV. Asumimos que el precio de compra ingresado también lo incluye.
-        // Para obtener la ganancia neta real (sin IGV), extraemos el IGV de la ganancia bruta.
         gananciaItem = gananciaBruta / 1.18
       } else {
-        // No facturable, exonerado (no afecto), o el IGV se suma al final (precios netos).
         gananciaItem = gananciaBruta
       }
-      
       ganancia_total += gananciaItem
     })
 
-    ganancia_total = Math.max(0, ganancia_total)
+    // Ajustar ganancia con NC/ND
+    // NOTA DE COMPATIBILIDAD: Solo las Notas de Crédito emitidas a partir de la
+    // migración (que tienen `detalle_emision.costoRecuperado` explícito) ajustan
+    // la ganancia. Las NC antiguas sin ese campo se ignoran para no destruir el
+    // histórico de utilidades pre-migración.
+    comps.forEach((c: any) => {
+      const valSinIgv = igvIncluido ? Number(c.total || 0) / 1.18 : Number(c.total || 0)
+      if (c.tipo === 'nota_debito') {
+        ganancia_total += valSinIgv
+      } else if (c.tipo === 'nota_credito') {
+        // Solo procesar si el campo existe explícitamente (NC nueva con lógica de costo)
+        const tieneSnapshotCosto = c.detalle_emision != null &&
+          'costoRecuperado' in (c.detalle_emision ?? {})
+        if (!tieneSnapshotCosto) return // NC antigua: no tocar ganancia histórica
+        ganancia_total -= valSinIgv
+        const costoRecup = Number(c.detalle_emision?.costoRecuperado || 0)
+        const costoRecupAjustado = igvIncluido ? (costoRecup / 1.18) : costoRecup
+        ganancia_total += costoRecupAjustado
+      }
+    })
+
+    // Permitir ganancia negativa si las devoluciones superan las ventas del periodo
+    // (comentamos el Math.max porque financieramente una ganancia negativa es real)
+    // ganancia_total = Math.max(0, ganancia_total)
 
     return { pedidos_n, entregados_n, ingresos_total, ganancia_total }
   }

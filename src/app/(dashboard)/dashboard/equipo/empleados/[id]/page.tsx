@@ -24,7 +24,7 @@ export default function EmpleadoProfilePage() {
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
       {/* ── Header Perfil ── */}
       <div className="flex flex-col md:flex-row md:items-center gap-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm">
-        <Link href="/dashboard/equipo/empleados" className="p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition text-zinc-500 self-start">
+        <Link href="/dashboard/equipo" className="p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition text-zinc-500 self-start">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex items-center gap-4 flex-1">

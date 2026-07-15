@@ -35,10 +35,12 @@ export default function ModalNotaCredito({
   }, [])
 
   // Cantidad a devolver por ítem — solo relevante si comportamiento === 'items'
+  // Arranca en 0 (el usuario elige cuánto devuelve). El máximo por item es
+  // cantidad_original - cantidad_devuelta (lo que ya fue devuelto en NC previas).
   const [cantidadesDevueltas, setCantidadesDevueltas] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {}
     pedido.items_pedido?.forEach((i: any) => {
-      init[i.id] = i.cantidad
+      init[i.id] = 0 // siempre empieza en 0 — el usuario elige cuánto devuelve
     })
     return init
   })
@@ -49,6 +51,11 @@ export default function ModalNotaCredito({
   }, 0) || 0
 
   const hasItemsToReturn = Object.values(cantidadesDevueltas).some(q => q > 0)
+
+  // Disponible por item: cantidad original menos lo ya devuelto en NC previas
+  function disponibleItem(item: any): number {
+    return Math.max(0, Number(item.cantidad) - Number(item.cantidad_devuelta ?? 0))
+  }
 
   function handleMotivoChange(codigo: string) {
     const m = buscarMotivo(CATALOGO_09_NOTA_CREDITO, codigo)!
@@ -168,35 +175,55 @@ export default function ModalNotaCredito({
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-2">Productos a devolver</label>
               <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                {pedido.items_pedido?.map((item: any) => (
-                  <div key={item.id} className="flex items-center justify-between p-3 border border-zinc-200 rounded-xl">
+              {pedido.items_pedido?.map((item: any) => {
+                const disp = disponibleItem(item)
+                const totalmenteDevuelto = disp === 0 && Number(item.cantidad) > 0
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex items-center justify-between p-3 border rounded-xl ${
+                      totalmenteDevuelto ? 'border-zinc-100 bg-zinc-50 opacity-60' : 'border-zinc-200'
+                    }`}
+                  >
                     <div className="flex-1 min-w-0 pr-3">
                       <p className="text-sm font-medium text-zinc-900 truncate">{item.nombre_producto}</p>
                       <p className="text-xs text-zinc-500">{formatPEN(item.precio_unitario)} / {item.unidad}</p>
+                      {Number(item.cantidad_devuelta ?? 0) > 0 && (
+                        <p className="text-xs text-amber-600 mt-0.5">
+                          {totalmenteDevuelto
+                            ? '✓ Devuelto completamente'
+                            : `Ya devuelto: ${item.cantidad_devuelta} de ${item.cantidad}`}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <div className="flex items-center bg-zinc-100 rounded-lg p-0.5">
-                        <button
-                          onClick={() => updateCantidad(item.id, item.cantidad, -1)}
-                          className="w-7 h-7 flex items-center justify-center rounded-md bg-white shadow-sm border border-zinc-200 text-zinc-600 hover:text-zinc-900 disabled:opacity-50"
-                          disabled={cantidadesDevueltas[item.id] === 0 || cargando}
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="w-8 text-center text-sm font-bold tabular-nums">
-                          {cantidadesDevueltas[item.id] || 0}
-                        </span>
-                        <button
-                          onClick={() => updateCantidad(item.id, item.cantidad, 1)}
-                          className="w-7 h-7 flex items-center justify-center rounded-md bg-white shadow-sm border border-zinc-200 text-zinc-600 hover:text-zinc-900 disabled:opacity-50"
-                          disabled={cantidadesDevueltas[item.id] === item.cantidad || cargando}
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
+                      {totalmenteDevuelto ? (
+                        <span className="text-xs font-medium text-zinc-400 bg-zinc-100 px-2 py-1 rounded-lg">Agotado</span>
+                      ) : (
+                        <div className="flex items-center bg-zinc-100 rounded-lg p-0.5">
+                          <button
+                            onClick={() => updateCantidad(item.id, disp, -1)}
+                            className="w-7 h-7 flex items-center justify-center rounded-md bg-white shadow-sm border border-zinc-200 text-zinc-600 hover:text-zinc-900 disabled:opacity-50"
+                            disabled={cantidadesDevueltas[item.id] === 0 || cargando}
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-8 text-center text-sm font-bold tabular-nums">
+                            {cantidadesDevueltas[item.id] || 0}
+                          </span>
+                          <button
+                            onClick={() => updateCantidad(item.id, disp, 1)}
+                            className="w-7 h-7 flex items-center justify-center rounded-md bg-white shadow-sm border border-zinc-200 text-zinc-600 hover:text-zinc-900 disabled:opacity-50"
+                            disabled={cantidadesDevueltas[item.id] >= disp || cargando}
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                ))}
+                )
+              })}
               </div>
 
               <div className="mt-4 flex justify-between items-center py-3 border-t border-zinc-100">

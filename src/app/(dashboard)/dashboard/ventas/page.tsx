@@ -50,10 +50,10 @@ export default async function VentasPage({
   const deliveryRepo = new DeliveryRepository(supabase)
   const facturacionRepo = new FacturacionRepository(supabase)
 
-  // Resolver sucursal activa del usuario (null = "Todas" = sin filtro)
-  const contextoSucursal = session.multiSucursal
-    ? await getContextoSucursal(supabase, session)
-    : null
+  // Resolver sucursal activa del usuario (null = "Todas" = sin filtro de sucursal).
+  // Se resuelve siempre (no solo con multiSucursal) para que localActivoId apunte
+  // al local principal en tenants de sucursal única.
+  const contextoSucursal = await getContextoSucursal(supabase, session)
   const localActivoId = contextoSucursal?.localActivoId ?? null
 
   // Conteo de deudas vencidas — siempre, para mostrar badge en el tab

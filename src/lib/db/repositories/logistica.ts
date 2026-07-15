@@ -82,18 +82,17 @@ export class DeliveryRepository {
   async listarRepartidores(ferreteriaId: string, localId?: string | null) {
     const { data, error } = await this.supabase
       .from('miembros_ferreteria')
-      .select('id, nombre, telefono, activo, local_id, empleado_sucursal(local_id)')
+      .select('id, nombre, telefono, activo, local_id')
       .eq('ferreteria_id', ferreteriaId)
       .eq('rol', 'repartidor')
       .order('nombre')
     if (error) throw error
 
     let lista = data ?? []
+    // Filtrar por sucursal si se especifica.
+    // local_id en miembros_ferreteria es la asignación canónica (migración 106).
     if (localId) {
-      lista = lista.filter(r => 
-        r.local_id === localId || 
-        ((r.empleado_sucursal as any[]) || []).some(s => s.local_id === localId)
-      )
+      lista = lista.filter(r => r.local_id === localId || r.local_id === null)
     }
 
     return lista

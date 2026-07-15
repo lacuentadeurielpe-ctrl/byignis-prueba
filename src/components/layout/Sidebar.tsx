@@ -29,6 +29,7 @@ import type { Rol } from '@/lib/auth/roles'
 import { checkPermiso, type Permiso, type PermisoMap } from '@/lib/auth/permisos'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { isModuleEnabled, type ModuleName } from '@/lib/config/modules'
+import { isModuleEnabledForSucursal } from '@/lib/sucursales/modulos'
 
 interface NavItem {
   label: string
@@ -37,6 +38,7 @@ interface NavItem {
   badge?: 'pedidos' | 'conversaciones' | 'cotizaciones'
   permiso?: Permiso
   moduleName?: ModuleName
+  hidden?: boolean
 }
 
 interface NavGroup {
@@ -50,7 +52,7 @@ const navGroups: NavGroup[] = [
       { label: 'Dashboard', href: '/dashboard',       icon: LayoutDashboard, permiso: 'ver_dashboard', moduleName: 'dashboard' },
       { label: 'Caja POS',  href: '/pos',             icon: ScanLine,        permiso: 'ver_pedidos', moduleName: 'pos' },
       { label: 'Ventas',    href: '/dashboard/ventas', icon: TrendingUp,      badge: 'pedidos',        permiso: 'ver_pedidos', moduleName: 'ventas' },
-      { label: 'Chat',      href: '/dashboard/conversations', icon: MessageSquare, badge: 'conversaciones', permiso: 'ver_pedidos', moduleName: 'chat' },
+      { label: 'Chat',      href: '/dashboard/conversations', icon: MessageSquare, badge: 'conversaciones', permiso: 'ver_pedidos', moduleName: 'chat', hidden: true },
     ],
   },
   {
@@ -59,9 +61,9 @@ const navGroups: NavGroup[] = [
       { label: 'Catálogo',  href: '/dashboard/catalog',   icon: Package,    permiso: 'ver_stock', moduleName: 'catalog' },
       { label: 'Clientes',  href: '/dashboard/clientes',  icon: Users,      permiso: 'ver_historial_clientes', moduleName: 'clientes' },
       { label: 'Equipo',    href: '/dashboard/equipo',    icon: Users,      permiso: 'configurar_ferreteria' },
-      { label: 'Difusiones', href: '/dashboard/difusiones', icon: Megaphone, permiso: 'ver_pedidos', moduleName: 'chat' },
-      { label: 'Plantillas WA', href: '/dashboard/plantillas-wa', icon: LayoutTemplate, permiso: 'ver_pedidos', moduleName: 'chat' },
-      { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos', moduleName: 'delivery' },
+      { label: 'Difusiones', href: '/dashboard/difusiones', icon: Megaphone, permiso: 'ver_pedidos', moduleName: 'chat', hidden: true },
+      { label: 'Plantillas WA', href: '/dashboard/plantillas-wa', icon: LayoutTemplate, permiso: 'ver_pedidos', moduleName: 'chat', hidden: true },
+      { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos', moduleName: 'delivery', hidden: true },
     ],
   },
   {
@@ -222,9 +224,14 @@ export default function Sidebar({
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
         {navGroups.map((group, gi) => {
           const visibles = group.items.filter((item) => {
+            if (item.hidden) return false
             const hasPerm = !item.permiso || checkPermiso(session, item.permiso)
             const isEnabled = !item.moduleName || isModuleEnabled(item.moduleName)
-            return hasPerm && isEnabled
+            // Verificación modular por sucursal: hoy siempre true,
+            // hook preparado para restricciones granulares por sucursal en el futuro.
+            const isEnabledForSucursal = !item.moduleName ||
+              isModuleEnabledForSucursal(item.moduleName, contextoSucursal ?? null)
+            return hasPerm && isEnabled && isEnabledForSucursal
           })
           if (visibles.length === 0) return null
 

@@ -30,16 +30,29 @@ interface ClienteResumen {
 
 function BadgeTipo({ tipo }: { tipo: TipoCliente }) {
   if (tipo === 'empresa') return (
-    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-violet-50 text-violet-700 border border-violet-200">
-      <Building2 className="w-2.5 h-2.5" /> Empresa
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold tracking-wide bg-violet-100/50 text-violet-700 border border-violet-200/50 uppercase">
+      <Building2 className="w-3 h-3" /> Empresa
     </span>
   )
   if (tipo === 'anonimo') return (
-    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 text-zinc-500 border border-zinc-200">
-      <UserX className="w-2.5 h-2.5" /> Anónimo
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold tracking-wide bg-zinc-100 text-zinc-500 border border-zinc-200 uppercase">
+      <UserX className="w-3 h-3" /> Anónimo
     </span>
   )
-  return null // persona: no necesita badge, es el default
+  return null
+}
+
+function getAvatarProps(nombre: string | null, alias: string | null) {
+  const text = (nombre || alias || '?').toUpperCase()
+  const initial = text.charAt(0)
+  // Generar un color determinista basado en la letra
+  const colors = [
+    'bg-blue-100 text-blue-700', 'bg-emerald-100 text-emerald-700',
+    'bg-violet-100 text-violet-700', 'bg-rose-100 text-rose-700',
+    'bg-amber-100 text-amber-700', 'bg-cyan-100 text-cyan-700'
+  ]
+  const colorIndex = text.charCodeAt(0) % colors.length
+  return { initial, colorClass: colors[colorIndex] }
 }
 
 export default function ClientesTable({
@@ -84,36 +97,41 @@ export default function ClientesTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
-              {clientes.map((c) => (
-                <tr key={c.id} className="hover:bg-zinc-50 transition group">
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <Link
-                            href={`/dashboard/clientes/${c.id}`}
-                            className="font-semibold text-indigo-600 hover:text-indigo-700 hover:underline transition"
-                          >
-                            {c.nombre || c.alias || '—'}
-                          </Link>
-                          <BadgeTipo tipo={c.tipo} />
-                          {c.tags.length > 0 && c.tags.slice(0, 2).map((tag) => (
-                            <span key={tag} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100">
-                              {tag}
-                            </span>
-                          ))}
+              {clientes.map((c) => {
+                const avatar = getAvatarProps(c.nombre, c.alias)
+                return (
+                  <tr key={c.id} className="hover:bg-zinc-50/80 transition-all duration-200 group relative">
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${avatar.colorClass}`}>
+                          {avatar.initial}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {c.telefono && (
-                            <p className="text-xs text-zinc-400 tabular-nums">+{c.telefono}</p>
-                          )}
-                          {c.alias && c.nombre && (
-                            <p className="text-xs text-zinc-300 italic">"{c.alias}"</p>
-                          )}
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <Link
+                              href={`/dashboard/clientes/${c.id}`}
+                              className="font-bold text-zinc-900 group-hover:text-indigo-600 transition-colors"
+                            >
+                              {c.nombre || c.alias || '—'}
+                            </Link>
+                            <BadgeTipo tipo={c.tipo} />
+                            {c.tags.length > 0 && c.tags.slice(0, 2).map((tag) => (
+                              <span key={tag} className="px-1.5 py-0.5 rounded border border-zinc-200 bg-white text-[10px] font-medium text-zinc-600 shadow-sm">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {c.telefono && (
+                              <p className="text-xs text-zinc-500 font-medium">+{c.telefono}</p>
+                            )}
+                            {c.alias && c.nombre && (
+                              <p className="text-xs text-zinc-400 italic">"{c.alias}"</p>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
                   <td className="px-3 py-3.5 hidden md:table-cell">
                     {c.dni_ruc ? (
@@ -170,27 +188,28 @@ export default function ClientesTable({
                     )}
                   </td>
 
-                  <td className="px-3 py-3.5">
-                    <div className="flex items-center gap-1">
-                      {/* Botón editar ficha */}
-                      <button
-                        onClick={() => setEditando(c)}
-                        className="p-1.5 rounded-lg text-zinc-300 hover:text-blue-600 hover:bg-blue-50 transition opacity-0 group-hover:opacity-100"
-                        title="Editar ficha del cliente"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      {/* Ver detalle */}
-                      <Link
-                        href={`/dashboard/clientes/${c.id}`}
-                        className="p-1.5 rounded-lg text-zinc-300 hover:text-zinc-700 hover:bg-zinc-100 transition"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-3 py-4">
+                      <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        {/* Botón editar ficha */}
+                        <button
+                          onClick={() => setEditando(c)}
+                          className="p-2 rounded-xl text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors shadow-sm bg-white border border-transparent hover:border-indigo-100"
+                          title="Editar ficha del cliente"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        {/* Ver detalle */}
+                        <Link
+                          href={`/dashboard/clientes/${c.id}`}
+                          className="p-2 rounded-xl text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors shadow-sm bg-white border border-transparent hover:border-indigo-100"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

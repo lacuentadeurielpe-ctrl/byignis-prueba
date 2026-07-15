@@ -40,21 +40,20 @@ export async function POST(request: Request) {
   // El adapter internamente carga credenciales — el endpoint es agnóstico.
   const proveedor = await resolverProveedor(supabase, session.ferreteriaId)
 
-  // Sucursal emisora: la del pedido; si no tiene (legado), la del contexto
-  // del usuario. Siempre resuelta por el servidor — nunca del body.
+  // Sucursal emisora: la del pedido; si no tiene (legado), la del contexto del usuario.
+  // Se resuelve siempre (no solo con multiSucursal) para asignar el local principal
+  // en tenants de sucursal única. Nunca se toma del body del cliente.
   let localId: string | null = null
-  if (session.multiSucursal) {
-    const { data: ped } = await supabase
-      .from('pedidos')
-      .select('local_id')
-      .eq('id', body.pedido_id)
-      .eq('ferreteria_id', session.ferreteriaId)
-      .single()
-    localId = ped?.local_id ?? null
-    if (!localId) {
-      const contexto = await getContextoSucursal(supabase, session)
-      localId = contexto.localEscrituraId || null
-    }
+  const { data: ped } = await supabase
+    .from('pedidos')
+    .select('local_id')
+    .eq('id', body.pedido_id)
+    .eq('ferreteria_id', session.ferreteriaId)
+    .single()
+  localId = ped?.local_id ?? null
+  if (!localId) {
+    const contexto = await getContextoSucursal(supabase, session)
+    localId = contexto.localEscrituraId ?? null
   }
 
   const tipo = body.tipo ?? 'boleta'

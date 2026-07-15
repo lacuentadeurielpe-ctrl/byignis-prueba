@@ -25,21 +25,36 @@ export async function GET(request: Request) {
       pedidosAyer,
       cobrosPendientes,
       convActivas,
-      pedidosActivos
+      pedidosActivos,
+      notasHoyRes,
+      notasAyerRes
     ] = await Promise.all([
       ventasRepo.obtenerPedidosRango(fid, inicioHoy, finDiaLima(0)),
       ventasRepo.obtenerPedidosRango(fid, inicioAyer, inicioHoy),
       ventasRepo.obtenerCobrosPendientesHoy(fid, inicioHoy),
       chatRepo.contarConversacionesPausadas(fid),
-      ventasRepo.obtenerPedidosActivosPipeline(fid) // Solo para conteo rápido
+      ventasRepo.obtenerPedidosActivosPipeline(fid), // Solo para conteo rápido
+      supabase.from('comprobantes').select('tipo, total').eq('ferreteria_id', fid).eq('estado', 'emitido').in('tipo', ['nota_credito', 'nota_debito']).gte('created_at', inicioHoy).lt('created_at', finDiaLima(0)),
+      supabase.from('comprobantes').select('tipo, total').eq('ferreteria_id', fid).eq('estado', 'emitido').in('tipo', ['nota_credito', 'nota_debito']).gte('created_at', inicioAyer).lt('created_at', inicioHoy)
     ])
 
     // Excluimos los mismos estados que dashboard_kpi_rango para que ambas cifras sean consistentes:
     // pendiente (no confirmado), cancelado (nulo), programado (aún no activo)
     const ESTADOS_EXCLUIR_INGRESOS = new Set(['pendiente', 'cancelado', 'programado'])
-    const ingresosHoy = (pedidosHoy ?? []).filter((p: any) => !ESTADOS_EXCLUIR_INGRESOS.has(p.estado)).reduce((s, p) => s + (p.total ?? 0), 0)
-    const ingresosAyer = (pedidosAyer ?? []).filter((p: any) => !ESTADOS_EXCLUIR_INGRESOS.has(p.estado)).reduce((s, p) => s + (p.total ?? 0), 0)
+    let ingresosHoy = (pedidosHoy ?? []).filter((p: any) => !ESTADOS_EXCLUIR_INGRESOS.has(p.estado)).reduce((s, p) => s + (p.total ?? 0), 0)
+    let ingresosAyer = (pedidosAyer ?? []).filter((p: any) => !ESTADOS_EXCLUIR_INGRESOS.has(p.estado)).reduce((s, p) => s + (p.total ?? 0), 0)
     
+    ;(notasHoyRes.data ?? []).forEach(n => {
+      const v = Number(n.total || 0)
+      if (n.tipo === 'nota_debito') ingresosHoy += v
+      else if (n.tipo === 'nota_credito') ingresosHoy -= v
+    })
+    
+    ;(notasAyerRes.data ?? []).forEach(n => {
+      const v = Number(n.total || 0)
+      if (n.tipo === 'nota_debito') ingresosAyer += v
+      else if (n.tipo === 'nota_credito') ingresosAyer -= v
+    })
     // Calcular porcentaje de cambio
     let pctCmbHoy = 0
     let subeHoy = true
