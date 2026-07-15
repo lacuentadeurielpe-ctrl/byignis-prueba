@@ -31,15 +31,11 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   const user = session.user
 
   // 1. ¿Es dueño?
-  const { data: ferreteria, error: errorDueno } = await supabase
+  const { data: ferreteria } = await supabase
     .from('ferreterias')
     .select('id, nombre, onboarding_completo, multi_sucursal')
     .eq('owner_id', session.user.id)
     .single()
-
-  if (errorDueno && errorDueno.code !== 'PGRST116') {
-    console.error('Error fetching ferreteria:', errorDueno)
-  }
 
   if (ferreteria) {
     return {
@@ -55,63 +51,24 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   }
 
   // 2. ¿Es empleado invitado?
-  // PGRST116 = Supabase .single() falla cuando hay 0 filas ("no rows") o >1 fila ("multiple rows").
-  // Distinguimos el caso de múltiples filas por el mensaje de error y activamos
-  // un fallback que toma el registro más antiguo activo, de modo que el usuario
-  // no quede bloqueado mientras se aplica la migración 116 en la BD.
-  const { data: miembro, error: errorMiembro } = await supabase
+  const { data: miembro } = await supabase
     .from('miembros_ferreteria')
     .select('ferreteria_id, rol, nombre, permisos, local_id, ferreterias(id, nombre, onboarding_completo, multi_sucursal)')
     .eq('user_id', user.id)
     .eq('activo', true)
     .single()
 
-  let finalMiembro = miembro
-  if (errorMiembro) {
-    const esMultiplesFilas = errorMiembro.code === 'PGRST116' &&
-      (errorMiembro.message?.toLowerCase().includes('multiple') ||
-       errorMiembro.details?.toLowerCase().includes('more than one'))
-
-    if (esMultiplesFilas) {
-      // Duplicados en miembros_ferreteria — activar fallback temporal.
-      // La migración 116 limpia los duplicados en la BD.
-      console.error(
-        `[AUTH] getSessionInfo: múltiples filas activas en miembros_ferreteria ` +
-        `para user_id=${user.id}. ` +
-        `Error: ${errorMiembro.code} — ${errorMiembro.message}. ` +
-        `ACCIÓN REQUERIDA: aplicar migración 116_fix_duplicados_miembros_constraints.sql`
-      )
-      const { data: listaMiembros } = await supabase
-        .from('miembros_ferreteria')
-        .select('ferreteria_id, rol, nombre, permisos, local_id, ferreterias(id, nombre, onboarding_completo, multi_sucursal)')
-        .eq('user_id', user.id)
-        .eq('activo', true)
-        .order('created_at', { ascending: true })
-        .limit(1)
-      finalMiembro = listaMiembros?.[0] ?? null
-      if (finalMiembro) {
-        console.warn(
-          `[AUTH] Fallback activado: usando ferreteria_id=${finalMiembro.ferreteria_id} ` +
-          `(registro más antiguo activo). Usuario operativo en estado degradado.`
-        )
-      }
-    } else if (errorMiembro.code !== 'PGRST116') {
-      // Error inesperado (no es "0 filas" ni "múltiples filas")
-      console.error(`[AUTH] Error inesperado al cargar miembros_ferreteria para user_id=${user.id}:`, errorMiembro)
-    }
-  }
-
-  if (finalMiembro) {
-    const ferr = finalMiembro.ferreterias as any
+  if (miembro) {
+    const ferr = miembro.ferreterias as any
     return {
       userId: user.id,
-      ferreteriaId: finalMiembro.ferreteria_id,
-      rol: finalMiembro.rol as Rol,
+      ferreteriaId: miembro.ferreteria_id,
+      rol: miembro.rol as Rol,
       nombreFerreteria: ferr?.nombre ?? 'Ferretería',
       onboardingCompleto: ferr?.onboarding_completo ?? true,
-      permisos: normalizarPermisos((finalMiembro.permisos as Record<string, unknown>) ?? {}),
+      permisos: normalizarPermisos((miembro.permisos as Record<string, unknown>) ?? {}),
       multiSucursal: ferr?.multi_sucursal ?? false,
-      localAsignadoId: finalMiembro.local_id ?? null,
+      localAsignadoId: miembro.local_id ?? null,
     }
   }
 
