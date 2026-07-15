@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { encriptar, desencriptar } from '@/lib/encryption'
 import { pfxAPem } from '@/lib/facturacion/lycet/cert'
@@ -171,7 +172,42 @@ export async function POST(request: Request) {
       lycetError = res.error
     }
 
-    return NextResponse.json({ ok: true, credenciales: data, lycet: { ok: lycetOk, error: lycetError } })
+    // ── Validación cruzada de RUC ──────────────────────────────────────────────
+    // Si otro tenant ya tiene el mismo RUC registrado en sunat_credenciales,
+    // emitir los dos desde el sistema causaría colisión de correlativos (SUNAT
+    // rechaza documentos con el mismo RUC + serie + número ya registrado).
+    // No bloqueamos, pero informamos claramente del riesgo.
+    let rucWarning: string | undefined
+    try {
+      const adminSupabase = createAdminClient()
+      const { data: rucConflicto } = await adminSupabase
+        .from('sunat_credenciales')
+        .select('ferreteria_id')
+        .eq('ruc', rucLimpio)
+        .neq('ferreteria_id', session.ferreteriaId)
+        .limit(1)
+
+      if (rucConflicto && rucConflicto.length > 0) {
+        rucWarning =
+          `⚠️ El RUC ${rucLimpio} ya está configurado en otra cuenta del sistema. ` +
+          `Usar el mismo RUC en dos cuentas causará colisión de correlativos: ` +
+          `SUNAT rechazará los documentos de la cuenta que emita el número duplicado. ` +
+          `Si migraste de otra cuenta, asegúrate de que la anterior esté desconectada.`
+        console.warn(
+          `[SUNAT] RUC ${rucLimpio} compartido entre ferreteria_id=${session.ferreteriaId} ` +
+          `y ferreteria_id=${rucConflicto[0].ferreteria_id}`
+        )
+      }
+    } catch {
+      // Validación cruzada best-effort — no bloquea el guardado
+    }
+
+    return NextResponse.json({
+      ok: true,
+      credenciales: data,
+      lycet: { ok: lycetOk, error: lycetError },
+      ...(rucWarning ? { warning: rucWarning } : {}),
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? 'Error al guardar credenciales' }, { status: 500 })
   }
