@@ -10,6 +10,7 @@ import LandingTestimonials from './_components/LandingTestimonials'
 import LandingPricing from './_components/LandingPricing'
 import LandingFAQ from './_components/LandingFAQ'
 import LoginForm from './_components/LoginForm'
+import LandingFooter from './_components/LandingFooter'
 
 export default function LoginPage() {
   const scrollToLogin = () => {
@@ -64,14 +65,7 @@ export default function LoginPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-12 bg-zinc-950 text-center">
-        <div className="flex items-center justify-center gap-2 mb-6">
-           {/* eslint-disable-next-line @next/next/no-img-element */}
-           <img src="/uintegrus_favicon.png" alt="Uintegrus Logo" className="h-6 w-auto opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all" />
-        </div>
-        <p className="text-zinc-500 text-sm">© {new Date().getFullYear()} Uintegrus. Todos los derechos reservados.</p>
-      </footer>
+      <LandingFooter />
     </div>
   )
 }
