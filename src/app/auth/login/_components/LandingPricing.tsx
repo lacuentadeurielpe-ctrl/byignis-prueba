@@ -48,7 +48,7 @@ export default function LandingPricing() {
               <span className="text-3xl font-bold text-zinc-500 line-through">S/ 150</span>
               <span className="text-6xl font-extrabold text-white">S/ 85</span>
             </div>
-            <p className="text-blue-400 font-medium mt-2">Pago único mensual sin comisiones ocultas</p>
+            <p className="text-blue-400 font-medium mt-2">Pago fijo mensual sin comisiones ocultas</p>
           </div>
 
           <div className="space-y-4 mb-10">
