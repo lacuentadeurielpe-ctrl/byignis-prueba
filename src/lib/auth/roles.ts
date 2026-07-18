@@ -42,7 +42,9 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
     .single()
 
   if (ferreteria) {
-    const estado = ferreteria.suscripciones?.[0]?.estado ?? 'suspendido'
+    const estado = (Array.isArray(ferreteria.suscripciones)
+      ? ferreteria.suscripciones[0]?.estado
+      : (ferreteria.suscripciones as any)?.estado) ?? 'suspendido'
     
     return {
       userId: user.id,
@@ -67,7 +69,9 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
 
   if (miembro) {
     const ferr = miembro.ferreterias as any
-    const estado = ferr?.suscripciones?.[0]?.estado ?? 'suspendido'
+    const estado = (Array.isArray(ferr?.suscripciones)
+      ? ferr?.suscripciones[0]?.estado
+      : ferr?.suscripciones?.estado) ?? 'suspendido'
 
     return {
       userId: user.id,
