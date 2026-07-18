@@ -30,7 +30,7 @@ export default function ReembolsoPage() {
         <section>
           <h2 className="text-xl font-bold text-white mb-4">3. Suscripciones y Cancelaciones</h2>
           <p className="mb-4">
-            Usted puede cancelar su suscripción (los pagos recurrentes) en cualquier momento desde su panel de control o comunicándose a soporte@uintegrus.com. 
+            Usted puede cancelar su suscripción (los pagos recurrentes) en cualquier momento desde su panel de control o comunicándose a admin@uintegrus.com. 
             <br/><br/>
             <strong>Tenga en cuenta:</strong> La cancelación evitará futuros cobros, pero no emitiremos reembolsos prorrateados por los días no utilizados dentro del mes en curso que ya haya sido pagado. Su cuenta permanecerá activa hasta que termine su ciclo de facturación.
           </p>
@@ -39,7 +39,7 @@ export default function ReembolsoPage() {
         <section>
           <h2 className="text-xl font-bold text-white mb-4">4. Procedimiento de Solicitud</h2>
           <p className="mb-4">
-            Para solicitar un reembolso por las causas mencionadas en el punto 2, debe escribir a <strong>soporte@uintegrus.com</strong> adjuntando:
+            Para solicitar un reembolso por las causas mencionadas en el punto 2, debe escribir a <strong>admin@uintegrus.com</strong> adjuntando:
           </p>
           <ul className="list-disc pl-6 space-y-2 mb-4">
             <li>Recibo o constancia de pago.</li>

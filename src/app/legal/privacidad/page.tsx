@@ -63,7 +63,7 @@ export default function PrivacidadPage() {
         <section>
           <h2 className="text-xl font-bold text-white mb-4">6. Derechos ARCO</h2>
           <p>
-            En cumplimiento con la Ley de Protección de Datos Personales, usted tiene derecho a Acceder, Rectificar, Cancelar u Oponerse (Derechos ARCO) al uso de sus datos. Para ejercer estos derechos, envíe un correo electrónico a soporte@uintegrus.com.
+            En cumplimiento con la Ley de Protección de Datos Personales, usted tiene derecho a Acceder, Rectificar, Cancelar u Oponerse (Derechos ARCO) al uso de sus datos. Para ejercer estos derechos, envíe un correo electrónico a admin@uintegrus.com.
           </p>
         </section>
       </div>

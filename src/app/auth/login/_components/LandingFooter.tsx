@@ -48,8 +48,8 @@ export default function LandingFooter() {
                 Lima, Perú
               </li>
               <li>
-                <a href="mailto:soporte@uintegrus.com" className="text-zinc-400 hover:text-blue-400 text-sm transition-colors">
-                  soporte@uintegrus.com
+                <a href="mailto:admin@uintegrus.com" className="text-zinc-400 hover:text-blue-400 text-sm transition-colors">
+                  admin@uintegrus.com
                 </a>
               </li>
             </ul>
