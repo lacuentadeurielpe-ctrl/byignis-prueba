@@ -7,8 +7,8 @@ export default function LandingHowItWorks() {
   const steps = [
     {
       icon: <Rocket className="w-8 h-8 text-blue-950" />,
-      title: "1. Activa tu sistema",
-      desc: "Realiza tu pago seguro de S/ 85 y recibe tus credenciales de acceso de forma inmediata."
+      title: "1. Crea tu cuenta",
+      desc: "Regístrate de forma segura, realiza tu pago de S/ 85 y accede al sistema al instante."
     },
     {
       icon: <MonitorSmartphone className="w-8 h-8 text-blue-950" />,
