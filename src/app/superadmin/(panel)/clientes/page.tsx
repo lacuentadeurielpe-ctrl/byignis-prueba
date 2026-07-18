@@ -24,7 +24,9 @@ export default async function ClientesPage() {
     email: f.email || 'Sin Correo',
     telefono_whatsapp: f.telefono_whatsapp || '',
     created_at: f.created_at,
-    estado: f.suscripciones?.[0]?.estado || 'suspendido'
+    estado: (Array.isArray(f.suscripciones) 
+      ? f.suscripciones[0]?.estado 
+      : f.suscripciones?.estado) || 'suspendido'
   }))
 
   return (

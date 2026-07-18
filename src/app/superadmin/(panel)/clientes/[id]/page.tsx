@@ -55,7 +55,14 @@ export default async function ClientDetailPage({
     espacioKb = Number(rpcData)
   }
 
-  const suscripcion = ferreteria.suscripciones?.[0] || null
+  let suscripcion = null
+  if (ferreteria.suscripciones) {
+    if (Array.isArray(ferreteria.suscripciones)) {
+      suscripcion = ferreteria.suscripciones[0] || null
+    } else {
+      suscripcion = ferreteria.suscripciones
+    }
+  }
 
   const clientData = {
     id: ferreteria.id,
