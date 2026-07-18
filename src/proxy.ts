@@ -22,6 +22,7 @@ const RUTAS_PUBLICAS = [
   // (Supabase Auth + tabla superadmins + header x-superadmin-secret)
   '/superadmin',
   '/api/superadmin',
+  '/legal',       // Páginas legales (Términos, Privacidad, Reembolsos)
 ]
 
 export async function proxy(request: NextRequest) {
