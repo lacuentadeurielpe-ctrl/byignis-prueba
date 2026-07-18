@@ -21,7 +21,7 @@ export default async function ClientDetailPage({
   // 1. Obtener info de la ferreteria
   const { data: ferreteria } = await supabase
     .from('ferreterias')
-    .select('id, nombre, email, telefono_whatsapp, created_at, suscripciones(id, estado, plan_id, created_at)')
+    .select('id, nombre, email, telefono_whatsapp, created_at, owner_id, suscripciones(id, estado, plan_id, created_at)')
     .eq('id', id)
     .single()
 
@@ -64,10 +64,18 @@ export default async function ClientDetailPage({
     }
   }
 
+  let ownerEmail = ferreteria.email
+  if (ferreteria.owner_id) {
+    const { data: userData } = await supabase.auth.admin.getUserById(ferreteria.owner_id)
+    if (userData?.user?.email) {
+      ownerEmail = userData.user.email
+    }
+  }
+
   const clientData = {
     id: ferreteria.id,
     nombre: ferreteria.nombre || 'Sin Nombre',
-    email: ferreteria.email || 'Sin Correo',
+    email: ownerEmail || 'Sin Correo',
     telefono: ferreteria.telefono_whatsapp || 'Sin Teléfono',
     fecha_registro: ferreteria.created_at,
     kpis: {

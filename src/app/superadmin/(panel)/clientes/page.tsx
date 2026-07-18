@@ -15,13 +15,17 @@ export default async function ClientesPage() {
 
   const { data: ferreterias } = await supabase
     .from('ferreterias')
-    .select('id, nombre, email, telefono_whatsapp, created_at, suscripciones(estado)')
+    .select('id, nombre, email, telefono_whatsapp, created_at, owner_id, suscripciones(estado)')
     .order('created_at', { ascending: false })
+
+  // Obtener usuarios reales de Auth para cruzar el email correcto del dueño
+  const { data: { users } } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+  const usersMap = new Map((users || []).map(u => [u.id, u.email]))
 
   const clientes = (ferreterias || []).map((f: any) => ({
     id: f.id,
     nombre: f.nombre || 'Sin Nombre',
-    email: f.email || 'Sin Correo',
+    email: usersMap.get(f.owner_id) || f.email || 'Sin Correo',
     telefono_whatsapp: f.telefono_whatsapp || '',
     created_at: f.created_at,
     estado: (Array.isArray(f.suscripciones) 
