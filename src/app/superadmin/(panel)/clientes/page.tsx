@@ -2,10 +2,12 @@ import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSuperadminSession } from '@/lib/auth/superadmin'
 import ClientList from './ClientList'
+import { unstable_noStore as noStore } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ClientesPage() {
+  noStore()
   const session = await getSuperadminSession()
   if (!session) redirect('/superadmin/login')
 

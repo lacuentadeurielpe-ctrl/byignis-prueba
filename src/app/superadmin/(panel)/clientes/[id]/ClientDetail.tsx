@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
@@ -41,6 +41,10 @@ export default function ClientDetail({ data }: ClientDetailProps) {
   const [estadoSuscripcion, setEstadoSuscripcion] = useState(data.suscripcion.estado)
   const [isSaving, setIsSaving] = useState(false)
   const [toast, setToast] = useState(false)
+
+  useEffect(() => {
+    setEstadoSuscripcion(data.suscripcion.estado)
+  }, [data.suscripcion.estado])
 
   const formatearSoles = (valor: number) => {
     return new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(valor)
