@@ -71,6 +71,16 @@ export default function PaywallPage() {
             </button>
             
             <button
+              onClick={() => {
+                router.refresh()
+                window.location.reload()
+              }}
+              className="w-full bg-transparent hover:bg-white/5 text-zinc-400 hover:text-white font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-2"
+            >
+              Ya realicé el pago, actualizar
+            </button>
+
+            <button
               onClick={handleLogout}
               className="w-full bg-transparent hover:bg-white/5 text-zinc-400 hover:text-white font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2"
             >
