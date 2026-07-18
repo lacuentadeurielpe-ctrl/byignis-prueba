@@ -44,6 +44,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ciclo_fin: cicloFin,
       creditos_del_mes: 999999, // Fix column name
       creditos_disponibles: 999999,
+      creditos_extra: 0,
+      plan_id: '2cb9bb87-c734-4374-92e0-2d37d010eb2e' // Plan Pro por defecto
     })
     if (insertError) {
       console.error('Insert error:', insertError)
