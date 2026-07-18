@@ -21,6 +21,11 @@ export default async function DashboardLayout({
     redirect('/onboarding')
   }
 
+  // Verificar estado de suscripción: si no es activo, forzar pago/bloqueo
+  if (session.estadoSuscripcion !== 'activo') {
+    redirect('/paywall')
+  }
+
   const supabase = await createClient()
 
   const [

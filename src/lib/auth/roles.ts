@@ -15,6 +15,8 @@ export interface SessionInfo {
   multiSucursal: boolean
   /** Sucursal fija del empleado (miembros_ferreteria.local_id). null = todas. */
   localAsignadoId: string | null
+  /** Estado de la suscripción (activo, suspendido, etc). */
+  estadoSuscripcion: string
 }
 
 /**
@@ -33,11 +35,13 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   // 1. ¿Es dueño?
   const { data: ferreteria } = await supabase
     .from('ferreterias')
-    .select('id, nombre, onboarding_completo, multi_sucursal')
+    .select('id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado)')
     .eq('owner_id', session.user.id)
     .single()
 
   if (ferreteria) {
+    const estado = ferreteria.suscripciones?.[0]?.estado ?? 'suspendido'
+    
     return {
       userId: user.id,
       ferreteriaId: ferreteria.id,
@@ -47,19 +51,22 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       permisos: PERMISOS_DUENO,
       multiSucursal: ferreteria.multi_sucursal ?? false,
       localAsignadoId: null, // el dueño nunca está fijado a una sucursal
+      estadoSuscripcion: estado,
     }
   }
 
   // 2. ¿Es empleado invitado?
   const { data: miembro } = await supabase
     .from('miembros_ferreteria')
-    .select('ferreteria_id, rol, nombre, permisos, local_id, ferreterias(id, nombre, onboarding_completo, multi_sucursal)')
+    .select('ferreteria_id, rol, nombre, permisos, local_id, ferreterias(id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado))')
     .eq('user_id', user.id)
     .eq('activo', true)
     .single()
 
   if (miembro) {
     const ferr = miembro.ferreterias as any
+    const estado = ferr?.suscripciones?.[0]?.estado ?? 'suspendido'
+
     return {
       userId: user.id,
       ferreteriaId: miembro.ferreteria_id,
@@ -69,6 +76,7 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       permisos: normalizarPermisos((miembro.permisos as Record<string, unknown>) ?? {}),
       multiSucursal: ferr?.multi_sucursal ?? false,
       localAsignadoId: miembro.local_id ?? null,
+      estadoSuscripcion: estado,
     }
   }
 
