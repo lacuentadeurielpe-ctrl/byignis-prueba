@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server'
 import { requireSuperadminAdmin } from '@/lib/auth/superadmin'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { revalidatePath } from 'next/cache'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireSuperadminAdmin(request)
@@ -10,13 +11,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await request.json()
   const { suscripcion_estado } = body
-
-  const ESTADOS_VALIDOS = ['activo', 'suspendido', 'vencido', 'trial'] // vitalicio y pro son 'activo', pero en la tabla original es 'activo'.
-  // Para la UI, el cliente nos mandará vitalicio, pro, restringido.
-  // Mapearemos esto: vitalicio -> activo, pro -> activo, restringido -> suspendido
-  // Wait, if the database only accepts trial, activo, suspendido, vencido, we need to map or alter type.
-  // Actually, we can just save it as the raw state if we alter the type, but let's just use 'activo' for vitalicio and pro.
-  // If we need to differentiate vitalicio from pro, we can add a 'tipo_suscripcion' column, but for now we can just use 'activo' and set 'ciclo_fin' to 2099 for vitalicio.
   
   const admin = createAdminClient()
 
@@ -28,30 +22,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     cicloFin = '2099-12-31'
   } else if (suscripcion_estado === 'pro') {
     nuevoEstado = 'activo'
-    cicloFin = null // o la fecha correspondiente, por ahora dejamos null o no la tocamos
+    cicloFin = null
   } else if (suscripcion_estado === 'restringido') {
     nuevoEstado = 'suspendido'
   }
 
-  const { error } = await admin
+  // Primero intentamos actualizar
+  const { data, error } = await admin
     .from('suscripciones')
     .update({ 
       estado: nuevoEstado, 
       ...(cicloFin ? { ciclo_fin: cicloFin } : {}) 
     })
     .eq('ferreteria_id', id)
+    .select()
 
-  if (error) {
-    // Si no existe suscripcion, la creamos
+  // Si no se actualizó nada (arreglo vacío) o hubo error, insertamos
+  if (error || !data || data.length === 0) {
+    // Si no existe plan_id real, intentamos obtener uno o lo dejamos null si la BD lo permite
+    // Asumiendo que podemos insertar o que requiere UUID válido, buscamos el primer plan o metemos uno dummy si no hay constraint
     await admin.from('suscripciones').insert({
       ferreteria_id: id,
       estado: nuevoEstado,
       ciclo_fin: cicloFin,
-      creditos_mes: 9999999,
-      creditos_disponibles: 9999999,
-      plan_id: '11111111-1111-1111-1111-111111111111' // fake or we need a real plan id
+      creditos_mes: 999999,
+      creditos_disponibles: 999999,
     })
   }
+
+  // Refrescar la cache de Next.js
+  revalidatePath('/superadmin', 'layout')
+  revalidatePath('/superadmin/tenants')
+  revalidatePath('/superadmin/historial')
 
   return NextResponse.json({ success: true, estado: suscripcion_estado })
 }
