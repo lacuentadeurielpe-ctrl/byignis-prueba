@@ -1,131 +1,77 @@
 'use client'
 
-import { Suspense, useState } from 'react'
-import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Suspense } from 'react'
+import { Lock, Loader2 } from 'lucide-react'
+import LandingHero from './_components/LandingHero'
+import LandingAgitation from './_components/LandingAgitation'
+import LandingFeatures from './_components/LandingFeatures'
+import LandingHowItWorks from './_components/LandingHowItWorks'
+import LandingTestimonials from './_components/LandingTestimonials'
+import LandingPricing from './_components/LandingPricing'
+import LandingFAQ from './_components/LandingFAQ'
+import LoginForm from './_components/LoginForm'
 
-function LoginForm() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') ?? '/dashboard'
-
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
-
-    if (process.env.NODE_ENV === 'development') {
-      router.push(redirectTo)
-      router.refresh()
-      return
-    }
-
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-    if (error) {
-      setError('Correo o contraseña incorrectos. Intente de nuevo.')
-      setLoading(false)
-      return
-    }
-
-    router.push(redirectTo)
-    router.refresh()
+export default function LoginPage() {
+  const scrollToLogin = () => {
+    document.getElementById('login-section')?.scrollIntoView({ behavior: 'smooth' })
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8">
-      <h2 className="text-xl font-semibold text-zinc-900 mb-1">Iniciar sesión</h2>
-      <p className="text-sm text-zinc-500 mb-6">Ingresa a tu panel de gestión</p>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">
-            Correo electrónico
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="tu@correo.com"
-            required
-            className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-300 focus:border-transparent transition"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">
-            Contraseña
-          </label>
-          <div className="relative">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              className="w-full px-3 py-2.5 pr-10 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-300 focus:border-transparent transition"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+    <div className="min-h-screen bg-zinc-950 text-zinc-50 font-sans selection:bg-blue-500/30">
+      {/* Navbar Minimalista */}
+      <nav className="fixed top-0 w-full z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-white/5">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/uintegrus_favicon.png" alt="Uintegrus Logo" className="h-8 w-auto" />
+            <span className="font-bold text-2xl tracking-tight hidden sm:block">Uintegrus</span>
           </div>
+          <button 
+            onClick={scrollToLogin}
+            className="text-sm font-medium text-zinc-300 hover:text-white transition-all px-5 py-2.5 rounded-xl hover:bg-white/10 flex items-center gap-2 border border-transparent hover:border-white/10"
+          >
+            <Lock className="w-4 h-4" />
+            Ya tengo cuenta
+          </button>
         </div>
+      </nav>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
-            {error}
+      {/* Embudo de Ventas Modular */}
+      <LandingHero />
+      <LandingAgitation />
+      <LandingHowItWorks />
+      <LandingFeatures />
+      <LandingTestimonials />
+      <LandingPricing />
+      <LandingFAQ />
+
+      {/* Sección de Login para Clientes Actuales */}
+      <section className="py-32 relative bg-zinc-900/30 border-t border-white/5">
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80')] opacity-5 bg-cover bg-center"></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-extrabold text-white mb-4">¿Ya eres parte de Uintegrus?</h2>
+            <p className="text-lg text-zinc-400">Accede a tu panel y sigue controlando tu negocio.</p>
           </div>
-        )}
+          
+          <Suspense fallback={
+            <div className="w-full max-w-md mx-auto bg-zinc-900/80 rounded-3xl border border-white/10 p-12 flex items-center justify-center">
+              <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+            </div>
+          }>
+            <LoginForm />
+          </Suspense>
+        </div>
+      </section>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-zinc-900 hover:bg-zinc-800 disabled:opacity-60 text-white font-medium py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2"
-        >
-          {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          {loading ? 'Ingresando...' : 'Ingresar'}
-        </button>
-      </form>
-
-      <div className="mt-4 flex items-center justify-between text-sm">
-        <Link href="/auth/reset-password" className="text-zinc-900 hover:text-zinc-700 underline font-medium">
-          ¿Olvidaste tu contraseña?
-        </Link>
-        <Link href="/auth/register" className="text-zinc-600 hover:text-zinc-800">
-          Crear cuenta
-        </Link>
-      </div>
+      {/* Footer */}
+      <footer className="border-t border-white/5 py-12 bg-zinc-950 text-center">
+        <div className="flex items-center justify-center gap-2 mb-6">
+           {/* eslint-disable-next-line @next/next/no-img-element */}
+           <img src="/uintegrus_favicon.png" alt="Uintegrus Logo" className="h-6 w-auto opacity-50 grayscale hover:grayscale-0 hover:opacity-100 transition-all" />
+        </div>
+        <p className="text-zinc-500 text-sm">© {new Date().getFullYear()} Uintegrus. Todos los derechos reservados.</p>
+      </footer>
     </div>
-  )
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={
-      <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-zinc-100 rounded w-40" />
-          <div className="h-4 bg-zinc-100 rounded w-56" />
-          <div className="h-10 bg-zinc-100 rounded" />
-          <div className="h-10 bg-zinc-100 rounded" />
-          <div className="h-10 bg-zinc-100 rounded" />
-        </div>
-      </div>
-    }>
-      <LoginForm />
-    </Suspense>
   )
 }

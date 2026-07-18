@@ -1,0 +1,3 @@
+UPDATE productos SET imagenes = '["data:text/plain;base64,U291cmNlIGltYWdlIGlzIHVucmVhY2hhYmxl"]'::jsonb WHERE codigo_interno = 'BOD-016' AND ferreteria_id = '289fbbc4-a3f6-4080-b34b-3cf591992235';
+UPDATE productos SET imagenes = '["data:text/plain;base64,VW5hYmxlIHRvIGZpbmQgaW1hZ2UgZmlsZS4KCg=="]'::jsonb WHERE codigo_interno = 'BOD-017' AND ferreteria_id = '289fbbc4-a3f6-4080-b34b-3cf591992235';
+UPDATE productos SET imagenes = '["data:text/plain;base64,VW5hYmxlIHRvIGZpbmQgaW1hZ2UgZmlsZS4KCg=="]'::jsonb WHERE codigo_interno = 'BOD-018' AND ferreteria_id = '289fbbc4-a3f6-4080-b34b-3cf591992235';

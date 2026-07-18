@@ -1,7 +1,17 @@
-// Layout compartido para todas las páginas de autenticación
+'use client';
+
+import { usePathname } from 'next/navigation';
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/auth/login';
+
+  if (isLoginPage) {
+    return <div className="min-h-screen bg-zinc-950 font-sans">{children}</div>;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans">
       <div className="w-full max-w-md">
         {/* Logo / Marca */}
         <div className="text-center mb-8">
