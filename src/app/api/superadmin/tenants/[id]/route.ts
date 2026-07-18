@@ -22,7 +22,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // Primero intentamos actualizar
-  const { data, error } = await admin
+  const { data, error: updateError } = await admin
     .from('suscripciones')
     .update({ 
       estado: nuevoEstado, 
@@ -31,15 +31,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .eq('ferreteria_id', id)
     .select()
 
-  // Si no se actualizó nada (arreglo vacío) o hubo error, insertamos
-  if (error || !data || data.length === 0) {
-    await admin.from('suscripciones').insert({
+  if (updateError) {
+    console.error('Update error:', updateError)
+    return NextResponse.json({ error: updateError.message }, { status: 500 })
+  }
+
+  // Si no se actualizó nada (arreglo vacío), insertamos
+  if (!data || data.length === 0) {
+    const { error: insertError } = await admin.from('suscripciones').insert({
       ferreteria_id: id,
       estado: nuevoEstado,
       ciclo_fin: cicloFin,
-      creditos_mes: 999999,
+      creditos_del_mes: 999999, // Fix column name
       creditos_disponibles: 999999,
     })
+    if (insertError) {
+      console.error('Insert error:', insertError)
+      return NextResponse.json({ error: insertError.message }, { status: 500 })
+    }
   }
 
   // Refrescar la cache de Next.js
