@@ -9,64 +9,43 @@ async function getData() {
   const [
     { data: ferreterias },
     { data: suscripciones },
-    { data: planes },
-    { data: cfgMeta },
-    { data: cfgYCloud },
+    { data: pedidos }
   ] = await Promise.all([
     admin.from('ferreterias').select('id, nombre, telefono_whatsapp, estado_tenant, created_at').order('created_at', { ascending: false }),
-    admin.from('suscripciones').select('ferreteria_id, plan_id, estado, creditos_disponibles, creditos_mes'),
-    admin.from('planes').select('id, nombre, precio_mensual'),
-    admin.from('configuracion_meta').select('ferreteria_id, estado_conexion'),
-    admin.from('configuracion_ycloud').select('ferreteria_id, estado_conexion'),
+    admin.from('suscripciones').select('ferreteria_id, estado'),
+    admin.from('pedidos').select('ferreteria_id, total, costo_total').eq('estado', 'entregado')
   ])
 
-  const planesMap  = Object.fromEntries((planes ?? []).map(p => [p.id, p]))
-  const suscMap    = Object.fromEntries((suscripciones ?? []).map(s => [s.ferreteria_id, s]))
-  const metaMap    = Object.fromEntries((cfgMeta ?? []).map(m => [m.ferreteria_id, m.estado_conexion]))
-  const ycloudMap  = Object.fromEntries((cfgYCloud ?? []).map(y => [y.ferreteria_id, y.estado_conexion]))
+  const suscMap = Object.fromEntries((suscripciones ?? []).map(s => [s.ferreteria_id, s.estado]))
+  const pedidosAgrupados: Record<string, { ventas: number, profit: number }> = {}
+  
+  for (const ped of (pedidos ?? [])) {
+    if (!pedidosAgrupados[ped.ferreteria_id]) {
+      pedidosAgrupados[ped.ferreteria_id] = { ventas: 0, profit: 0 }
+    }
+    const venta = Number(ped.total) || 0
+    const costo = Number(ped.costo_total) || 0
+    pedidosAgrupados[ped.ferreteria_id].ventas += venta
+    pedidosAgrupados[ped.ferreteria_id].profit += (venta - costo)
+  }
 
   const tenants = (ferreterias ?? []).map(f => {
-    const sus   = suscMap[f.id]
-    const plan  = sus?.plan_id ? planesMap[sus.plan_id] : null
-    const mrr   = plan?.precio_mensual && sus?.estado === 'activo' ? Number(plan.precio_mensual) : 0
-
-    const metaActivo   = metaMap[f.id] === 'activo'
-    const ycloudActivo = ycloudMap[f.id] === 'activo'
-    const proveedorWa  = metaActivo ? 'meta' : ycloudActivo ? 'ycloud' : 'ninguno'
-
     return {
       id:                f.id,
       nombre:            f.nombre,
       telefono_whatsapp: f.telefono_whatsapp ?? '',
-      estado_tenant:     f.estado_tenant ?? 'trial',
       created_at:        f.created_at,
-      plan_nombre:       plan?.nombre ?? null,
-      plan_id:           sus?.plan_id ?? null,
-      creditos_disp:     sus?.creditos_disponibles ?? 0,
-      creditos_mes:      sus?.creditos_mes ?? 0,
-      mrr,
-      proveedor_wa:      proveedorWa as 'meta' | 'ycloud' | 'ninguno',
+      suscripcion:       suscMap[f.id] ?? 'restringido',
+      ventas:            pedidosAgrupados[f.id]?.ventas ?? 0,
+      profit:            pedidosAgrupados[f.id]?.profit ?? 0,
+      espacio_mb:        0, // Pendiente: Calcular peso exacto del bucket
     }
   })
 
-  const plansList = (planes ?? []).map(p => ({ id: p.id, nombre: p.nombre }))
-
-  return { tenants, planes: plansList }
+  return { tenants }
 }
 
-export default async function TenantsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ filtro?: string }>
-}) {
-  const params           = await searchParams
-  const { tenants, planes } = await getData()
-
-  return (
-    <TenantsClient
-      tenants={tenants}
-      planes={planes}
-      filtroInicial={params.filtro ?? ''}
-    />
-  )
+export default async function TenantsPage() {
+  const { tenants } = await getData()
+  return <TenantsClient tenants={tenants} />
 }

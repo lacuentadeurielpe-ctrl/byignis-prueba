@@ -7,13 +7,8 @@ import type { SuperadminSession } from '@/lib/auth/superadmin'
 import {
   LayoutDashboard,
   Store,
-  PackageCheck,
-  Bot,
-  HeartPulse,
   LogOut,
   DollarSign,
-  Shield,
-  Settings,
 } from 'lucide-react'
 
 interface Props {
@@ -22,13 +17,8 @@ interface Props {
 
 const NAV_ITEMS = [
   { href: '/superadmin',            label: 'Dashboard',  Icon: LayoutDashboard },
-  { href: '/superadmin/tenants',    label: 'Tenants',    Icon: Store },
-  { href: '/superadmin/planes',     label: 'Planes',     Icon: PackageCheck },
-  { href: '/superadmin/ia',         label: 'Economía IA', Icon: Bot },
-  { href: '/superadmin/billing',    label: 'Billing',    Icon: DollarSign },
-  { href: '/superadmin/seguridad',  label: 'Seguridad',  Icon: Shield },
-  { href: '/superadmin/salud',      label: 'Salud',      Icon: HeartPulse },
-  { href: '/superadmin/config',     label: 'Config',     Icon: Settings },
+  { href: '/superadmin/tenants',    label: 'Clientes',   Icon: Store },
+  { href: '/superadmin/historial',  label: 'Historial',  Icon: DollarSign },
 ]
 
 export default function SuperadminNav({ session }: Props) {
