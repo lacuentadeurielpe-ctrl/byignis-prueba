@@ -87,6 +87,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const zona_delivery_id = modalidad === 'delivery' ? body.zona_delivery_id : null
   const direccion_entrega = modalidad === 'delivery' ? body.direccion_entrega : null
 
+  const { getContextoSucursal } = await import('@/lib/sucursales/contexto')
+  const contexto = await getContextoSucursal(supabase, session)
+  const local_id = contexto?.localEscrituraId ?? null
+
   // 5. Crear el pedido
   const { data: pedido, error: errPedido } = await supabase
     .from('pedidos')
@@ -103,6 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       estado: 'pendiente',
       total: cotizacion.total,
       costo_total: costo_total,
+      local_id: local_id,
       notas: `Convertido desde Cotización #${cotizacion.id.slice(0, 8).toUpperCase()}`,
     })
     .select('id, numero_pedido')

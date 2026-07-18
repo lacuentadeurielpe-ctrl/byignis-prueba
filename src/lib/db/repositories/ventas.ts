@@ -248,7 +248,7 @@ export class VentasRepository {
       .order('created_at', { ascending: false })
       .limit(100)
 
-    if (localId) query = query.eq('local_id', localId)
+    if (localId) query = query.or(`local_id.eq.${localId},local_id.is.null`)
 
     const { data, error } = await query
     if (error) throw error
@@ -291,7 +291,7 @@ export class VentasRepository {
     // Filtrar por local_id via pedido si se especifica
     const lista = data ?? []
     if (localId) {
-      return lista.filter((p: any) => (p.pedido as any)?.local_id === localId || p.pedido === null)
+      return lista.filter((p: any) => (p.pedido as any)?.local_id === localId || (p.pedido as any)?.local_id == null || p.pedido === null)
     }
     return lista
   }
@@ -401,7 +401,7 @@ export class VentasRepository {
       .order('created_at', { ascending: false })
 
     if (estado) query = query.eq('estado', estado)
-    if (localId) query = query.eq('local_id', localId)
+    if (localId) query = query.or(`local_id.eq.${localId},local_id.is.null`)
 
     const { data, error } = await query
     if (error) throw error
@@ -454,7 +454,7 @@ export class VentasRepository {
 
     const lista = data ?? []
     if (localId) {
-      return lista.filter((c: any) => (c.pedidos as any)?.local_id === localId || c.pedidos === null)
+      return lista.filter((c: any) => (c.pedidos as any)?.local_id === localId || (c.pedidos as any)?.local_id == null || c.pedidos === null)
     }
     return lista
   }
@@ -615,7 +615,7 @@ export class VentasRepository {
       .lt('created_at', fin)
 
     if (localId) {
-      query = query.eq('local_id', localId)
+      query = query.or(`local_id.eq.${localId},local_id.is.null`)
     }
 
     const { data: pedidos, error: pedidosError } = await query
@@ -653,7 +653,7 @@ export class VentasRepository {
       .gte('created_at', inicio)
       .lt('created_at', fin)
 
-    if (localId) queryComprobantes = queryComprobantes.eq('local_id', localId)
+    if (localId) queryComprobantes = queryComprobantes.or(`local_id.eq.${localId},local_id.is.null`)
     const { data: comprobantes } = await queryComprobantes
     const comps = comprobantes ?? []
 
