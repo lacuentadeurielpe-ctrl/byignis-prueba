@@ -38,7 +38,7 @@ interface NavItem {
   badge?: 'pedidos' | 'conversaciones' | 'cotizaciones'
   permiso?: Permiso
   moduleName?: ModuleName
-  hidden?: boolean
+  requireProPlan?: boolean
 }
 
 interface NavGroup {
@@ -52,7 +52,7 @@ const navGroups: NavGroup[] = [
       { label: 'Dashboard', href: '/dashboard',       icon: LayoutDashboard, permiso: 'ver_dashboard', moduleName: 'dashboard' },
       { label: 'Caja POS',  href: '/pos',             icon: ScanLine,        permiso: 'ver_pedidos', moduleName: 'pos' },
       { label: 'Ventas',    href: '/dashboard/ventas', icon: TrendingUp,      badge: 'pedidos',        permiso: 'ver_pedidos', moduleName: 'ventas' },
-      { label: 'Chat',      href: '/dashboard/conversations', icon: MessageSquare, badge: 'conversaciones', permiso: 'ver_pedidos', moduleName: 'chat', hidden: true },
+      { label: 'Chat',      href: '/dashboard/conversations', icon: MessageSquare, badge: 'conversaciones', permiso: 'ver_pedidos', moduleName: 'chat', requireProPlan: true },
     ],
   },
   {
@@ -61,9 +61,9 @@ const navGroups: NavGroup[] = [
       { label: 'Catálogo',  href: '/dashboard/catalog',   icon: Package,    permiso: 'ver_stock', moduleName: 'catalog' },
       { label: 'Clientes',  href: '/dashboard/clientes',  icon: Users,      permiso: 'ver_historial_clientes', moduleName: 'clientes' },
       { label: 'Equipo',    href: '/dashboard/equipo',    icon: Users,      permiso: 'configurar_ferreteria' },
-      { label: 'Difusiones', href: '/dashboard/difusiones', icon: Megaphone, permiso: 'ver_pedidos', moduleName: 'chat', hidden: true },
-      { label: 'Plantillas WA', href: '/dashboard/plantillas-wa', icon: LayoutTemplate, permiso: 'ver_pedidos', moduleName: 'chat', hidden: true },
-      { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos', moduleName: 'delivery', hidden: true },
+      { label: 'Difusiones', href: '/dashboard/difusiones', icon: Megaphone, permiso: 'ver_pedidos', moduleName: 'chat', requireProPlan: true },
+      { label: 'Plantillas WA', href: '/dashboard/plantillas-wa', icon: LayoutTemplate, permiso: 'ver_pedidos', moduleName: 'chat', requireProPlan: true },
+      { label: 'Delivery',  href: '/dashboard/delivery',  icon: Truck,      permiso: 'delivery_ver_pedidos', moduleName: 'delivery', requireProPlan: true },
     ],
   },
   {
@@ -97,6 +97,7 @@ export default function Sidebar({
   rol,
   permisos,
   contextoSucursal,
+  planId,
 }: SidebarProps) {
   const pathname = usePathname()
   const router   = useRouter()
@@ -105,6 +106,9 @@ export default function Sidebar({
   const [logoLocal,    setLogoLocal]    = useState<string | null | undefined>(logoUrl)
   const [subiendoLogo, setSubiendoLogo] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
+
+  // IDs de planes Pro y Vitalicio
+  const isProOrVitalicio = planId === '2cb9bb87-c734-4374-92e0-2d37d010eb2e' || planId === 'bc7f4803-e34b-4de6-8d33-4475c7c67429'
 
   async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -224,7 +228,7 @@ export default function Sidebar({
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
         {navGroups.map((group, gi) => {
           const visibles = group.items.filter((item) => {
-            if (item.hidden) return false
+            if (item.requireProPlan && !isProOrVitalicio) return false
             const hasPerm = !item.permiso || checkPermiso(session, item.permiso)
             const isEnabled = !item.moduleName || isModuleEnabled(item.moduleName)
             // Verificación modular por sucursal: hoy siempre true,

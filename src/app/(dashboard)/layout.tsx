@@ -73,6 +73,7 @@ export default async function DashboardLayout({
       rol={session.rol}
       permisos={session.permisos}
       contextoSucursal={contexto}
+      planId={session.planId}
     />
   )
 

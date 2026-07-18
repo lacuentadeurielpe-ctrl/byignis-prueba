@@ -18,6 +18,8 @@ export interface SessionInfo {
   localAsignadoId: string | null
   /** Estado de la suscripción (activo, suspendido, etc). */
   estadoSuscripcion: string
+  /** ID del plan activo. */
+  planId?: string | null
 }
 
 /**
@@ -37,14 +39,17 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   // 1. ¿Es dueño?
   const { data: ferreteria } = await supabase
     .from('ferreterias')
-    .select('id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado)')
+    .select('id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado, plan_id)')
     .eq('owner_id', session.user.id)
     .single()
 
   if (ferreteria) {
-    const estado = (Array.isArray(ferreteria.suscripciones)
-      ? ferreteria.suscripciones[0]?.estado
-      : (ferreteria.suscripciones as any)?.estado) ?? 'suspendido'
+    const suscripcion = Array.isArray(ferreteria.suscripciones)
+      ? ferreteria.suscripciones[0]
+      : (ferreteria.suscripciones as any)
+      
+    const estado = suscripcion?.estado ?? 'suspendido'
+    const planId = suscripcion?.plan_id ?? null
     
     return {
       userId: user.id,
@@ -56,22 +61,26 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       multiSucursal: ferreteria.multi_sucursal ?? false,
       localAsignadoId: null, // el dueño nunca está fijado a una sucursal
       estadoSuscripcion: estado,
+      planId,
     }
   }
 
   // 2. ¿Es empleado invitado?
   const { data: miembro } = await supabase
     .from('miembros_ferreteria')
-    .select('ferreteria_id, rol, nombre, permisos, local_id, ferreterias(id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado))')
+    .select('ferreteria_id, rol, nombre, permisos, local_id, ferreterias(id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado, plan_id))')
     .eq('user_id', user.id)
     .eq('activo', true)
     .single()
 
   if (miembro) {
     const ferr = miembro.ferreterias as any
-    const estado = (Array.isArray(ferr?.suscripciones)
-      ? ferr?.suscripciones[0]?.estado
-      : ferr?.suscripciones?.estado) ?? 'suspendido'
+    const suscripcion = Array.isArray(ferr?.suscripciones)
+      ? ferr?.suscripciones[0]
+      : ferr?.suscripciones
+      
+    const estado = suscripcion?.estado ?? 'suspendido'
+    const planId = suscripcion?.plan_id ?? null
 
     return {
       userId: user.id,
@@ -83,6 +92,7 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       multiSucursal: ferr?.multi_sucursal ?? false,
       localAsignadoId: miembro.local_id ?? null,
       estadoSuscripcion: estado,
+      planId,
     }
   }
 
