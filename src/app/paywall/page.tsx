@@ -9,13 +9,29 @@ export default function PaywallPage() {
   const router = useRouter()
   
   useEffect(() => {
-    // Polling automático cada 3 segundos
-    // Si el Superadmin activa la cuenta, al hacer router.refresh() 
-    // el PaywallLayout detectará el estado 'activo' y redirigirá al /dashboard automáticamente.
-    const interval = setInterval(() => {
-      router.refresh()
-    }, 3000)
-    return () => clearInterval(interval)
+    const supabase = createClient()
+    
+    // Configurar canal de realtime para la tabla suscripciones
+    // Cuando el superadmin cambie el estado en la base de datos, 
+    // se dispara este evento y Next.js re-evalúa el layout automáticamente.
+    const channel = supabase
+      .channel('paywall-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'suscripciones',
+        },
+        () => {
+          router.refresh()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [router])
   
   const handleLogout = async () => {
