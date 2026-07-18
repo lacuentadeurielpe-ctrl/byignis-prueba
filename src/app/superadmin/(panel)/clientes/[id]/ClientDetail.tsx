@@ -55,7 +55,7 @@ export default function ClientDetail({ data }: ClientDetailProps) {
     setIsSaving(true)
     try {
       const res = await fetch(`/api/superadmin/tenants/${data.id}`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estadoSuscripcion })
       })
