@@ -70,10 +70,8 @@ export default async function SuperadminPage() {
 
       {/* Links rápidos */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <QuickLink href="/superadmin/tenants" title="Clientes / Suscripciones"
-          desc="Gestionar estado vitalicio/pro y ver ventas por cliente" />
-        <QuickLink href="/superadmin/historial" title="Historial de Pagos"
-          desc="Ver registro de pagos y cambios de suscripción" />
+        <QuickLink href="/superadmin/clientes" title="Gestión de Clientes"
+          desc="Administrar clientes, ver métricas por negocio y estado de suscripción" />
       </div>
     </div>
   )

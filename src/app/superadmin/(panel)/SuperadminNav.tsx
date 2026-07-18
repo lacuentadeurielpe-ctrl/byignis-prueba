@@ -17,8 +17,7 @@ interface Props {
 
 const NAV_ITEMS = [
   { href: '/superadmin',            label: 'Dashboard',  Icon: LayoutDashboard },
-  { href: '/superadmin/tenants',    label: 'Clientes',   Icon: Store },
-  { href: '/superadmin/historial',  label: 'Historial',  Icon: DollarSign },
+  { href: '/superadmin/clientes',   label: 'Clientes',   Icon: Store },
 ]
 
 export default function SuperadminNav({ session }: Props) {

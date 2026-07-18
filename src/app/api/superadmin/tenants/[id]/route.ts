@@ -10,21 +10,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { id } = await params
   const body = await request.json()
-  const { suscripcion_estado } = body
+  const { estadoSuscripcion } = body
   
   const admin = createAdminClient()
 
-  let nuevoEstado = 'suspendido'
+  let nuevoEstado = estadoSuscripcion // activo, suspendido, trial
   let cicloFin: string | null = null
 
-  if (suscripcion_estado === 'vitalicio') {
-    nuevoEstado = 'activo'
-    cicloFin = '2099-12-31'
-  } else if (suscripcion_estado === 'pro') {
-    nuevoEstado = 'activo'
-    cicloFin = null
-  } else if (suscripcion_estado === 'restringido') {
-    nuevoEstado = 'suspendido'
+  if (estadoSuscripcion === 'activo') {
+    cicloFin = '2099-12-31' // Plan vitalicio/pro
   }
 
   // Primero intentamos actualizar
@@ -39,8 +33,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // Si no se actualizó nada (arreglo vacío) o hubo error, insertamos
   if (error || !data || data.length === 0) {
-    // Si no existe plan_id real, intentamos obtener uno o lo dejamos null si la BD lo permite
-    // Asumiendo que podemos insertar o que requiere UUID válido, buscamos el primer plan o metemos uno dummy si no hay constraint
     await admin.from('suscripciones').insert({
       ferreteria_id: id,
       estado: nuevoEstado,
@@ -52,8 +44,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // Refrescar la cache de Next.js
   revalidatePath('/superadmin', 'layout')
-  revalidatePath('/superadmin/tenants')
-  revalidatePath('/superadmin/historial')
+  revalidatePath('/superadmin/clientes')
+  revalidatePath(`/superadmin/clientes/${id}`)
 
-  return NextResponse.json({ success: true, estado: suscripcion_estado })
+  return NextResponse.json({ success: true, estado: estadoSuscripcion })
 }
