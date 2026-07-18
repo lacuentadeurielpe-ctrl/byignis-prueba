@@ -3,9 +3,20 @@
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Lock, LogOut, CheckCircle2 } from 'lucide-react'
+import { useEffect } from 'react'
 
 export default function PaywallPage() {
   const router = useRouter()
+  
+  useEffect(() => {
+    // Polling automático cada 3 segundos
+    // Si el Superadmin activa la cuenta, al hacer router.refresh() 
+    // el PaywallLayout detectará el estado 'activo' y redirigirá al /dashboard automáticamente.
+    const interval = setInterval(() => {
+      router.refresh()
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [router])
   
   const handleLogout = async () => {
     const supabase = createClient()
@@ -70,16 +81,6 @@ export default function PaywallPage() {
               Chatea con un asesor
             </button>
             
-            <button
-              onClick={() => {
-                router.refresh()
-                window.location.reload()
-              }}
-              className="w-full bg-transparent hover:bg-white/5 text-zinc-400 hover:text-white font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2 mt-2"
-            >
-              Ya realicé el pago, actualizar
-            </button>
-
             <button
               onClick={handleLogout}
               className="w-full bg-transparent hover:bg-white/5 text-zinc-400 hover:text-white font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2"
