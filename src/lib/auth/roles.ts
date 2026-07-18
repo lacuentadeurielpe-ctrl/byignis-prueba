@@ -1,4 +1,5 @@
 // Utilidad server-side para obtener el rol y permisos del usuario actual
+import { unstable_noStore as noStore } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { type PermisoMap, PERMISOS_DUENO, normalizarPermisos } from '@/lib/auth/permisos'
 
@@ -26,6 +27,7 @@ export interface SessionInfo {
  * React/Next.js deduplica esta llamada dentro del mismo request.
  */
 export async function getSessionInfo(): Promise<SessionInfo | null> {
+  noStore()
   const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
 
