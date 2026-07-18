@@ -85,6 +85,7 @@ interface SidebarProps {
   rol: Rol
   permisos: PermisoMap
   contextoSucursal?: ContextoSucursal | null
+  planId?: string | null
 }
 
 export default function Sidebar({
