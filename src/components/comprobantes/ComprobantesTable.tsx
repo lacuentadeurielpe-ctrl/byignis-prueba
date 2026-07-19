@@ -135,7 +135,7 @@ function guiaSunat(codigo: string | null | undefined): string | null {
   if (n >= 4000)  return 'Observación menor — el comprobante es válido'
   if (n === 2800) return 'Datos del emisor no coinciden con SOL — reverifica tus credenciales'
   if (n === 2335 || n === 2017) return 'Serie o número incorrecto — verifica la serie configurada'
-  if (n === 1033) return 'Certificado digital expirado — renuévalo en Configuración'
+  if (n === 1033) return 'Este número ya fue registrado en SUNAT — usa "Reintentar" para emitir con número nuevo'
   if (n === 3273) return 'IGV incorrecto — revisa la tasa IGV del producto'
   if (n >= 100 && n <= 999)  return 'Error en el XML — contacta al soporte'
   if (n >= 1000 && n <= 1999) return 'Error del sistema SUNAT — reintenta más tarde'
@@ -185,6 +185,17 @@ function puedeAnular(comp: ComprobanteExt): boolean {
   if (comp.tipo !== 'boleta' && comp.tipo !== 'factura') return false
   if (comp.anulacion_solicitada) return false
   return comp.estado_sunat === 'aceptado' || comp.estado_sunat === 'aceptado_obs'
+}
+
+// Boletas/facturas fallidas (error local o rechazo definitivo SUNAT) con pedido
+// asociado: se pueden re-emitir con un correlativo NUEVO. Los `error_reintentable`
+// no aplican — esos los procesa el job automático con el mismo número.
+function puedeReemitir(comp: ComprobanteExt): boolean {
+  if (comp.tipo !== 'boleta' && comp.tipo !== 'factura') return false
+  if (!comp.pedido_id) return false
+  if (comp.estado === 'anulado') return false
+  if (comp.estado_sunat === 'error_reintentable') return false
+  return comp.estado === 'error' || comp.estado_sunat === 'rechazado'
 }
 
 // ── Menú de acciones secundarias (NC / ND / Anular) ───────────────────────────
@@ -256,6 +267,27 @@ export default function ComprobantesTable({
   const [ncTarget, setNcTarget] = useState<ComprobanteExt | null>(null)
   const [ndTarget, setNdTarget] = useState<ComprobanteExt | null>(null)
   const [anularTarget, setAnularTarget] = useState<ComprobanteExt | null>(null)
+  const [reemitiendoId, setReemitiendoId] = useState<string | null>(null)
+
+  async function reemitir(comp: ComprobanteExt) {
+    if (reemitiendoId) return
+    setReemitiendoId(comp.id)
+    const toastId = toast.loading(`Re-emitiendo ${comp.tipo === 'factura' ? 'factura' : 'boleta'} con número nuevo…`)
+    try {
+      const res = await fetch(`/api/comprobantes/${comp.id}/reemitir`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        toast.error(data.error ?? 'No se pudo re-emitir el comprobante', { id: toastId })
+        return
+      }
+      toast.success(`Comprobante ${data.numeroCompleto} emitido y aceptado por SUNAT`, { id: toastId })
+      setTimeout(() => window.location.reload(), 1500)
+    } catch {
+      toast.error('Error de red al re-emitir — inténtalo de nuevo', { id: toastId })
+    } finally {
+      setReemitiendoId(null)
+    }
+  }
 
   const conteoTipos = useMemo(() => {
     const m: Record<string, number> = {}
@@ -288,7 +320,7 @@ export default function ComprobantesTable({
           <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <div>
             <span className="font-bold">{rechazados} comprobante(s) rechazado(s) por SUNAT.</span>{' '}
-            Revisa los detalles en la tabla y corrígelos o emite una nota de crédito.
+            Usa el botón <span className="font-bold">Reintentar</span> para volver a emitirlos con un número nuevo, o revisa el detalle del error en cada fila.
           </div>
         </div>
       )}
@@ -404,6 +436,22 @@ export default function ComprobantesTable({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {puedeReemitir(comp) && (
+                          <button
+                            onClick={() => reemitir(comp)}
+                            disabled={reemitiendoId !== null}
+                            className={cn(
+                              'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition',
+                              reemitiendoId === comp.id
+                                ? 'bg-amber-100 text-amber-700 cursor-wait'
+                                : 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50'
+                            )}
+                            title="Vuelve a emitir este comprobante con un número nuevo"
+                          >
+                            <RefreshCcw className={cn('w-3.5 h-3.5', reemitiendoId === comp.id && 'animate-spin')} />
+                            {reemitiendoId === comp.id ? 'Emitiendo…' : 'Reintentar'}
+                          </button>
+                        )}
                         {href && (
                           <a
                             href={href}
