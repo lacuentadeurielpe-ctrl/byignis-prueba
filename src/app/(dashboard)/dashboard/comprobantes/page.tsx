@@ -45,6 +45,7 @@ export default async function ComprobantesPage() {
       <ComprobantesTable
         comprobantes={comprobantes ?? []}
         facturacionConfigurada={!!credSunat}
+        ferreteriaId={session.ferreteriaId}
       />
     </div>
   )

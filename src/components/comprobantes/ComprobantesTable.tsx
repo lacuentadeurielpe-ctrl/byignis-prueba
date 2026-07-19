@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { formatPEN, formatFechaHoraLima, cn } from '@/lib/utils'
 import {
   Search, FileText, Download, CheckCircle2, AlertTriangle,
@@ -258,16 +260,45 @@ function MenuAcciones({ acciones }: { acciones: AccionMenu[] }) {
 export default function ComprobantesTable({
   comprobantes,
   facturacionConfigurada,
+  ferreteriaId,
 }: {
   comprobantes: ComprobanteExt[]
   facturacionConfigurada: boolean
+  ferreteriaId: string
 }) {
+  const router = useRouter()
   const [busqueda, setBusqueda] = useState('')
   const [tipoFiltro, setTipoFiltro] = useState<string>('todos')
   const [ncTarget, setNcTarget] = useState<ComprobanteExt | null>(null)
   const [ndTarget, setNdTarget] = useState<ComprobanteExt | null>(null)
   const [anularTarget, setAnularTarget] = useState<ComprobanteExt | null>(null)
   const [reemitiendoId, setReemitiendoId] = useState<string | null>(null)
+
+  // Realtime: cualquier cambio en `comprobantes` de esta ferretería (reintento
+  // automático del job, emisión desde otra pestaña/POS, respuesta de SUNAT)
+  // refresca los datos del server component sin recargar la página. El debounce
+  // agrupa las ráfagas de updates que genera una emisión (insert + varios update).
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!ferreteriaId) return
+    const supabase = createClient()
+    const refrescar = () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      refreshTimer.current = setTimeout(() => router.refresh(), 500)
+    }
+    const channel = supabase
+      .channel(`comprobantes-rt-${ferreteriaId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'comprobantes', filter: `ferreteria_id=eq.${ferreteriaId}` },
+        refrescar
+      )
+      .subscribe()
+    return () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      supabase.removeChannel(channel)
+    }
+  }, [ferreteriaId, router])
 
   async function reemitir(comp: ComprobanteExt) {
     if (reemitiendoId) return
@@ -281,7 +312,7 @@ export default function ComprobantesTable({
         return
       }
       toast.success(`Comprobante ${data.numeroCompleto} emitido y aceptado por SUNAT`, { id: toastId })
-      setTimeout(() => window.location.reload(), 1500)
+      router.refresh()
     } catch {
       toast.error('Error de red al re-emitir — inténtalo de nuevo', { id: toastId })
     } finally {
@@ -503,7 +534,7 @@ export default function ComprobantesTable({
             onEmitida={(res) => {
               setNcTarget(null)
               toast.success(`Nota de crédito ${res.numeroCompleto} emitida`)
-              setTimeout(() => window.location.reload(), 1500)
+              router.refresh()
             }}
           />
         )}
@@ -515,7 +546,7 @@ export default function ComprobantesTable({
             onEmitida={(res) => {
               setNdTarget(null)
               toast.success(`Nota de débito ${res.numeroCompleto} emitida`)
-              setTimeout(() => window.location.reload(), 1500)
+              router.refresh()
             }}
           />
         )}
@@ -527,7 +558,7 @@ export default function ComprobantesTable({
             onAnulada={() => {
               setAnularTarget(null)
               toast.success('Anulación solicitada — se procesará ante SUNAT en la próxima corrida nocturna')
-              setTimeout(() => window.location.reload(), 1500)
+              router.refresh()
             }}
           />
         )}
