@@ -4,6 +4,7 @@ import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
 import Sidebar from '@/components/layout/Sidebar'
 import MobileSidebarWrapper from '@/components/layout/MobileSidebarWrapper'
+import TrialBanner from '@/components/layout/TrialBanner'
 import { getContextoSucursal } from '@/lib/sucursales/contexto'
 
 export default async function DashboardLayout({
@@ -21,8 +22,8 @@ export default async function DashboardLayout({
     redirect('/onboarding')
   }
 
-  // Verificar estado de suscripción: si no es activo, forzar pago/bloqueo
-  if (session.estadoSuscripcion !== 'activo') {
+  // Verificar suscripción: 'activo' o trial de 3 días vigente. Si no → paywall.
+  if (!session.suscripcionActiva) {
     redirect('/paywall')
   }
 
@@ -88,6 +89,12 @@ export default async function DashboardLayout({
       rol={session.rol}
       permisos={session.permisos}
     >
+      {session.estadoSuscripcion === 'trial' && (
+        <TrialBanner
+          diasRestantes={session.trialDiasRestantes ?? 0}
+          esDueno={session.rol === 'dueno'}
+        />
+      )}
       {children}
     </MobileSidebarWrapper>
   )

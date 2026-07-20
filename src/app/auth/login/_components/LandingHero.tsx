@@ -81,11 +81,11 @@ export default function LandingHero() {
   const CallToActions = () => (
     <div className={`transition-all duration-700 transform ${showButtons ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}>
       <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-        <a 
-          href="#pricing"
+        <a
+          href="/auth/register"
           className="w-full sm:w-auto flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-[0_0_30px_rgba(59,130,246,0.2)] hover:shadow-[0_0_50px_rgba(59,130,246,0.4)] hover:-translate-y-1 text-lg"
         >
-          Compra Directa - S/ 85
+          Probar gratis 3 días
           <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
         </a>
         <a 

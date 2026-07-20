@@ -138,6 +138,11 @@ YCLOUD_WEBHOOK_SECRET=               # HMAC verification key for webhooks
 DEEPSEEK_API_KEY=                    # Used for core intent and processing
 OPENAI_API_KEY=                      # Optional: enables Whisper and Vision support
 
+# Mercado Pago (suscripciones SaaS — cobro mensual S/85 a los tenants)
+MP_ACCESS_TOKEN=                     # Access Token de producción de la cuenta Uintegrus
+MP_WEBHOOK_SECRET=                   # Opcional: clave secreta del webhook (panel MP → Webhooks)
+# MP_CLIENT_ID / MP_CLIENT_SECRET son para el OAuth por tenant (futuro, src/lib/mercadopago.ts)
+
 # Dashboard Context
 NEXT_PUBLIC_APP_URL=                 # Base URL for invitation/delivery links
 CRON_SECRET=                         # Bearer token protecting cron endpoints

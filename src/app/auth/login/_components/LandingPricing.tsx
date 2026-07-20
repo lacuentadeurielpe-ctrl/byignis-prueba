@@ -62,14 +62,14 @@ export default function LandingPricing() {
             ))}
           </div>
 
-          <a 
-            href="#"
+          <a
+            href="/auth/register"
             className="w-full bg-blue-500 hover:bg-blue-400 text-zinc-950 font-bold py-4 px-8 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-[0_0_30px_rgba(16,185,129,0.3)] hover:shadow-[0_0_50px_rgba(16,185,129,0.5)] text-lg"
           >
-            Obtener mi sistema ahora
+            Empezar prueba gratis de 3 días
             <ArrowRight className="w-6 h-6" />
           </a>
-          <p className="text-center text-zinc-500 text-sm mt-4">Activa tu cuenta de inmediato. Soporte incluido.</p>
+          <p className="text-center text-zinc-500 text-sm mt-4">Sin tarjeta para probar. Luego S/ 85/mes con Mercado Pago.</p>
         </motion.div>
       </div>
     </section>

@@ -18,8 +18,40 @@ export interface SessionInfo {
   localAsignadoId: string | null
   /** Estado de la suscripción (activo, suspendido, etc). */
   estadoSuscripcion: string
+  /** true si puede usar el sistema: estado 'activo' o trial de 3 días vigente. */
+  suscripcionActiva: boolean
+  /** Días restantes del trial (solo cuando estado === 'trial'). */
+  trialDiasRestantes: number | null
   /** ID del plan activo. */
   planId?: string | null
+}
+
+/** Fecha actual en Lima como YYYY-MM-DD (las fechas de ciclo son DATE). */
+function hoyLima(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+}
+
+/**
+ * Evalúa si la suscripción da acceso al sistema.
+ * - 'activo' (pro/vitalicio, lo gestiona el superadmin o el webhook de MP) → sí.
+ * - 'trial' → sí mientras ciclo_fin no haya pasado (prueba gratis de 3 días).
+ * - resto ('suspendido', 'vencido' o sin fila) → no, va al paywall.
+ */
+function evaluarSuscripcion(
+  estado: string,
+  cicloFin: string | null
+): { activa: boolean; trialDiasRestantes: number | null } {
+  if (estado === 'activo') return { activa: true, trialDiasRestantes: null }
+  if (estado === 'trial') {
+    if (!cicloFin) return { activa: false, trialDiasRestantes: 0 }
+    const hoy = hoyLima()
+    const dias = Math.max(
+      0,
+      Math.ceil((new Date(cicloFin).getTime() - new Date(hoy).getTime()) / 86_400_000)
+    )
+    return { activa: cicloFin >= hoy, trialDiasRestantes: dias }
+  }
+  return { activa: false, trialDiasRestantes: null }
 }
 
 /**
@@ -39,7 +71,7 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   // 1. ¿Es dueño?
   const { data: ferreteria } = await supabase
     .from('ferreterias')
-    .select('id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado, plan_id)')
+    .select('id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado, plan_id, ciclo_fin)')
     .eq('owner_id', session.user.id)
     .single()
 
@@ -47,10 +79,11 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
     const suscripcion = Array.isArray(ferreteria.suscripciones)
       ? ferreteria.suscripciones[0]
       : (ferreteria.suscripciones as any)
-      
+
     const estado = suscripcion?.estado ?? 'suspendido'
     const planId = suscripcion?.plan_id ?? null
-    
+    const evalSub = evaluarSuscripcion(estado, suscripcion?.ciclo_fin ?? null)
+
     return {
       userId: user.id,
       ferreteriaId: ferreteria.id,
@@ -61,6 +94,8 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       multiSucursal: ferreteria.multi_sucursal ?? false,
       localAsignadoId: null, // el dueño nunca está fijado a una sucursal
       estadoSuscripcion: estado,
+      suscripcionActiva: evalSub.activa,
+      trialDiasRestantes: evalSub.trialDiasRestantes,
       planId,
     }
   }
@@ -68,7 +103,7 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   // 2. ¿Es empleado invitado?
   const { data: miembro } = await supabase
     .from('miembros_ferreteria')
-    .select('ferreteria_id, rol, nombre, permisos, local_id, ferreterias(id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado, plan_id))')
+    .select('ferreteria_id, rol, nombre, permisos, local_id, ferreterias(id, nombre, onboarding_completo, multi_sucursal, suscripciones(estado, plan_id, ciclo_fin))')
     .eq('user_id', user.id)
     .eq('activo', true)
     .single()
@@ -81,6 +116,7 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       
     const estado = suscripcion?.estado ?? 'suspendido'
     const planId = suscripcion?.plan_id ?? null
+    const evalSub = evaluarSuscripcion(estado, suscripcion?.ciclo_fin ?? null)
 
     return {
       userId: user.id,
@@ -92,6 +128,8 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
       multiSucursal: ferr?.multi_sucursal ?? false,
       localAsignadoId: miembro.local_id ?? null,
       estadoSuscripcion: estado,
+      suscripcionActiva: evalSub.activa,
+      trialDiasRestantes: evalSub.trialDiasRestantes,
       planId,
     }
   }

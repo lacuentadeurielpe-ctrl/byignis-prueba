@@ -18,8 +18,8 @@ export default async function POSPage() {
     redirect('/onboarding')
   }
 
-  // Si no está activo, bloquear acceso a la caja POS
-  if (session.estadoSuscripcion !== 'activo') {
+  // Suscripción 'activo' o trial vigente; si no, bloquear acceso a la caja POS
+  if (!session.suscripcionActiva) {
     redirect('/paywall')
   }
 
