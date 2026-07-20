@@ -21,6 +21,7 @@ import {
   FileText,
   Megaphone,
   LayoutTemplate,
+  CreditCard,
 } from 'lucide-react'
 import NotificationBadge from '@/components/layout/NotificationBadge'
 import SucursalSelector from '@/components/sucursales/SucursalSelector'
@@ -70,6 +71,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Facturación', href: '/dashboard/comprobantes', icon: FileText, permiso: 'ver_caja_dia', moduleName: 'comprobantes' },
       { label: 'Finanzas', href: '/dashboard/finanzas', icon: BarChart2, permiso: 'ver_caja_dia', moduleName: 'finanzas' },
+      { label: 'Suscripción', href: '/dashboard/suscripcion', icon: CreditCard, permiso: 'configurar_ferreteria' },
       { label: 'Ajustes',  href: '/dashboard/settings-2', icon: Settings,  permiso: 'configurar_ferreteria', moduleName: 'settings-2' },
     ],
   },

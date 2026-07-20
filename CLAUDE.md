@@ -140,6 +140,7 @@ OPENAI_API_KEY=                      # Optional: enables Whisper and Vision supp
 
 # Mercado Pago (suscripciones SaaS — cobro mensual S/85 a los tenants)
 MP_ACCESS_TOKEN=                     # Access Token de producción de la cuenta Uintegrus
+NEXT_PUBLIC_MP_PUBLIC_KEY=           # Public Key de producción — habilita el checkout embebido (tarjeta en la página)
 MP_WEBHOOK_SECRET=                   # Opcional: clave secreta del webhook (panel MP → Webhooks)
 # MP_CLIENT_ID / MP_CLIENT_SECRET son para el OAuth por tenant (futuro, src/lib/mercadopago.ts)
 

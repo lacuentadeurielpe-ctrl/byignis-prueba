@@ -9,7 +9,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { crearSuscripcionMP, suscripcionesMPConfigurado } from '@/lib/suscripciones/mercadopago'
+import {
+  crearSuscripcionMP,
+  sincronizarPreapproval,
+  suscripcionesMPConfigurado,
+  hoyLima,
+} from '@/lib/suscripciones/mercadopago'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,9 +41,11 @@ export async function POST(request: NextRequest) {
   }
 
   let email = ''
+  let cardTokenId: string | null = null
   try {
     const body = await request.json()
     email = String(body?.email ?? '').trim().toLowerCase()
+    cardTokenId = body?.cardTokenId ? String(body.cardTokenId) : null
   } catch {
     // body vacío → se valida abajo
   }
@@ -53,15 +60,31 @@ export async function POST(request: NextRequest) {
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? new URL(request.url).origin
 
+  // Si está en trial vigente, el primer cobro se programa para el fin de la
+  // prueba: paga hoy pero conserva sus días gratis (días restantes + 30).
+  const admin = createAdminClient()
+  let primerCobro: string | null = null
+  if (session.estadoSuscripcion === 'trial') {
+    const { data: susc } = await admin
+      .from('suscripciones')
+      .select('ciclo_fin')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .maybeSingle()
+    if (susc?.ciclo_fin && susc.ciclo_fin > hoyLima()) {
+      primerCobro = susc.ciclo_fin
+    }
+  }
+
   try {
-    const { preapprovalId, initPoint } = await crearSuscripcionMP({
+    const { preapprovalId, initPoint, status } = await crearSuscripcionMP({
       ferreteriaId: session.ferreteriaId,
       payerEmail:   email,
       baseUrl,
+      primerCobro,
+      cardTokenId,
     })
 
     // Guardar el intento en la suscripción (si existe fila) para reconciliar.
-    const admin = createAdminClient()
     await admin
       .from('suscripciones')
       .update({
@@ -71,6 +94,17 @@ export async function POST(request: NextRequest) {
       })
       .eq('ferreteria_id', session.ferreteriaId)
 
+    // Flujo embebido (tarjeta en la página): quedó autorizado sin redirección.
+    // Sincronizamos ya mismo para activar la cuenta sin esperar al webhook.
+    if (cardTokenId) {
+      await sincronizarPreapproval(preapprovalId)
+      return NextResponse.json({
+        activada: status === 'authorized',
+        preapprovalId,
+      })
+    }
+
+    // Flujo con redirección al checkout de MP (requiere cuenta de MP)
     return NextResponse.json({ url: initPoint })
   } catch (err) {
     console.error('[suscripcion/checkout]', err)
@@ -78,7 +112,13 @@ export async function POST(request: NextRequest) {
     // MP rechaza el checkout si el email pertenece a la misma cuenta que cobra
     if (msg.includes('payer') && msg.includes('collector')) {
       return NextResponse.json(
-        { error: 'Ese correo pertenece a la cuenta que cobra. Usa el correo de TU cuenta personal de Mercado Pago.' },
+        { error: 'Ese correo pertenece a la cuenta que cobra. Usa otro correo.' },
+        { status: 400 }
+      )
+    }
+    if (cardTokenId) {
+      return NextResponse.json(
+        { error: 'Tu tarjeta fue rechazada. Verifica los datos, que tenga saldo, o intenta con otra tarjeta.' },
         { status: 400 }
       )
     }

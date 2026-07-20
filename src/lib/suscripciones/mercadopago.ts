@@ -83,34 +83,77 @@ interface MPAuthorizedPayment {
 
 // ─── Crear suscripción (checkout) ──────────────────────────────────────────
 
+/** Fecha actual en Lima como YYYY-MM-DD. */
+export function hoyLima(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+}
+
 /**
- * Crea el preapproval en MP y devuelve la URL de checkout (init_point).
- * El external_reference lleva el ferreteriaId para reconciliar en el webhook.
+ * Crea el preapproval en MP.
+ *
+ * Dos modos:
+ *  - Sin `cardTokenId`: status 'pending' → devuelve init_point (checkout en
+ *    la web de MP, requiere cuenta de Mercado Pago del pagador).
+ *  - Con `cardTokenId` (tarjeta tokenizada en el navegador con la Public
+ *    Key): status 'authorized' → el cobro queda autorizado SIN redirección.
+ *
+ * `primerCobro` (YYYY-MM-DD, opcional): fecha del primer cargo. Se usa cuando
+ * el tenant paga durante el trial — la tarjeta se autoriza hoy pero el primer
+ * cobro sale al terminar la prueba, así no pierde los días que le quedan.
  */
 export async function crearSuscripcionMP(params: {
   ferreteriaId: string
   payerEmail: string
   baseUrl: string
-}): Promise<{ preapprovalId: string; initPoint: string }> {
+  primerCobro?: string | null
+  cardTokenId?: string | null
+}): Promise<{ preapprovalId: string; initPoint: string | null; status: string }> {
+  const autoRecurring: Record<string, unknown> = {
+    frequency:          1,
+    frequency_type:     'months',
+    transaction_amount: PLAN_SAAS.precio,
+    currency_id:        PLAN_SAAS.moneda,
+  }
+  // start_date solo si es una fecha futura (MP rechaza fechas pasadas)
+  if (params.primerCobro && params.primerCobro > hoyLima()) {
+    autoRecurring.start_date = `${params.primerCobro}T12:00:00.000-05:00`
+  }
+
+  const body: Record<string, unknown> = {
+    reason:             PLAN_SAAS.razon,
+    external_reference: params.ferreteriaId,
+    payer_email:        params.payerEmail,
+    auto_recurring:     autoRecurring,
+    back_url:           `${params.baseUrl}/suscripcion/gracias`,
+  }
+
+  if (params.cardTokenId) {
+    body.card_token_id = params.cardTokenId
+    body.status        = 'authorized'
+  } else {
+    body.status = 'pending'
+  }
+
   const data: MPPreapproval = await mpFetch('/preapproval', {
     method: 'POST',
-    body: JSON.stringify({
-      reason:             PLAN_SAAS.razon,
-      external_reference: params.ferreteriaId,
-      payer_email:        params.payerEmail,
-      auto_recurring: {
-        frequency:          1,
-        frequency_type:     'months',
-        transaction_amount: PLAN_SAAS.precio,
-        currency_id:        PLAN_SAAS.moneda,
-      },
-      back_url: `${params.baseUrl}/suscripcion/gracias`,
-      status:   'pending',
-    }),
+    body: JSON.stringify(body),
   })
 
-  if (!data.init_point) throw new Error('MP no devolvió init_point')
-  return { preapprovalId: data.id, initPoint: data.init_point }
+  if (!params.cardTokenId && !data.init_point) {
+    throw new Error('MP no devolvió init_point')
+  }
+  return { preapprovalId: data.id, initPoint: data.init_point ?? null, status: data.status }
+}
+
+/**
+ * Cancela la suscripción en MP. El webhook (o el sync inmediato del caller)
+ * se encarga de reflejar el estado en la BD.
+ */
+export async function cancelarPreapproval(preapprovalId: string): Promise<void> {
+  await mpFetch(`/preapproval/${preapprovalId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status: 'cancelled' }),
+  })
 }
 
 export async function obtenerPreapproval(id: string): Promise<MPPreapproval> {

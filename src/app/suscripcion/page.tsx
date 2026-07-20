@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import { getSessionInfo } from '@/lib/auth/roles'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { hoyLima } from '@/lib/suscripciones/mercadopago'
 import CheckoutSuscripcion from './CheckoutSuscripcion'
 
 export const metadata = {
@@ -23,6 +25,24 @@ export default async function SuscripcionPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  // Si el trial sigue vigente, el primer cobro se difiere al fin de la prueba
+  let primerCobroDiferido: string | null = null
+  if (session.estadoSuscripcion === 'trial') {
+    const admin = createAdminClient()
+    const { data: susc } = await admin
+      .from('suscripciones')
+      .select('ciclo_fin')
+      .eq('ferreteria_id', session.ferreteriaId)
+      .maybeSingle()
+    if (susc?.ciclo_fin && susc.ciclo_fin > hoyLima()) {
+      primerCobroDiferido = susc.ciclo_fin
+    }
+  }
+
+  // Acepta cualquiera de los dos nombres — no depende de cómo se subió a Vercel.
+  const mpPublicKey =
+    process.env.NEXT_PUBLIC_MP_PUBLIC_KEY ?? process.env.MP_PUBLIC_KEY ?? ''
+
   return (
     <CheckoutSuscripcion
       emailDefault={user?.email ?? ''}
@@ -30,6 +50,8 @@ export default async function SuscripcionPage() {
       esDueno={session.rol === 'dueno'}
       enTrial={session.estadoSuscripcion === 'trial' && session.suscripcionActiva}
       trialDiasRestantes={session.trialDiasRestantes ?? 0}
+      primerCobroDiferido={primerCobroDiferido}
+      mpPublicKey={mpPublicKey}
     />
   )
 }
