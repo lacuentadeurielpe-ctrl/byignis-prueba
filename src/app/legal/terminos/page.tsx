@@ -37,7 +37,7 @@ export default function TerminosPage() {
         <section>
           <h2 className="text-xl font-bold text-white mb-4">4. Pagos y Suscripciones</h2>
           <p className="mb-4">
-            El acceso a la plataforma requiere el pago de las tarifas vigentes (por ejemplo, el pago fijo de S/ 85). No existen contratos de permanencia a largo plazo, salvo que se estipule expresamente en una oferta particular. En caso de falta de pago, Uintegrus se reserva el derecho de suspender o cancelar el acceso a la cuenta.
+            El acceso a la plataforma requiere el pago de las tarifas vigentes (por ejemplo, el pago fijo de S/ 80). No existen contratos de permanencia a largo plazo, salvo que se estipule expresamente en una oferta particular. En caso de falta de pago, Uintegrus se reserva el derecho de suspender o cancelar el acceso a la cuenta.
           </p>
         </section>
 

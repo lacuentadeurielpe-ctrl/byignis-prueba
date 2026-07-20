@@ -28,7 +28,7 @@ export default function TrialBanner({
           href="/suscripcion"
           className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 font-semibold transition hover:bg-white/25"
         >
-          Suscribirme — S/ 85/mes
+          Suscribirme — S/ 80/mes
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       )}

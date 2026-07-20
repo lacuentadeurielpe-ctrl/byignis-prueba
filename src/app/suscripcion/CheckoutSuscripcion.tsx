@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Checkout embebido de la suscripción (S/ 85/mes).
+ * Checkout embebido de la suscripción (S/ 80/mes).
  *
  * La tarjeta se ingresa AQUÍ MISMO: los campos sensibles (número, vencimiento,
  * CVV) son iframes seguros del SDK de Mercado Pago — los datos viajan cifrados
@@ -82,7 +82,7 @@ export default function CheckoutSuscripcion({
         const mp = new MercadoPago(MP_PUBLIC_KEY, { locale: 'es-PE' })
 
         cardFormRef.current = mp.cardForm({
-          amount: '85',
+          amount: '80',
           iframe: true,
           form: {
             id: 'mp-form',
@@ -229,8 +229,8 @@ export default function CheckoutSuscripcion({
             <h1 className="text-2xl font-bold text-white">Plan Todo Incluido</h1>
             <p className="mt-1 text-sm text-zinc-400">{nombreNegocio}</p>
             <div className="mt-3 flex items-baseline justify-center gap-2">
-              <span className="text-xl font-bold text-zinc-500 line-through">S/ 150</span>
-              <span className="text-5xl font-extrabold text-white">S/ 85</span>
+              <span className="text-xl font-bold text-zinc-500 line-through">S/ 120</span>
+              <span className="text-5xl font-extrabold text-white">S/ 80</span>
               <span className="text-zinc-400">/mes</span>
             </div>
             {primerCobroDiferido ? (
@@ -347,7 +347,7 @@ export default function CheckoutSuscripcion({
                     ) : (
                       <>
                         <CreditCard className="h-5 w-5" />
-                        {primerCobroDiferido ? 'Autorizar suscripción' : 'Pagar S/ 85 y activar'}
+                        {primerCobroDiferido ? 'Autorizar suscripción' : 'Pagar S/ 80 y activar'}
                       </>
                     )}
                   </button>

@@ -46,7 +46,7 @@ export default async function GraciasPage({
       icono: <CheckCircle2 className="h-10 w-10 text-green-400" />,
       halo: 'bg-green-500/10 border-green-500/20',
       titulo: '¡Suscripción activada!',
-      texto: `${session.nombreFerreteria} ya tiene el Plan Todo Incluido. El cobro de S/ 85 se realizará automáticamente cada mes.`,
+      texto: `${session.nombreFerreteria} ya tiene el Plan Todo Incluido. El cobro de S/ 80 se realizará automáticamente cada mes.`,
     },
     pending: {
       icono: <Clock className="h-10 w-10 text-blue-400" />,

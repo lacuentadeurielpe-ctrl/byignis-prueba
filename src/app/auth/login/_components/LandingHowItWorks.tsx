@@ -8,7 +8,7 @@ export default function LandingHowItWorks() {
     {
       icon: <Rocket className="w-8 h-8 text-blue-950" />,
       title: "1. Crea tu cuenta",
-      desc: "Regístrate de forma segura, realiza tu pago de S/ 85 y accede al sistema al instante."
+      desc: "Regístrate de forma segura, realiza tu pago de S/ 80 y accede al sistema al instante."
     },
     {
       icon: <MonitorSmartphone className="w-8 h-8 text-blue-950" />,

@@ -63,7 +63,7 @@ export default function PaywallPage() {
             Activa tu suscripción
           </h1>
           <p className="text-zinc-400 text-center text-sm sm:text-base mb-8 leading-relaxed">
-            Tu periodo de acceso terminó. Suscríbete por S/ 85 al mes y recupera tu panel al instante — el pago es automático y puedes cancelar cuando quieras.
+            Tu periodo de acceso terminó. Suscríbete por S/ 80 al mes y recupera tu panel al instante — el pago es automático y puedes cancelar cuando quieras.
           </p>
 
           <div className="space-y-4 mb-8 bg-black/30 rounded-2xl p-5 border border-white/5">
@@ -86,7 +86,7 @@ export default function PaywallPage() {
               href="/suscripcion"
               className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-bold py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] hover:-translate-y-0.5"
             >
-              Suscribirme con Mercado Pago — S/ 85/mes
+              Suscribirme con Mercado Pago — S/ 80/mes
             </a>
             
             <button

@@ -12,7 +12,7 @@ export const metadata = {
 export const dynamic = 'force-dynamic'
 
 /**
- * Página de pago de la suscripción SaaS (S/ 85/mes, plan único).
+ * Página de pago de la suscripción SaaS (S/ 80/mes, plan único).
  * Requiere sesión (el proxy redirige a login si no la hay).
  */
 export default async function SuscripcionPage() {

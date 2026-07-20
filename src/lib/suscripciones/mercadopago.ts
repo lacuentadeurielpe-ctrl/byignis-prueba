@@ -1,7 +1,7 @@
 /**
  * Suscripciones SaaS con Mercado Pago (Preapproval).
  *
- * Uintegrus cobra S/ 85/mes a cada negocio usando la cuenta MP propia
+ * Uintegrus cobra S/ 80/mes a cada negocio usando la cuenta MP propia
  * (MP_ACCESS_TOKEN). No confundir con src/lib/mercadopago.ts, que es el
  * OAuth por tenant para que cada negocio cobre a SUS clientes (futuro).
  *
@@ -25,7 +25,7 @@ const MP_API = 'https://api.mercadopago.com'
 
 export const PLAN_SAAS = {
   nombre:  'Todo Incluido',
-  precio:  85,
+  precio:  80,
   moneda:  'PEN',
   razon:   'Uintegrus — Plan Todo Incluido',
 } as const

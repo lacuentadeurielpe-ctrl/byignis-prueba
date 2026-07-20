@@ -45,8 +45,8 @@ export default function LandingPricing() {
           <div className="text-center mb-8 border-b border-white/10 pb-8">
             <h3 className="text-2xl text-zinc-400 font-medium mb-2">Plan Todo Incluido</h3>
             <div className="flex items-baseline justify-center gap-2">
-              <span className="text-3xl font-bold text-zinc-500 line-through">S/ 150</span>
-              <span className="text-6xl font-extrabold text-white">S/ 85</span>
+              <span className="text-3xl font-bold text-zinc-500 line-through">S/ 120</span>
+              <span className="text-6xl font-extrabold text-white">S/ 80</span>
             </div>
             <p className="text-blue-400 font-medium mt-2">Pago fijo mensual sin comisiones ocultas</p>
           </div>
@@ -69,7 +69,7 @@ export default function LandingPricing() {
             Empezar prueba gratis de 3 días
             <ArrowRight className="w-6 h-6" />
           </a>
-          <p className="text-center text-zinc-500 text-sm mt-4">Sin tarjeta para probar. Luego S/ 85/mes con Mercado Pago.</p>
+          <p className="text-center text-zinc-500 text-sm mt-4">Sin tarjeta para probar. Luego S/ 80/mes con Mercado Pago.</p>
         </motion.div>
       </div>
     </section>
