@@ -10,7 +10,6 @@ function VideoPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
-  const [isLoaded, setIsLoaded] = useState(false)
   const [progress, setProgress] = useState(0)
   const [showOverlay, setShowOverlay] = useState(true)
 
@@ -85,6 +84,7 @@ function VideoPlayer() {
       onClick={handlePlayPause}
     >
       {/* ── Video real (hero-video.mp4 en /public) ── */}
+      {/* El poster= ya muestra el thumbnail mientras carga — no necesitamos nada más */}
       <video
         ref={videoRef}
         src="https://copncsicoevhliaoxfpj.supabase.co/storage/v1/object/public/media/landing/hero-video.mp4"
@@ -93,20 +93,9 @@ function VideoPlayer() {
         playsInline
         loop
         preload="metadata"
-        onLoadedData={() => setIsLoaded(true)}
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+        className="absolute inset-0 w-full h-full object-cover"
         style={{ willChange: 'transform' }}
       />
-
-      {/* ── Thumbnail / poster mientras carga ── */}
-      {!isLoaded && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src="https://copncsicoevhliaoxfpj.supabase.co/storage/v1/object/public/media/landing/hero-thumbnail.jpg"
-          alt="Vista previa - Mira cómo funciona Uintegrus"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      )}
 
       {/* ── Gradiente inferior ── */}
       <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/10 to-transparent z-10 pointer-events-none" />
