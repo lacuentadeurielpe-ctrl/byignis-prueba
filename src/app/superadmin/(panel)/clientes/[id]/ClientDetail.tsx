@@ -3,15 +3,19 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { 
-  ArrowLeft, 
-  Store, 
-  Database, 
-  TrendingUp, 
-  DollarSign, 
+import {
+  ArrowLeft,
+  Store,
+  Database,
+  TrendingUp,
+  DollarSign,
   ShoppingCart,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  Gift,
+  RefreshCw,
+  XCircle,
+  Loader2
 } from 'lucide-react'
 import dayjs from 'dayjs'
 
@@ -32,8 +36,21 @@ interface ClientDetailProps {
       id?: string
       estado: string
       creadoEn?: string
+      cicloFin?: string | null
+      trialOtorgadoPor?: string | null
+      trialOtorgadoAt?: string | null
+      trialRenovaciones?: number
     }
   }
+}
+
+/** Días que faltan para una fecha YYYY-MM-DD (0 o negativo = vencida). */
+function diasRestantes(cicloFin?: string | null): number | null {
+  if (!cicloFin) return null
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
+  return Math.ceil(
+    (new Date(cicloFin).getTime() - new Date(hoy).getTime()) / 86_400_000
+  )
 }
 
 export default function ClientDetail({ data }: ClientDetailProps) {
@@ -41,6 +58,32 @@ export default function ClientDetail({ data }: ClientDetailProps) {
   const [estadoSuscripcion, setEstadoSuscripcion] = useState(data.suscripcion.estado)
   const [isSaving, setIsSaving] = useState(false)
   const [toast, setToast] = useState(false)
+  const [trialCargando, setTrialCargando] = useState<null | 'activar' | 'renovar' | 'desactivar'>(null)
+
+  const enTrial   = data.suscripcion.estado === 'trial'
+  const diasTrial = enTrial ? diasRestantes(data.suscripcion.cicloFin) : null
+
+  const accionTrial = async (accion: 'activar' | 'renovar' | 'desactivar') => {
+    setTrialCargando(accion)
+    try {
+      const res = await fetch(`/api/superadmin/tenants/${data.id}/trial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error ?? 'Error')
+      }
+      setToast(true)
+      setTimeout(() => setToast(false), 3000)
+      router.refresh()
+    } catch {
+      alert('No se pudo actualizar la prueba gratuita')
+    } finally {
+      setTrialCargando(null)
+    }
+  }
 
   useEffect(() => {
     setEstadoSuscripcion(data.suscripcion.estado)
@@ -177,6 +220,84 @@ export default function ClientDetail({ data }: ClientDetailProps) {
                 <CheckCircle2 className="w-4 h-4" /> Guardado correctamente
               </div>
             )}
+
+            {/* ── Prueba gratuita (cortesía otorgada por el superadmin) ── */}
+            <div className="border-t border-gray-800 pt-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Gift className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-medium text-white">Prueba gratuita</h3>
+              </div>
+
+              {enTrial ? (
+                <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
+                  <p className="text-sm font-semibold text-amber-300">
+                    {diasTrial !== null && diasTrial > 0
+                      ? `Activa — ${diasTrial} ${diasTrial === 1 ? 'día restante' : 'días restantes'}`
+                      : 'Vencida'}
+                  </p>
+                  {data.suscripcion.cicloFin && (
+                    <p className="text-xs text-amber-400/70 mt-0.5">
+                      Vence el {dayjs(data.suscripcion.cicloFin).format('DD/MM/YYYY')}
+                    </p>
+                  )}
+                  {(data.suscripcion.trialRenovaciones ?? 0) > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Renovada {data.suscripcion.trialRenovaciones} {data.suscripcion.trialRenovaciones === 1 ? 'vez' : 'veces'}
+                    </p>
+                  )}
+                  {data.suscripcion.trialOtorgadoPor && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Otorgada por {data.suscripcion.trialOtorgadoPor}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500 mb-4">
+                  Este cliente no tiene prueba activa. Al activarla tendrá 3 días de
+                  acceso completo sin pagar.
+                </p>
+              )}
+
+              <div className="space-y-2">
+                {!enTrial && (
+                  <button
+                    onClick={() => accionTrial('activar')}
+                    disabled={trialCargando !== null}
+                    className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    {trialCargando === 'activar'
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Gift className="w-4 h-4" />}
+                    Activar prueba de 3 días
+                  </button>
+                )}
+
+                {enTrial && (
+                  <>
+                    <button
+                      onClick={() => accionTrial('renovar')}
+                      disabled={trialCargando !== null}
+                      className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                    >
+                      {trialCargando === 'renovar'
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <RefreshCw className="w-4 h-4" />}
+                      Renovar 3 días más
+                    </button>
+                    <button
+                      onClick={() => accionTrial('desactivar')}
+                      disabled={trialCargando !== null}
+                      className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors border border-gray-700"
+                    >
+                      {trialCargando === 'desactivar'
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <XCircle className="w-4 h-4" />}
+                      Desactivar prueba
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
           
           <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl space-y-2">

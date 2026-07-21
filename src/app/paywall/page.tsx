@@ -63,7 +63,7 @@ export default function PaywallPage() {
             Activa tu suscripción
           </h1>
           <p className="text-zinc-400 text-center text-sm sm:text-base mb-8 leading-relaxed">
-            Tu periodo de acceso terminó. Suscríbete por S/ 80 al mes y recupera tu panel al instante — el pago es automático y puedes cancelar cuando quieras.
+            Suscríbete por S/ 80 al mes y accede a tu panel al instante — el pago es automático y puedes cancelar cuando quieras.
           </p>
 
           <div className="space-y-4 mb-8 bg-black/30 rounded-2xl p-5 border border-white/5">

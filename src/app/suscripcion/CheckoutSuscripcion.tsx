@@ -236,8 +236,8 @@ export default function CheckoutSuscripcion({
             {primerCobroDiferido ? (
               <p className="mx-auto mt-3 max-w-sm rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-2 text-xs text-green-300">
                 Tus días de prueba se respetan: autorizas hoy y el primer cobro será
-                recién el <strong>{formatearFecha(primerCobroDiferido)}</strong>, cubriendo
-                los siguientes 30 días.
+                recién el <strong>{formatearFecha(primerCobroDiferido)}</strong>. Desde
+                ahí se cobra una vez al mes.
               </p>
             ) : (
               <p className="mt-2 text-sm font-medium text-blue-400">

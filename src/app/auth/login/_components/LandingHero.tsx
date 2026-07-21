@@ -202,7 +202,7 @@ export default function LandingHero() {
           href="/auth/register"
           className="w-full sm:w-auto flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-[0_0_30px_rgba(59,130,246,0.2)] hover:shadow-[0_0_50px_rgba(59,130,246,0.4)] hover:-translate-y-1 text-lg"
         >
-          Probar gratis 3 días
+          Empezar por S/ 80 al mes
           <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
         </a>
         <a

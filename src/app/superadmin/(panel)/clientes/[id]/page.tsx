@@ -21,7 +21,7 @@ export default async function ClientDetailPage({
   // 1. Obtener info de la ferreteria
   const { data: ferreteria } = await supabase
     .from('ferreterias')
-    .select('id, nombre, email, telefono_whatsapp, created_at, owner_id, suscripciones(id, estado, plan_id, created_at)')
+    .select('id, nombre, email, telefono_whatsapp, created_at, owner_id, suscripciones(id, estado, plan_id, created_at, ciclo_fin, trial_otorgado_por, trial_otorgado_at, trial_renovaciones)')
     .eq('id', id)
     .single()
 
@@ -87,7 +87,11 @@ export default async function ClientDetailPage({
     suscripcion: {
       id: suscripcion?.id,
       estado: suscripcion?.estado || 'suspendido',
-      creadoEn: suscripcion?.created_at
+      creadoEn: suscripcion?.created_at,
+      cicloFin: suscripcion?.ciclo_fin ?? null,
+      trialOtorgadoPor: suscripcion?.trial_otorgado_por ?? null,
+      trialOtorgadoAt: suscripcion?.trial_otorgado_at ?? null,
+      trialRenovaciones: suscripcion?.trial_renovaciones ?? 0,
     }
   }
 

@@ -175,8 +175,8 @@ export default function PanelSuscripcion({
                 {primerCobroDiferido && (
                   <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
                     Tus días de prueba se respetan: si pagas hoy, el primer cobro será
-                    recién el <strong>{formatearFecha(primerCobroDiferido)}</strong> y cubrirá
-                    los siguientes 30 días.
+                    recién el <strong>{formatearFecha(primerCobroDiferido)}</strong> y desde
+                    ahí se cobra una vez al mes.
                   </p>
                 )}
               </>

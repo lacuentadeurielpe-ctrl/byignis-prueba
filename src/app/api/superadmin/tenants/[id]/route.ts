@@ -14,19 +14,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   
   const admin = createAdminClient()
 
-  let nuevoEstado = estadoSuscripcion // activo, suspendido, trial
+  const nuevoEstado = estadoSuscripcion // activo, suspendido, trial
   let cicloFin: string | null = null
 
   if (estadoSuscripcion === 'activo') {
     cicloFin = '2099-12-31' // Plan vitalicio/pro
+  } else if (estadoSuscripcion === 'trial') {
+    // El trial dura 3 días desde hoy (Lima). Sin esto heredaba el ciclo_fin
+    // anterior — por ejemplo 2099-12-31 — creando pruebas de décadas.
+    const lima = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Lima' }))
+    lima.setDate(lima.getDate() + 3)
+    cicloFin = lima.toLocaleDateString('en-CA')
   }
 
   // Primero intentamos actualizar
   const { data, error: updateError } = await admin
     .from('suscripciones')
-    .update({ 
-      estado: nuevoEstado, 
-      ...(cicloFin ? { ciclo_fin: cicloFin } : {}) 
+    .update({
+      estado: nuevoEstado,
+      ...(cicloFin ? { ciclo_fin: cicloFin } : {}),
     })
     .eq('ferreteria_id', id)
     .select()
