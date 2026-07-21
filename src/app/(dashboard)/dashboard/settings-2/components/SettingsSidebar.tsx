@@ -12,6 +12,8 @@ interface NavItem {
   icon: React.ReactNode
   status?: 'completo' | 'incompleto' | 'alerta'
   count?: string | number
+  /** Oculta el item del menú sin eliminar su ruta ni su página (sigue accesible por URL). */
+  hidden?: boolean
 }
 
 const BASE = '/dashboard/settings-2'
@@ -46,6 +48,7 @@ const SECTIONS: NavItem[] = [
     href: `${BASE}/bot`,
     icon: <Bot className="w-5 h-5" />,
     status: 'completo',
+    hidden: true, // oculto del menú; la ruta /settings-2/bot sigue funcionando
   },
   {
     id: 'catalogo',
@@ -60,6 +63,7 @@ const SECTIONS: NavItem[] = [
     href: `${BASE}/delivery`,
     icon: <Truck className="w-5 h-5" />,
     status: 'completo',
+    hidden: true, // oculto del menú; la ruta /settings-2/delivery sigue funcionando
   },
   {
     id: 'avanzado',
@@ -85,6 +89,9 @@ const STATUS_COLOR = {
 export default function SettingsSidebar() {
   const pathname = usePathname()
 
+  // Solo los items visibles (los marcados hidden se omiten del menú).
+  const visibleSections = SECTIONS.filter(item => !item.hidden)
+
   return (
     <nav className="w-full md:w-64 shrink-0 bg-white border-b md:border-b-0 md:border-r border-zinc-200 overflow-x-auto md:overflow-y-auto flex flex-row md:flex-col no-scrollbar">
       {/* Header */}
@@ -98,7 +105,7 @@ export default function SettingsSidebar() {
 
       {/* Navigation Items */}
       <div className="flex flex-row md:flex-col flex-1 px-3 py-3 md:py-4 gap-2 md:gap-0 md:space-y-1 min-w-max md:min-w-0">
-        {SECTIONS.map(item => {
+        {visibleSections.map(item => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
           const statusColorMap = {
             completo: 'text-emerald-600',
@@ -141,7 +148,7 @@ export default function SettingsSidebar() {
       {/* Footer */}
       <div className="hidden md:block border-t border-zinc-200 p-4 mt-auto">
         <p className="text-xs text-zinc-500 text-center">
-          ✓ {SECTIONS.filter(s => s.status === 'completo').length}/8 completados
+          ✓ {visibleSections.filter(s => s.status === 'completo').length}/{visibleSections.length} completados
         </p>
       </div>
     </nav>
