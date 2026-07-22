@@ -14,8 +14,13 @@ export default async function DashboardLayout({
 }) {
   const session = await getSessionInfo()
 
-  // Sin sesión → login
-  if (!session) redirect('/auth/login')
+  // El proxy ya garantiza sesión válida para llegar hasta acá (rutas de
+  // /dashboard no son públicas). Si getSessionInfo() da null aquí, solo
+  // puede ser porque el usuario está autenticado pero aún no completó el
+  // onboarding (no existe su fila en ferreterias/miembros_ferreteria) —
+  // mandarlo a /auth/login en ese caso creaba un bucle infinito con este
+  // mismo layout (login → autenticado → /dashboard → sin sesión → login…).
+  if (!session) redirect('/onboarding')
 
   // Dueño que no completó onboarding → onboarding
   if (session.rol === 'dueno' && !session.onboardingCompleto) {

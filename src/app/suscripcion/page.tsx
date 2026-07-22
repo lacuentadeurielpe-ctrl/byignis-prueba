@@ -17,7 +17,9 @@ export const dynamic = 'force-dynamic'
  */
 export default async function SuscripcionPage() {
   const session = await getSessionInfo()
-  if (!session) redirect('/auth/login')
+  // Ver comentario equivalente en (dashboard)/layout.tsx: el proxy ya
+  // garantiza sesión válida acá — null significa onboarding incompleto.
+  if (!session) redirect('/onboarding')
 
   // Ya está pagando o es vitalicio → no hay nada que hacer aquí
   if (session.estadoSuscripcion === 'activo') redirect('/dashboard')

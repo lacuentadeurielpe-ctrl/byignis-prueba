@@ -24,7 +24,9 @@ export default async function GraciasPage({
   searchParams: Promise<{ preapproval_id?: string }>
 }) {
   const session = await getSessionInfo()
-  if (!session) redirect('/auth/login')
+  // Ver comentario equivalente en (dashboard)/layout.tsx: el proxy ya
+  // garantiza sesión válida acá — null significa onboarding incompleto.
+  if (!session) redirect('/onboarding')
 
   const { preapproval_id: preapprovalId } = await searchParams
 

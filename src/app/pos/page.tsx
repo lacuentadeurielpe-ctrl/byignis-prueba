@@ -12,7 +12,9 @@ export const metadata = {
 
 export default async function POSPage() {
   const session = await getSessionInfo()
-  if (!session) redirect('/auth/login')
+  // Ver comentario equivalente en (dashboard)/layout.tsx: el proxy ya
+  // garantiza sesión válida acá — null significa onboarding incompleto.
+  if (!session) redirect('/onboarding')
 
   if (session.rol === 'dueno' && !session.onboardingCompleto) {
     redirect('/onboarding')
