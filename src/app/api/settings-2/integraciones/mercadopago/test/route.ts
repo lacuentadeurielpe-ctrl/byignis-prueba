@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { getAccessTokenTenantMP } from '@/lib/integrations/mercadopago-tenant'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,16 +10,18 @@ export async function POST() {
   if (!session || session.rol !== 'dueno') return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
   const supabase = await createClient()
-  const { data: row } = await supabase
-    .from('integraciones_conectadas')
-    .select('metadata')
-    .eq('ferreteria_id', session.ferreteriaId)
-    .eq('tipo', 'mercadopago')
-    .eq('estado', 'conectado')
-    .maybeSingle()
+  const { token: accessToken, motivo } = await getAccessTokenTenantMP(supabase, session.ferreteriaId)
 
-  const accessToken = row?.metadata?.access_token
-  if (!accessToken) return NextResponse.json({ error: 'MercadoPago no configurado' }, { status: 400 })
+  if (!accessToken) {
+    return NextResponse.json(
+      {
+        error: motivo === 'error_descifrado'
+          ? 'No pudimos leer las credenciales guardadas. Vuelve a conectar tu cuenta de Mercado Pago.'
+          : 'MercadoPago no configurado',
+      },
+      { status: 400 },
+    )
+  }
 
   try {
     const res = await fetch('https://api.mercadopago.com/v1/account/bank_report/config', {

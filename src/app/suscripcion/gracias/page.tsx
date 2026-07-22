@@ -6,6 +6,7 @@ import {
   sincronizarPreapproval,
   suscripcionesMPConfigurado,
 } from '@/lib/suscripciones/mercadopago'
+import AutoRefrescar from './AutoRefrescar'
 
 export const metadata = {
   title: 'Confirmación de suscripción | Uintegrus',
@@ -101,6 +102,10 @@ export default async function GraciasPage({
               <ArrowRight className="h-5 w-5" />
             </Link>
           )}
+
+          {/* Mientras MP valida, la página se refresca sola y muestra la
+              confirmación apenas se autorice. */}
+          <AutoRefrescar activo={status === 'pending'} />
         </div>
       </div>
     </div>

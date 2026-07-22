@@ -75,6 +75,64 @@ export class MPError extends Error {
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
+ * Traduce el rechazo de MP a algo que el cliente pueda accionar.
+ *
+ * MP devuelve códigos precisos (`cc_rejected_*`) y mostrarle a todos
+ * "revisa tu tarjeta" hace que culpen a su banco cuando el problema puede
+ * ser un CVV mal tipeado. Cada mensaje dice QUÉ corregir.
+ */
+export function mensajeErrorMP(err: unknown): string {
+  const generico = 'No pudimos procesar el pago. Inténtalo de nuevo o escríbenos por WhatsApp.'
+  if (!(err instanceof MPError)) return generico
+
+  const texto = `${err.message} ${err.body}`.toLowerCase()
+
+  // El correo del pagador no puede ser el de la cuenta que cobra
+  if (
+    (texto.includes('payer') && texto.includes('collector')) ||
+    texto.includes('cannot_be_the_same') ||
+    texto.includes('same user')
+  ) {
+    return 'Ese correo pertenece a la cuenta que cobra. Usa el correo de tu cuenta personal.'
+  }
+
+  const porCodigo: Array<[string, string]> = [
+    ['cc_rejected_bad_filled_card_number', 'El número de tarjeta es incorrecto. Revísalo e intenta de nuevo.'],
+    ['cc_rejected_bad_filled_security_code', 'El código de seguridad (CVV) es incorrecto.'],
+    ['cc_rejected_bad_filled_date',         'La fecha de vencimiento es incorrecta.'],
+    ['cc_rejected_bad_filled_other',        'Hay un dato incorrecto en la tarjeta. Revisa todos los campos.'],
+    ['cc_rejected_insufficient_amount',     'Tu tarjeta no tiene fondos suficientes. Intenta con otra.'],
+    ['cc_rejected_high_risk',               'Tu banco rechazó el pago por seguridad. Llámalos o usa otra tarjeta.'],
+    ['cc_rejected_max_attempts',            'Demasiados intentos con esta tarjeta. Espera un momento o usa otra.'],
+    ['cc_rejected_call_for_authorize',      'Tu banco necesita que autorices este pago. Llámalos y vuelve a intentar.'],
+    ['cc_rejected_card_disabled',           'Tu tarjeta está inhabilitada para compras por internet. Actívala con tu banco.'],
+    ['cc_rejected_duplicated_payment',      'Ya registramos un pago igual hace un momento. Revisa tu suscripción antes de reintentar.'],
+    ['cc_rejected_card_error',              'Hubo un problema con la tarjeta. Intenta de nuevo o usa otra.'],
+    ['cc_rejected_invalid_installments',    'Esa tarjeta no admite esta modalidad de pago. Usa otra.'],
+    ['cc_rejected_blacklist',               'Tu banco rechazó el pago. Comunícate con ellos o usa otra tarjeta.'],
+    ['invalid card_token_id',               'Los datos de la tarjeta expiraron. Vuelve a ingresarlos.'],
+    ['invalid_card_token',                  'Los datos de la tarjeta expiraron. Vuelve a ingresarlos.'],
+  ]
+
+  for (const [codigo, mensaje] of porCodigo) {
+    if (texto.includes(codigo)) return mensaje
+  }
+
+  // Sin conexión con MP tras los reintentos
+  if (err.status === null) {
+    return 'No pudimos conectar con Mercado Pago. Revisa tu internet e inténtalo en unos segundos.'
+  }
+  if (err.status >= 500) {
+    return 'Mercado Pago está presentando problemas en este momento. Inténtalo en unos minutos.'
+  }
+  if (err.status === 401 || err.status === 403) {
+    return 'El cobro en línea no está disponible por el momento. Escríbenos por WhatsApp.'
+  }
+
+  return generico
+}
+
+/**
  * Llama a la API de MP con timeout y reintentos.
  *
  * Solo reintenta lo que es seguro reintentar: fallas de red, timeouts y 5xx
@@ -357,6 +415,19 @@ export async function sincronizarPreapproval(
   if (!ferreteriaId) return { status: pre.status, ferreteriaId: null }
 
   if (pre.status === 'authorized') {
+    // El monto autorizado debe coincidir con el plan. Si no coincide se avisa
+    // pero no se bloquea el acceso: el cliente ya autorizó y dejarlo afuera
+    // por una diferencia de precio (ej. tras un cambio de tarifa) sería peor.
+    const monto = pre.auto_recurring?.transaction_amount
+    if (monto != null && Math.abs(monto - PLAN_SAAS.precio) > 0.01) {
+      console.warn('[MP] monto distinto al plan', {
+        preapproval: pre.id,
+        ferreteriaId,
+        montoAutorizado: monto,
+        montoEsperado: PLAN_SAAS.precio,
+      })
+    }
+
     const proximoCobro = pre.next_payment_date?.slice(0, 10) ?? null
     await upsertSuscripcion(ferreteriaId, {
       estado:            'activo',

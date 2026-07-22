@@ -14,6 +14,7 @@ import {
   sincronizarPreapproval,
   limpiarPreapprovalPrevio,
   suscripcionesMPConfigurado,
+  mensajeErrorMP,
   hoyLima,
 } from '@/lib/suscripciones/mercadopago'
 
@@ -129,23 +130,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: initPoint })
   } catch (err) {
     console.error('[suscripcion/checkout]', err)
-    const msg = err instanceof Error ? err.message : ''
-    // MP rechaza el checkout si el email pertenece a la misma cuenta que cobra
-    if (msg.includes('payer') && msg.includes('collector')) {
-      return NextResponse.json(
-        { error: 'Ese correo pertenece a la cuenta que cobra. Usa otro correo.' },
-        { status: 400 }
-      )
-    }
-    if (cardTokenId) {
-      return NextResponse.json(
-        { error: 'Tu tarjeta fue rechazada. Verifica los datos, que tenga saldo, o intenta con otra tarjeta.' },
-        { status: 400 }
-      )
-    }
-    return NextResponse.json(
-      { error: 'No pudimos iniciar el pago. Inténtalo de nuevo o escríbenos por WhatsApp.' },
-      { status: 502 }
-    )
+    // Mensaje según el código real de MP (CVV errado, sin fondos, etc.) en
+    // vez de culpar siempre a la tarjeta del cliente.
+    return NextResponse.json({ error: mensajeErrorMP(err) }, { status: 400 })
   }
 }

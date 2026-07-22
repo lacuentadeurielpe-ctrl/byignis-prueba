@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
+import { encriptar } from '@/lib/encryption'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json(data || { estado: 'desconectado' })
+    if (!data) return NextResponse.json({ estado: 'desconectado' })
+
+    // Nunca devolver credenciales al navegador — solo lo necesario para la UI
+    const meta = (data.metadata ?? {}) as Record<string, unknown>
+    return NextResponse.json({
+      ...data,
+      metadata: {
+        public_key: meta.public_key ?? null,
+        user_id:    meta.user_id ?? null,
+        email:      meta.email ?? null,
+        // Solo se informa que existe, jamás su valor
+        tiene_access_token: !!(meta.access_token_enc ?? meta.access_token),
+      },
+    })
   } catch (err) {
     console.error('Error in GET /api/settings-2/integraciones/mercadopago:', err)
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })
@@ -52,6 +66,10 @@ export async function POST(request: Request) {
 
     const integrationId = existing?.id || crypto.randomUUID()
 
+    // El access token es una credencial de cobro: se guarda cifrado
+    // (AES-256-GCM), igual que YCloud, Meta y SUNAT. Antes iba en texto plano.
+    const accessTokenEnc = await encriptar(String(body.access_token).trim())
+
     const { data, error } = await supabase
       .from('integraciones_conectadas')
       .upsert(
@@ -62,7 +80,7 @@ export async function POST(request: Request) {
           estado: 'conectado',
           conectado_at: new Date().toISOString(),
           metadata: {
-            access_token: body.access_token,
+            access_token_enc: accessTokenEnc,
             public_key: body.public_key || null,
             user_id: body.user_id || null,
             email: body.email || null,
@@ -86,7 +104,11 @@ export async function POST(request: Request) {
       usuario_id: session.userId,
     })
 
-    return NextResponse.json(data)
+    // Sin credenciales en la respuesta
+    return NextResponse.json({
+      ...data,
+      metadata: { public_key: body.public_key || null, email: body.email || null, tiene_access_token: true },
+    })
   } catch (err) {
     console.error('Error in POST /api/settings-2/integraciones/mercadopago:', err)
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })

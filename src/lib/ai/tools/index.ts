@@ -17,6 +17,7 @@ import { consultarRuc, validarFormatoRuc } from '@/lib/sunat/ruc'
 import type { WASender } from '@/lib/whatsapp/types'
 import { enviarMensajeTelegram } from '@/lib/integrations/telegram'
 import { enviarEmail } from '@/lib/integrations/resend'
+import { getAccessTokenTenantMP } from '@/lib/integrations/mercadopago-tenant'
 import { getValidAccessToken } from '@/lib/integrations/google'
 import { enviarEmailGmail } from '@/lib/integrations/gmail'
 import { crearEventoCalendario, listarEventosHoy } from '@/lib/integrations/gcalendar'
@@ -2298,19 +2299,12 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
 
     if (!montoSoles || montoSoles <= 0) return { ok: false, error: 'monto_soles inválido' }
 
-    const { data: integ } = await ctx.supabase
-      .from('integraciones_conectadas')
-      .select('metadata, estado')
-      .eq('ferreteria_id', ctx.ferreteriaId)
-      .eq('tipo', 'mercadopago')
-      .single()
-
-    if (!integ || integ.estado !== 'conectado') {
-      return { ok: false, error: 'MercadoPago no conectado', motivo: 'sin_integracion' }
+    const { token: accessToken, motivo } = await getAccessTokenTenantMP(ctx.supabase, ctx.ferreteriaId)
+    if (!accessToken) {
+      return motivo === 'sin_integracion'
+        ? { ok: false, error: 'MercadoPago no conectado', motivo: 'sin_integracion' }
+        : { ok: false, error: 'Access token de MercadoPago no disponible' }
     }
-
-    const accessToken = (integ.metadata as any)?.access_token as string | null
-    if (!accessToken) return { ok: false, error: 'Access token de MercadoPago no disponible' }
 
     const { data: ferr } = await ctx.supabase
       .from('ferreterias')
@@ -2694,19 +2688,12 @@ export const TOOL_EXECUTORS: Record<string, Executor> = {
     const preferenceId = (args.preference_id as string | undefined)?.trim()
     if (!preferenceId) return { ok: false, error: 'preference_id es requerido' }
 
-    const { data: integ } = await ctx.supabase
-      .from('integraciones_conectadas')
-      .select('metadata, estado')
-      .eq('ferreteria_id', ctx.ferreteriaId)
-      .eq('tipo', 'mercadopago')
-      .single()
-
-    if (!integ || integ.estado !== 'conectado') {
-      return { ok: false, error: 'MercadoPago no conectado', motivo: 'sin_integracion' }
+    const { token: accessToken, motivo } = await getAccessTokenTenantMP(ctx.supabase, ctx.ferreteriaId)
+    if (!accessToken) {
+      return motivo === 'sin_integracion'
+        ? { ok: false, error: 'MercadoPago no conectado', motivo: 'sin_integracion' }
+        : { ok: false, error: 'Token MP no disponible' }
     }
-
-    const accessToken = (integ.metadata as any)?.access_token as string | null
-    if (!accessToken) return { ok: false, error: 'Token MP no disponible' }
 
     const res = await fetch(
       `https://api.mercadopago.com/checkout/preferences/${preferenceId}`,
