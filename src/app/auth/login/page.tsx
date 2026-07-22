@@ -6,7 +6,7 @@ import LandingHero from './_components/LandingHero'
 import LandingAgitation from './_components/LandingAgitation'
 import LandingFeatures from './_components/LandingFeatures'
 import LandingHowItWorks from './_components/LandingHowItWorks'
-import LandingTestimonials from './_components/LandingTestimonials'
+import LandingGuarantees from './_components/LandingGuarantees'
 import LandingPricing from './_components/LandingPricing'
 import LandingFAQ from './_components/LandingFAQ'
 import LoginForm from './_components/LoginForm'
@@ -42,7 +42,7 @@ export default function LoginPage() {
       <LandingAgitation />
       <LandingHowItWorks />
       <LandingFeatures />
-      <LandingTestimonials />
+      <LandingGuarantees />
       <LandingPricing />
       <LandingFAQ />
 

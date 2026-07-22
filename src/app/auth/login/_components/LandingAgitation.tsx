@@ -7,18 +7,18 @@ export default function LandingAgitation() {
   const problems = [
     {
       icon: <TrendingDown className="w-8 h-8 text-rose-500" />,
-      title: "Descontrol de Inventario",
-      desc: "¿Cuántas veces has dicho 'creo que sí hay' y luego pierdes la venta porque no encontraste el producto?"
+      title: "Ventas que se escapan",
+      desc: "Un cliente pregunta por WhatsApp y le respondes horas después. O dices 'creo que sí tengo' y terminas perdiendo la venta."
     },
     {
       icon: <Clock className="w-8 h-8 text-rose-500" />,
-      title: "Horas Perdidas",
-      desc: "Hacer facturas, boletas y cuadrar la caja a mano te roba tiempo valioso que deberías dedicar a vender más o a tu familia."
+      title: "Horas perdidas en papeleo",
+      desc: "Hacer boletas y facturas a mano, cuadrar la caja, pasar todo a Excel. Tiempo que deberías dedicar a vender o a tu familia."
     },
     {
       icon: <AlertCircle className="w-8 h-8 text-rose-500" />,
-      title: "Cero Supervisión",
-      desc: "Si no estás en la tienda, no sabes qué pasa. No hay control real sobre lo que venden tus empleados."
+      title: "No sabes qué pasa cuando no estás",
+      desc: "Cuánto se vendió hoy, quién atendió, cuánto quedó en caja. Si no estás presente, trabajas a ciegas."
     }
   ]
 

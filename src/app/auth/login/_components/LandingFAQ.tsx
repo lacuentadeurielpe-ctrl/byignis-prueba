@@ -6,6 +6,10 @@ import { ChevronDown } from 'lucide-react'
 
 const faqs = [
   {
+    question: "¿Funciona para mi tipo de negocio?",
+    answer: "Sí. Uintegrus no es solo para un rubro: lo usan tiendas de ropa, minimarkets, ferreterías, distribuidoras y negocios de servicios. Si vendes productos, usarás el inventario y el catálogo; si vendes servicios, usarás cotizaciones, clientes y facturación. Todo se configura según tu negocio."
+  },
+  {
     question: "¿Necesito conocimientos técnicos para usarlo?",
     answer: "No, para nada. El sistema está diseñado específicamente para dueños de negocios, no para informáticos. Es tan fácil de usar como WhatsApp."
   },
@@ -20,6 +24,10 @@ const faqs = [
   {
     question: "¿Qué pasa si tengo dudas al usarlo?",
     answer: "Tendrás acceso a nuestro soporte técnico por WhatsApp. Te ayudaremos con cualquier duda que tengas para que le saques el máximo provecho."
+  },
+  {
+    question: "¿Cómo es el pago y qué pasa si quiero cancelar?",
+    answer: "Son S/ 80 al mes con Mercado Pago, cobrados automáticamente cada mes. No hay costo de instalación ni comisiones por venta. Puedes cancelar desde tu propio panel cuando quieras y no se te vuelve a cobrar."
   }
 ]
 

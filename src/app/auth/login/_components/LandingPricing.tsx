@@ -9,7 +9,7 @@ export default function LandingPricing() {
     "Tienda online para pedidos por WhatsApp",
     "Gestión de inventario en tiempo real",
     "Control de múltiples sucursales",
-    "Perfiles para cajeros y administradores",
+    "Permisos por rol para todo tu equipo",
     "Soporte técnico y actualizaciones incluidas",
     "Sin costo de instalación ni contratos amarrados"
   ]
@@ -27,7 +27,7 @@ export default function LandingPricing() {
             viewport={{ once: true }}
             className="text-3xl md:text-5xl font-extrabold text-white mb-6"
           >
-            Una inversión ridícula para el valor que obtienes
+            Un solo plan. Todo incluido.
           </motion.h2>
         </div>
 
@@ -39,7 +39,7 @@ export default function LandingPricing() {
         >
           {/* Badge */}
           <div className="absolute top-0 right-0 bg-blue-500 text-zinc-950 text-sm font-bold px-4 py-1.5 rounded-bl-2xl">
-            OFERTA ÚNICA
+            PLAN ÚNICO
           </div>
 
           <div className="text-center mb-8 border-b border-white/10 pb-8">

@@ -34,13 +34,13 @@ const Badge = ({ color, children }: { color: 'green' | 'amber' | 'blue'; childre
   return <span className={`px-1.5 py-0.5 rounded text-[8px] font-semibold ${map[color]}`}>{children}</span>
 }
 
-// 1. Tienda Online Integrada — catálogo público compartible
+// 1. Tienda Online Integrada — catálogo público compartible (ej. boutique)
 export function MockupTienda() {
   const productos = [
-    { nombre: 'Taladro 1/2"', precio: 'S/ 189', color: 'bg-blue-100' },
-    { nombre: 'Cemento 42.5kg', precio: 'S/ 28', color: 'bg-amber-100' },
-    { nombre: 'Pintura Látex 4L', precio: 'S/ 65', color: 'bg-emerald-100' },
-    { nombre: 'Cable THW 12', precio: 'S/ 12', color: 'bg-purple-100' },
+    { nombre: 'Blusa manga larga', precio: 'S/ 45', color: 'bg-rose-100' },
+    { nombre: 'Jean clásico', precio: 'S/ 89', color: 'bg-blue-100' },
+    { nombre: 'Zapatillas urbanas', precio: 'S/ 120', color: 'bg-amber-100' },
+    { nombre: 'Casaca denim', precio: 'S/ 135', color: 'bg-indigo-100' },
   ]
   return (
     <BrowserFrame path="tienda/mi-negocio">
@@ -68,7 +68,7 @@ export function MockupTienda() {
 export function MockupFacturacion() {
   const filas = [
     { doc: 'B001-00458', cliente: 'Carlos M.', total: 'S/ 189.00', estado: 'Aceptado' },
-    { doc: 'F001-00112', cliente: 'Ferretería Sur SAC', total: 'S/ 1,240.00', estado: 'Aceptado' },
+    { doc: 'F001-00112', cliente: 'Distribuidora Lima SAC', total: 'S/ 1,240.00', estado: 'Aceptado' },
     { doc: 'B001-00459', cliente: 'María R.', total: 'S/ 65.00', estado: 'Aceptado' },
   ]
   return (
@@ -96,13 +96,13 @@ export function MockupFacturacion() {
   )
 }
 
-// 3. Gestión de Inventarios — stock en tiempo real
+// 3. Gestión de Inventarios — stock en tiempo real (ej. minimarket)
 export function MockupInventario() {
   const items = [
-    { nombre: 'Taladro 1/2"', stock: 24, pct: 80, color: 'bg-emerald-500' },
-    { nombre: 'Cemento 42.5kg', stock: 6, pct: 20, color: 'bg-amber-500' },
-    { nombre: 'Pintura Látex 4L', stock: 18, pct: 60, color: 'bg-emerald-500' },
-    { nombre: 'Cable THW 12', stock: 2, pct: 8, color: 'bg-red-500' },
+    { nombre: 'Gaseosa 1.5L', stock: 24, pct: 80, color: 'bg-emerald-500' },
+    { nombre: 'Arroz 5kg', stock: 6, pct: 20, color: 'bg-amber-500' },
+    { nombre: 'Aceite 1L', stock: 18, pct: 60, color: 'bg-emerald-500' },
+    { nombre: 'Detergente 900g', stock: 2, pct: 8, color: 'bg-red-500' },
   ]
   return (
     <BrowserFrame path="dashboard/catalog">
@@ -187,11 +187,11 @@ export function MockupEquipo() {
   )
 }
 
-// 6. Cotizaciones Profesionales — PDF premium
+// 6. Cotizaciones Profesionales — PDF premium (ej. negocio de servicios)
 export function MockupCotizaciones() {
   const items = [
-    { nombre: 'Taladro 1/2"', cant: 2, precio: 'S/ 378.00' },
-    { nombre: 'Cemento 42.5kg (x10)', cant: 1, precio: 'S/ 280.00' },
+    { nombre: 'Servicio de instalación', cant: 2, precio: 'S/ 380.00' },
+    { nombre: 'Mantenimiento mensual', cant: 1, precio: 'S/ 278.00' },
   ]
   return (
     <BrowserFrame path="dashboard/cotizaciones/pdf">
