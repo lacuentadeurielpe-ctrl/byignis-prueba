@@ -18,6 +18,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import {
   sincronizarPreapproval,
   registrarCobroAutorizado,
+  PERFIL_WEBHOOK,
 } from '@/lib/suscripciones/mercadopago'
 
 export const dynamic = 'force-dynamic'
@@ -71,11 +72,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Perfil acotado: MP corta la conexión a los ~22s. Si aun así se agota,
+    // MP reintenta la notificación y el proceso es idempotente.
     if (topic === 'subscription_preapproval') {
-      const res = await sincronizarPreapproval(String(dataId))
+      const res = await sincronizarPreapproval(String(dataId), PERFIL_WEBHOOK)
       console.log('[webhook/mercadopago] preapproval sync', { dataId, ...res })
     } else if (topic === 'subscription_authorized_payment') {
-      await registrarCobroAutorizado(String(dataId))
+      await registrarCobroAutorizado(String(dataId), PERFIL_WEBHOOK)
       console.log('[webhook/mercadopago] cobro registrado', { dataId })
     }
     // Otros topics (payment, plan, etc.) se aceptan sin acción.

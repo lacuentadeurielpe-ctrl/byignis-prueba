@@ -130,13 +130,19 @@ export default function CheckoutSuscripcion({
                   }),
                 })
                 const json = await res.json()
-                if (!res.ok || !json.activada) {
-                  setError(json.error ?? 'Tu tarjeta fue rechazada. Intenta con otra.')
-                  setProcesando(false)
-                  procesandoRef.current = false
+
+                // Si el preapproval existe (autorizado O pendiente), la página
+                // de gracias resuelve el estado real. Solo se muestra error
+                // acá cuando no se llegó a crear nada — así el cliente nunca
+                // paga dos veces creyendo que el primer intento falló.
+                if (json.preapprovalId) {
+                  window.location.href = `/suscripcion/gracias?preapproval_id=${json.preapprovalId}`
                   return
                 }
-                window.location.href = `/suscripcion/gracias?preapproval_id=${json.preapprovalId}`
+
+                setError(json.error ?? 'No pudimos procesar el pago. Intenta de nuevo.')
+                setProcesando(false)
+                procesandoRef.current = false
               } catch {
                 setError('Error de conexión. Revisa tu internet e inténtalo de nuevo.')
                 setProcesando(false)
@@ -172,8 +178,18 @@ export default function CheckoutSuscripcion({
 
   // ── Flujo alterno: checkout en la web de MP (requiere cuenta MP) ────────
   const pagarConCuentaMP = async () => {
+    // El estado de React tarda un tick en aplicarse; el ref bloquea el doble
+    // clic de inmediato para no disparar dos cobros.
+    if (procesandoRef.current) return
+    procesandoRef.current = true
     setError(null)
     setProcesando(true)
+
+    const liberar = () => {
+      setProcesando(false)
+      procesandoRef.current = false
+    }
+
     try {
       const emailInput = document.getElementById('mp-email') as HTMLInputElement | null
       const email = emailInput?.value?.trim() || emailDefault
@@ -185,13 +201,13 @@ export default function CheckoutSuscripcion({
       const data = await res.json()
       if (!res.ok || !data.url) {
         setError(data.error ?? 'No pudimos iniciar el pago. Inténtalo de nuevo.')
-        setProcesando(false)
+        liberar()
         return
       }
       window.location.href = data.url
     } catch {
       setError('Error de conexión. Inténtalo de nuevo.')
-      setProcesando(false)
+      liberar()
     }
   }
 

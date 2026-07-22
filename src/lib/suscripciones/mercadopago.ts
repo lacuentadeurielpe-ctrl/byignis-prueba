@@ -43,20 +43,97 @@ export function suscripcionesMPConfigurado(): boolean {
   return !!process.env.MP_ACCESS_TOKEN
 }
 
-async function mpFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${MP_API}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${getAccessToken()}`,
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
-  })
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`MP ${init?.method ?? 'GET'} ${path} → ${res.status}: ${body}`)
+/** Timeout por intento — MP suele responder en < 2s; 15s ya es anomalía. */
+const MP_TIMEOUT_MS = 15_000
+/** Reintentos ante fallas transitorias (red o 5xx de MP). */
+const MP_MAX_INTENTOS = 3
+
+export interface MPOpciones {
+  timeoutMs?: number
+  maxIntentos?: number
+}
+
+/**
+ * Perfil acotado para el webhook: MP corta la conexión a los ~22s y reintenta
+ * la notificación. Con 2 intentos de 6s el peor caso queda en ~12s, dentro de
+ * ese margen. (Y si aun así falla, MP reenvía y el proceso es idempotente.)
+ */
+export const PERFIL_WEBHOOK: MPOpciones = { timeoutMs: 6_000, maxIntentos: 2 }
+
+/** Error con el status HTTP de MP, para decidir si reintentar y qué mostrar. */
+export class MPError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+    readonly body: string = '',
+  ) {
+    super(message)
+    this.name = 'MPError'
   }
-  return res.json()
+}
+
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Llama a la API de MP con timeout y reintentos.
+ *
+ * Solo reintenta lo que es seguro reintentar: fallas de red, timeouts y 5xx
+ * (MP no llegó a procesar, o falló de su lado). Un 4xx es una respuesta
+ * definitiva — reintentarlo solo haría esperar de más al cliente.
+ *
+ * Los POST que crean suscripciones viajan con `idempotencyKey`, así que un
+ * reintento nunca genera un segundo cobro.
+ */
+async function mpFetch(
+  path: string,
+  init?: RequestInit & { idempotencyKey?: string } & MPOpciones,
+) {
+  const { idempotencyKey, timeoutMs, maxIntentos, ...rest } = init ?? {}
+  const metodo = init?.method ?? 'GET'
+  const limiteIntentos = maxIntentos ?? MP_MAX_INTENTOS
+  const limiteTiempo = timeoutMs ?? MP_TIMEOUT_MS
+  let ultimoError: unknown
+
+  for (let intento = 1; intento <= limiteIntentos; intento++) {
+    try {
+      const res = await fetch(`${MP_API}${path}`, {
+        ...rest,
+        signal: AbortSignal.timeout(limiteTiempo),
+        headers: {
+          Authorization: `Bearer ${getAccessToken()}`,
+          'Content-Type': 'application/json',
+          // MP deduplica por esta clave: dos envíos idénticos (doble clic,
+          // reintento de red, dos pestañas) devuelven el MISMO preapproval en
+          // lugar de crear una segunda suscripción que cobraría aparte.
+          ...(idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}),
+          ...init?.headers,
+        },
+      })
+
+      if (res.ok) return res.json()
+
+      const body = await res.text()
+      const error = new MPError(`MP ${metodo} ${path} → ${res.status}: ${body}`, res.status, body)
+
+      // 4xx = respuesta definitiva de MP; no tiene sentido insistir
+      if (res.status < 500) throw error
+
+      ultimoError = error
+    } catch (err) {
+      // Un 4xx ya viene decidido: propagar sin reintentar
+      if (err instanceof MPError && err.status !== null && err.status < 500) throw err
+      ultimoError = err
+    }
+
+    if (intento < limiteIntentos) {
+      await esperar(300 * 2 ** (intento - 1)) // 300ms, 600ms
+    }
+  }
+
+  const detalle = ultimoError instanceof Error ? ultimoError.message : String(ultimoError)
+  throw ultimoError instanceof MPError
+    ? ultimoError
+    : new MPError(`MP ${metodo} ${path} sin respuesta tras ${limiteIntentos} intentos: ${detalle}`, null)
 }
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
@@ -67,6 +144,7 @@ export interface MPPreapproval {
   external_reference: string          // ferreteriaId
   payer_email?: string
   next_payment_date?: string
+  date_created?: string
   init_point?: string
   auto_recurring?: { transaction_amount: number; currency_id: string }
 }
@@ -107,7 +185,12 @@ export async function crearSuscripcionMP(params: {
   baseUrl: string
   primerCobro?: string | null
   cardTokenId?: string | null
-}): Promise<{ preapprovalId: string; initPoint: string | null; status: string }> {
+}): Promise<{
+  preapprovalId: string
+  initPoint: string | null
+  status: string
+  preapproval: MPPreapproval
+}> {
   const autoRecurring: Record<string, unknown> = {
     frequency:          1,
     frequency_type:     'months',
@@ -134,15 +217,27 @@ export async function crearSuscripcionMP(params: {
     body.status = 'pending'
   }
 
+  // Clave estable por intento: con tarjeta, el token la identifica; sin
+  // tarjeta, el tenant + correo dentro de una ventana de un minuto.
+  const idempotencyKey = params.cardTokenId
+    ? `sub-${params.ferreteriaId}-${params.cardTokenId}`
+    : `sub-${params.ferreteriaId}-${params.payerEmail}-${Math.floor(Date.now() / 60_000)}`
+
   const data: MPPreapproval = await mpFetch('/preapproval', {
     method: 'POST',
     body: JSON.stringify(body),
+    idempotencyKey,
   })
 
   if (!params.cardTokenId && !data.init_point) {
     throw new Error('MP no devolvió init_point')
   }
-  return { preapprovalId: data.id, initPoint: data.init_point ?? null, status: data.status }
+  return {
+    preapprovalId: data.id,
+    initPoint:     data.init_point ?? null,
+    status:        data.status,
+    preapproval:   data,
+  }
 }
 
 /**
@@ -156,8 +251,46 @@ export async function cancelarPreapproval(preapprovalId: string): Promise<void> 
   })
 }
 
-export async function obtenerPreapproval(id: string): Promise<MPPreapproval> {
-  return mpFetch(`/preapproval/${id}`)
+/**
+ * Garantiza que un tenant nunca acumule dos suscripciones cobrando a la vez.
+ *
+ * Antes de crear un preapproval nuevo se revisa el anterior (si lo hay):
+ *  - `authorized` → ya está pagando; NO se crea otro (devuelve yaActiva).
+ *  - `pending`    → intento anterior que quedó a medias; se cancela para que
+ *                   no pueda activarse después y terminar cobrando doble.
+ *  - resto        → no estorba, se sigue de largo.
+ *
+ * Si la consulta a MP falla no se bloquea al usuario: se deja seguir y se
+ * registra el aviso (mejor un posible duplicado raro que un cliente que no
+ * puede pagar).
+ */
+export async function limpiarPreapprovalPrevio(preapprovalIdPrevio: string | null): Promise<{
+  yaActiva: boolean
+  preapprovalActivo?: MPPreapproval
+}> {
+  if (!preapprovalIdPrevio) return { yaActiva: false }
+
+  try {
+    const pre = await obtenerPreapproval(preapprovalIdPrevio)
+
+    if (pre.status === 'authorized') {
+      return { yaActiva: true, preapprovalActivo: pre }
+    }
+
+    if (pre.status === 'pending') {
+      await cancelarPreapproval(pre.id)
+      console.log('[MP] preapproval pendiente previo cancelado', { id: pre.id })
+    }
+
+    return { yaActiva: false }
+  } catch (err) {
+    console.warn('[MP] no se pudo revisar el preapproval previo:', err)
+    return { yaActiva: false }
+  }
+}
+
+export async function obtenerPreapproval(id: string, opts?: MPOpciones): Promise<MPPreapproval> {
+  return mpFetch(`/preapproval/${id}`, opts)
 }
 
 // ─── Sincronización con la BD ──────────────────────────────────────────────
@@ -204,15 +337,22 @@ async function upsertSuscripcion(
 }
 
 /**
- * Lee el preapproval REAL desde la API de MP y actualiza la BD.
+ * Actualiza la BD según el estado REAL del preapproval en MP.
  * Nunca confía en el payload del webhook — solo en lo que responde MP.
- * Devuelve el estado resultante para la UI.
+ *
+ * Acepta el id (lo consulta) o un preapproval ya obtenido por el llamador,
+ * para no repetir la misma consulta dos veces en un mismo flujo.
  */
-export async function sincronizarPreapproval(preapprovalId: string): Promise<{
+export async function sincronizarPreapproval(
+  preapproval: string | MPPreapproval,
+  opts?: MPOpciones,
+): Promise<{
   status: MPPreapproval['status']
   ferreteriaId: string | null
 }> {
-  const pre = await obtenerPreapproval(preapprovalId)
+  const pre = typeof preapproval === 'string'
+    ? await obtenerPreapproval(preapproval, opts)
+    : preapproval
   const ferreteriaId = pre.external_reference || null
   if (!ferreteriaId) return { status: pre.status, ferreteriaId: null }
 
@@ -249,11 +389,14 @@ export async function sincronizarPreapproval(preapprovalId: string): Promise<{
  * Registra un cobro mensual (topic subscription_authorized_payment) en
  * pagos_saas y refresca proximo_cobro. Idempotente por mp_payment_id.
  */
-export async function registrarCobroAutorizado(authorizedPaymentId: string): Promise<void> {
-  const pago: MPAuthorizedPayment = await mpFetch(`/authorized_payments/${authorizedPaymentId}`)
+export async function registrarCobroAutorizado(
+  authorizedPaymentId: string,
+  opts?: MPOpciones,
+): Promise<void> {
+  const pago: MPAuthorizedPayment = await mpFetch(`/authorized_payments/${authorizedPaymentId}`, opts)
   if (!pago?.preapproval_id) return
 
-  const pre = await obtenerPreapproval(pago.preapproval_id)
+  const pre = await obtenerPreapproval(pago.preapproval_id, opts)
   const ferreteriaId = pre.external_reference || null
   if (!ferreteriaId) return
 
@@ -271,6 +414,7 @@ export async function registrarCobroAutorizado(authorizedPaymentId: string): Pro
     { onConflict: 'mp_payment_id', ignoreDuplicates: true }
   )
 
-  // El estado de acceso (activo/suspendido) lo dicta el preapproval.
-  await sincronizarPreapproval(pago.preapproval_id)
+  // El estado de acceso (activo/suspendido) lo dicta el preapproval — se
+  // reutiliza el ya consultado arriba en vez de volver a pedirlo a MP.
+  await sincronizarPreapproval(pre, opts)
 }
