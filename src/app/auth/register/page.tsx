@@ -11,6 +11,7 @@ export default function RegisterPage() {
 
   const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' })
   const [showPassword, setShowPassword] = useState(false)
+  const [aceptaTerminos, setAceptaTerminos] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,6 +31,10 @@ export default function RegisterPage() {
       setError('La contraseña debe tener al menos 8 caracteres.')
       return
     }
+    if (!aceptaTerminos) {
+      setError('Debes aceptar los Términos y la Política de Privacidad para continuar.')
+      return
+    }
 
     setLoading(true)
 
@@ -45,6 +50,12 @@ export default function RegisterPage() {
           password: form.password,
           options: {
             emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/onboarding`,
+            // Deja constancia de cuándo aceptó los Términos — evidencia del
+            // consentimiento si alguna vez hay una controversia.
+            data: {
+              terminos_aceptados_at: new Date().toISOString(),
+              terminos_version: '2026-07',
+            },
           },
         }),
         new Promise<{ data: null; error: null }>((resolve) =>
@@ -128,6 +139,29 @@ export default function RegisterPage() {
             className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-300 focus:border-transparent transition"
           />
         </div>
+
+        {/* Aceptación expresa — hace exigibles los Términos (incl. contenido
+            del usuario e indemnidad). Sin este consentimiento, esas cláusulas
+            son mucho más difíciles de hacer valer. */}
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={aceptaTerminos}
+            onChange={(e) => setAceptaTerminos(e.target.checked)}
+            className="mt-0.5 w-4 h-4 shrink-0 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400 cursor-pointer"
+          />
+          <span className="text-xs text-zinc-600 leading-relaxed">
+            He leído y acepto los{' '}
+            <Link href="/legal/terminos" target="_blank" className="text-zinc-900 underline hover:text-zinc-700">
+              Términos y Condiciones
+            </Link>{' '}
+            y la{' '}
+            <Link href="/legal/privacidad" target="_blank" className="text-zinc-900 underline hover:text-zinc-700">
+              Política de Privacidad
+            </Link>
+            . Declaro que tengo los derechos sobre el contenido que publique en la plataforma.
+          </span>
+        </label>
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm text-red-700">
