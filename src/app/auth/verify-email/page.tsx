@@ -56,7 +56,13 @@ function VerifyEmailContent() {
     if (!email || resending || countdown > 0) return
     setResending(true)
     const supabase = createClient()
-    await supabase.auth.resend({ type: 'signup', email })
+    await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/auth/confirm?next=/onboarding`,
+      },
+    })
     setResending(false)
     setResent(true)
     setCountdown(60)

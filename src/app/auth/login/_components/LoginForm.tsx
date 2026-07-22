@@ -1,37 +1,71 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Eye, EyeOff, Loader2, Lock } from 'lucide-react'
 
+// Mensajes para los errores que /auth/confirm anexa a la URL
+const ERRORES_URL: Record<string, string> = {
+  link_expirado: 'El enlace de confirmación venció o ya fue usado. Inicia sesión — si tu correo aún no está confirmado, te reenviaremos el enlace.',
+  link_invalido: 'El enlace de confirmación no es válido. Inicia sesión o solicita uno nuevo.',
+}
+
+// Avisos positivos (no son errores)
+const INFOS_URL: Record<string, string> = {
+  correo_confirmado: '¡Tu correo fue confirmado! Ingresa con tu contraseña para continuar.',
+}
+
 export default function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect') ?? '/dashboard'
+  const errorUrl = searchParams.get('error')
+  const infoUrl = searchParams.get('info')
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    errorUrl ? (ERRORES_URL[errorUrl] ?? null) : null
+  )
+  const info = infoUrl ? (INFOS_URL[infoUrl] ?? null) : null
+
+  // El form vive al fondo de la landing: si /auth/confirm redirigió con un
+  // error o aviso, bajar hasta él para que el mensaje sea visible.
+  // window.scrollTo con posición calculada — scrollIntoView se cancela por el
+  // scroll-behavior global + los layout shifts de video/animaciones. Doble
+  // intento: uno temprano y otro cuando el contenido pesado asentó la altura.
+  useEffect(() => {
+    if (!errorUrl && !infoUrl) return
+    const bajar = () => {
+      const el = document.getElementById('login-section')
+      if (!el) return
+      const y = el.getBoundingClientRect().top + window.scrollY - window.innerHeight / 2 + el.offsetHeight / 2
+      window.scrollTo(0, Math.max(0, y))
+    }
+    const t1 = setTimeout(bajar, 300)
+    const t2 = setTimeout(bajar, 1500)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [errorUrl, infoUrl])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
-    if (process.env.NODE_ENV === 'development') {
-      router.push(redirectTo)
-      router.refresh()
-      return
-    }
-
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
+      // Cuenta creada pero correo sin confirmar → llevarlo al reenvío,
+      // no mentirle con "contraseña incorrecta".
+      if (/email not confirmed/i.test(error.message)) {
+        router.push(`/auth/verify-email?email=${encodeURIComponent(email)}`)
+        return
+      }
       setError('Correo o contraseña incorrectos. Intente de nuevo.')
       setLoading(false)
       return
@@ -88,6 +122,13 @@ export default function LoginForm() {
             </button>
           </div>
         </div>
+
+        {info && !error && (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3.5 text-sm text-emerald-400 flex items-start gap-2">
+            <span className="shrink-0 mt-0.5">✓</span>
+            <span>{info}</span>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3.5 text-sm text-red-400 flex items-start gap-2">

@@ -49,7 +49,10 @@ export default function RegisterPage() {
           email: form.email,
           password: form.password,
           options: {
-            emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/onboarding`,
+            // Pasa por /auth/confirm (ruta pública) que canjea el code por la
+            // sesión y recién ahí manda a /onboarding. Redirigir directo a
+            // /onboarding dejaba al usuario confirmado pero sin sesión.
+            emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/auth/confirm?next=/onboarding`,
             // Deja constancia de cuándo aceptó los Términos — evidencia del
             // consentimiento si alguna vez hay una controversia.
             data: {
