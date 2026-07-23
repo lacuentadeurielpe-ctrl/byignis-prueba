@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, Sparkles, Image as ImageIcon, Check, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 
 export interface AtributoValorForm {
   id?: string
@@ -52,6 +53,44 @@ export default function VariantsEditor({
   const [nuevoAtributoNombre, setNuevoAtributoNombre] = useState('')
   const [nuevoValorTexto, setNuevoValorTexto] = useState<Record<number, string>>({})
   const [nuevoValorColorHex, setNuevoValorColorHex] = useState<Record<number, string>>({})
+
+  const [uploadingVariantIdx, setUploadingVariantIdx] = useState<number | null>(null)
+  const variantFileInputRef = useRef<HTMLInputElement>(null)
+  const supabase = createClient()
+
+  const handleVariantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || uploadingVariantIdx === null) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert(`El archivo ${file.name} es demasiado grande. Máximo 5MB.`)
+      return
+    }
+
+    const idx = uploadingVariantIdx
+    setUploadingVariantIdx(null)
+    
+    const fileExt = file.name.split('.').pop()
+    const fileName = `variante_${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`
+    const filePath = `catalogo/${fileName}`
+
+    const { data, error } = await supabase.storage
+      .from('productos-imagenes')
+      .upload(filePath, file, { cacheControl: '3600', upsert: false })
+
+    if (error) {
+      console.error('Error uploading variant image:', error)
+      alert(`Error al subir imagen: ${error.message}`)
+    } else if (data) {
+      const { data: publicData } = supabase.storage
+        .from('productos-imagenes')
+        .getPublicUrl(data.path)
+      
+      actualizarVarianteField(idx, 'imagen_url', publicData.publicUrl)
+    }
+
+    if (variantFileInputRef.current) variantFileInputRef.current.value = ''
+  }
 
   // Agregar un nuevo tipo de atributo (ej. "Color", "Talla")
   const agregarAtributo = () => {
@@ -159,6 +198,13 @@ export default function VariantsEditor({
 
   return (
     <div className="space-y-6">
+      <input 
+        type="file" 
+        ref={variantFileInputRef} 
+        onChange={handleVariantImageUpload} 
+        accept="image/*" 
+        className="hidden" 
+      />
       {/* Switch principal para activar variantes */}
       <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-2xl">
         <div>
@@ -326,9 +372,35 @@ export default function VariantsEditor({
                 {/* Vista móvil: tarjetas */}
                 <div className="sm:hidden space-y-3">
                   {variantes.map((v, idx) => (
-                    <div key={idx} className="p-3 bg-zinc-50 border border-zinc-100 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-zinc-900 flex-1 min-w-0 truncate">{v.nombre_variante}</span>
+                    <div key={idx} className="bg-zinc-50 border border-zinc-200 rounded-xl p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {v.imagen_url ? (
+                            <div className="relative group/img w-8 h-8 rounded border border-zinc-200 overflow-hidden shrink-0">
+                              <img src={v.imagen_url} alt={v.nombre_variante} className="w-full h-full object-cover" />
+                              <button 
+                                type="button" 
+                                onClick={() => actualizarVarianteField(idx, 'imagen_url', '')} 
+                                className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUploadingVariantIdx(idx)
+                                variantFileInputRef.current?.click()
+                              }}
+                              className="w-8 h-8 rounded border border-dashed border-zinc-300 flex items-center justify-center text-zinc-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 shrink-0"
+                              title="Agregar imagen"
+                            >
+                              <ImageIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                          <h5 className="font-bold text-sm text-zinc-900">{v.nombre_variante}</h5>
+                        </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
@@ -398,7 +470,33 @@ export default function VariantsEditor({
                     <tbody className="divide-y divide-zinc-100">
                       {variantes.map((v, idx) => (
                         <tr key={idx} className="hover:bg-zinc-50/50">
-                          <td className="p-2.5 font-medium text-zinc-900">{v.nombre_variante}</td>
+                          <td className="p-2.5 font-medium text-zinc-900 flex items-center gap-2">
+                            {v.imagen_url ? (
+                              <div className="relative group/img w-8 h-8 rounded border border-zinc-200 overflow-hidden shrink-0">
+                                <img src={v.imagen_url} alt={v.nombre_variante} className="w-full h-full object-cover" />
+                                <button 
+                                  type="button" 
+                                  onClick={() => actualizarVarianteField(idx, 'imagen_url', '')} 
+                                  className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setUploadingVariantIdx(idx)
+                                  variantFileInputRef.current?.click()
+                                }}
+                                className="w-8 h-8 rounded border border-dashed border-zinc-300 flex items-center justify-center text-zinc-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 shrink-0"
+                                title="Agregar imagen"
+                              >
+                                <ImageIcon className="w-4 h-4" />
+                              </button>
+                            )}
+                            {v.nombre_variante}
+                          </td>
                           <td className="p-2.5">
                             <input
                               type="text"

@@ -334,8 +334,7 @@ export default function TiendaPage() {
             <AnimatePresence>
               {products.map((p, i) => {
                 const hasImages = p.imagenes && p.imagenes.length > 0
-                const cartItem = cartItems.find(item => item.id === p.id)
-                const qtyInCart = cartItem?.cantidad || 0
+                const qtyInCart = cartItems.filter(item => item.id === p.id).reduce((sum, item) => sum + item.cantidad, 0)
                 
                 return (
                   <motion.div 
@@ -430,7 +429,7 @@ export default function TiendaPage() {
                           <div className="h-4" />
                         )}
 
-                        {qtyInCart > 0 ? (
+                        {qtyInCart > 0 && !p.tiene_variantes ? (
                           <div className="flex items-center justify-between bg-emerald-50 rounded-xl p-1 border border-emerald-100 h-11">
                             <button
                               onClick={() => updateQuantity(p.id, -1)}
@@ -469,7 +468,7 @@ export default function TiendaPage() {
                             {p.tiene_variantes ? (
                               <>
                                 <Sparkles className="w-4 h-4 text-orange-500" />
-                                Opciones
+                                {qtyInCart > 0 ? `Opciones (${qtyInCart})` : 'Opciones'}
                               </>
                             ) : (
                               <>
