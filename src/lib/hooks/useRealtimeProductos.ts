@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 // Mismo select que CatalogRepository.listarProductosActivos
-const SELECT_PRODUCTO = '*, categorias(id,nombre), reglas_descuento(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))'
+const SELECT_PRODUCTO = '*, categorias(id,nombre), reglas_descuento(*), variantes:variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))'
 
 interface ProductoMinimo {
   id: string

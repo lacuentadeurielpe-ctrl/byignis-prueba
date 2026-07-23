@@ -27,7 +27,7 @@ export class CatalogRepository {
   async listarProductosActivos(ferreteriaId: string): Promise<Producto[]> {
     const { data, error } = await this.supabase
       .from('productos')
-      .select('*, categorias(id,nombre), reglas_descuento(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
+      .select('*, categorias(id,nombre), reglas_descuento(*), variantes:variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
       .eq('ferreteria_id', ferreteriaId)
       .eq('activo', true)
       .order('nombre')
@@ -45,7 +45,7 @@ export class CatalogRepository {
   async obtenerProductoConStock(ferreteriaId: string, productoId: string): Promise<any | null> {
     const { data, error } = await this.supabase
       .from('productos')
-      .select('id, nombre, unidad, stock, precio_base, codigo_interno, tiene_variantes, variantes_producto(*)')
+      .select('id, nombre, unidad, stock, precio_base, codigo_interno, tiene_variantes, variantes:variantes_producto(*)')
       .eq('id', productoId)
       .eq('ferreteria_id', ferreteriaId)
       .eq('activo', true)
@@ -231,7 +231,7 @@ export class CatalogRepository {
   async obtenerProductoPorCodigo(ferreteriaId: string, codigoInterno: string): Promise<Producto | null> {
     const { data, error } = await this.supabase
       .from('productos')
-      .select('*, categorias(id,nombre), reglas_descuento(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
+      .select('*, categorias(id,nombre), reglas_descuento(*), variantes:variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
       .eq('ferreteria_id', ferreteriaId)
       .eq('codigo_interno', codigoInterno)
       .eq('activo', true)

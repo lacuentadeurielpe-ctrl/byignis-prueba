@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from('productos')
-    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
+    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes:variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
     .eq('ferreteria_id', session.ferreteriaId)
     .order('nombre', { ascending: true })
 
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
   // Retornar producto completo con reglas, unidades, variantes y atributos
   const { data: productoCompleto } = await supabase
     .from('productos')
-    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
+    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes:variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
     .eq('id', producto.id).single()
 
   return NextResponse.json(productoCompleto, { status: 201 })

@@ -12,7 +12,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
   const { data, error } = await supabase
     .from('productos')
-    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
+    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes:variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
     .eq('id', id)
     .eq('ferreteria_id', session.ferreteriaId)
     .single()
@@ -100,7 +100,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { data: productoCompleto } = await supabase
     .from('productos')
-    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
+    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes:variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
     .eq('id', id)
     .eq('ferreteria_id', session.ferreteriaId)
     .single()
