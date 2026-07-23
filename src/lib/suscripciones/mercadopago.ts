@@ -219,6 +219,48 @@ interface MPAuthorizedPayment {
   payment?: { id: number; status: string; status_detail?: string }
 }
 
+// ─── Pago único de prueba (solo superadmin) ────────────────────────────────
+
+export interface MPPagoUnico {
+  id: number
+  status: string            // approved | rejected | in_process | pending
+  status_detail: string     // accredited | cc_rejected_* | ...
+  payment_type_id: string   // credit_card | debit_card | ...
+  payment_method_id: string // visa | master | ...
+  transaction_amount: number
+}
+
+/**
+ * Crea un pago ÚNICO (no recurrente) vía /v1/payments. Se usa SOLO en el
+ * banco de pruebas del superadmin: cobra un monto chico real para verificar
+ * que una tarjeta pasa y qué tipo es (crédito/débito). No crea suscripción,
+ * no toca accesos ni el estado de ningún negocio.
+ */
+export async function crearPagoUnicoMP(params: {
+  cardTokenId: string
+  payerEmail: string
+  paymentMethodId?: string
+  montoSoles: number
+  descripcion: string
+}): Promise<MPPagoUnico> {
+  const body: Record<string, unknown> = {
+    transaction_amount: params.montoSoles,
+    token:              params.cardTokenId,
+    description:        params.descripcion,
+    installments:       1,
+    payer:             { email: params.payerEmail },
+  }
+  if (params.paymentMethodId) body.payment_method_id = params.paymentMethodId
+
+  return mpFetch('/v1/payments', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    // Un token de tarjeta es de un solo uso; sirve de clave estable para que
+    // un reintento no duplique el cobro.
+    idempotencyKey: `prueba-${params.cardTokenId}`,
+  })
+}
+
 // ─── Crear suscripción (checkout) ──────────────────────────────────────────
 
 /** Fecha actual en Lima como YYYY-MM-DD. */

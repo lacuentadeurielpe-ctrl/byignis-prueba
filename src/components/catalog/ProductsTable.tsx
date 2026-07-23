@@ -309,101 +309,140 @@ export default function ProductsTable({
         </div>
       ) : (
         <>
-          {/* ── VISTA MOBILE: TARJETAS ── */}
           <div className="md:hidden space-y-3">
             {productosFiltrados.map((producto) => {
-              const isOutOfStock = producto.stock === 0 && !producto.venta_sin_stock
-              const isLowStock = producto.stock_minimo !== null && producto.stock <= producto.stock_minimo
+              const stockEfectivo = producto.tiene_variantes && producto.variantes && producto.variantes.length > 0
+                ? producto.variantes.reduce((acc, v) => acc + (v.stock || 0), 0)
+                : producto.stock
+              const isOutOfStock = stockEfectivo === 0 && !producto.venta_sin_stock
+              const isLowStock = producto.stock_minimo !== null && stockEfectivo <= producto.stock_minimo
               const nombreCat = getNombreCategoria(producto.categoria_id)
               return (
-                <div key={producto.id} className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
-                  <div className="flex items-start justify-between p-4 pb-3">
-                    <div className="flex-1 min-w-0 pr-3">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-mono text-xs font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-lg shrink-0" title="Código Interno">{producto.codigo_interno}</span>
-                        <span className="font-bold text-zinc-900 text-base leading-tight">{producto.nombre}</span>
-                        <button onClick={() => toggleActivo(producto)} disabled={loadingToggle === producto.id} className="shrink-0">
-                          {loadingToggle === producto.id
-                            ? <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
-                            : producto.activo
-                              ? <ToggleRight className="w-5 h-5 text-emerald-500" />
-                              : <ToggleLeft className="w-5 h-5 text-zinc-300" />
-                          }
-                        </button>
+                <Fragment key={producto.id}>
+                  <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
+                    <div className="flex items-start justify-between p-4 pb-3">
+                      <div className="flex-1 min-w-0 pr-3">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="font-mono text-xs font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-lg shrink-0" title="Código Interno">{producto.codigo_interno}</span>
+                          <span className="font-bold text-zinc-900 text-base leading-tight">{producto.nombre}</span>
+                          <button onClick={() => toggleActivo(producto)} disabled={loadingToggle === producto.id} className="shrink-0">
+                            {loadingToggle === producto.id
+                              ? <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+                              : producto.activo
+                                ? <ToggleRight className="w-5 h-5 text-emerald-500" />
+                                : <ToggleLeft className="w-5 h-5 text-zinc-300" />
+                            }
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {nombreCat && <Badge variant="blue">{nombreCat}</Badge>}
+                          {producto.marca && <span className="text-[10px] font-medium bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded-full">{producto.marca}</span>}
+                          {producto.tiene_variantes && producto.variantes && producto.variantes.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandVariantes(producto.id)}
+                              className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200/60 px-2 py-0.5 rounded-full transition"
+                            >
+                              <Sparkles className="w-3 h-3 text-orange-500" />
+                              {producto.variantes.length} variante{producto.variantes.length !== 1 ? 's' : ''} {expandedVariantes[producto.id] ? '▲' : '▼'}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {nombreCat && <Badge variant="blue">{nombreCat}</Badge>}
-                        {producto.marca && <span className="text-[10px] font-medium bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded-full">{producto.marca}</span>}
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => setModalEtiqueta(producto)}
+                          className="p-2.5 bg-zinc-50 text-zinc-500 hover:bg-zinc-900 hover:text-white rounded-xl transition"
+                          title="Imprimir etiqueta"
+                        >
+                          <Printer className="w-5 h-5" />
+                        </button>
+                        <Link
+                          href={`/dashboard/catalog/${producto.id}`}
+                          className="p-2.5 bg-zinc-900 text-white rounded-xl hover:bg-zinc-700 transition"
+                          title="Editar producto"
+                        >
+                          <Pencil className="w-5 h-5" />
+                        </Link>
                       </div>
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        onClick={() => setModalEtiqueta(producto)}
-                        className="p-2.5 bg-zinc-50 text-zinc-500 hover:bg-zinc-900 hover:text-white rounded-xl transition"
-                        title="Imprimir etiqueta"
-                      >
-                        <Printer className="w-5 h-5" />
-                      </button>
+
+                    <div className="grid grid-cols-3 divide-x divide-zinc-100 border-t border-zinc-100">
+                      <div className="p-3 text-center">
+                        <p className="text-[10px] text-zinc-400 uppercase font-semibold mb-0.5">Precio</p>
+                        <p className="font-bold text-zinc-900 tabular-nums text-sm">{formatPEN(producto.precio_base)}</p>
+                      </div>
+                      <div className="p-3 text-center">
+                        <p className="text-[10px] text-zinc-400 uppercase font-semibold mb-0.5">Stock</p>
+                        <p className={`font-bold tabular-nums text-sm ${isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-600' : 'text-zinc-900'}`}>
+                          {stockEfectivo}
+                          {isOutOfStock && <span className="block text-[9px] font-semibold text-red-400">Agotado</span>}
+                          {!isOutOfStock && isLowStock && <span className="block text-[9px] font-semibold text-amber-500">Stock bajo</span>}
+                        </p>
+                        {multiSucursal && (
+                          <div className="mt-1 flex flex-col items-center gap-0.5">
+                            {locales.map(loc => {
+                              const stockLocal = stockLocales.find(sl => sl.local_id === loc.id && sl.producto_id === producto.id)?.stock || 0
+                              return (
+                                <span key={loc.id} className="text-[9px] text-zinc-500 font-medium whitespace-nowrap">
+                                  {loc.nombre}: <b className="text-zinc-700">{stockLocal}</b>
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-3 text-center">
+                        <p className="text-[10px] text-zinc-400 uppercase font-semibold mb-0.5">Unidad</p>
+                        <p className="font-medium text-zinc-700 text-sm">{producto.unidad}</p>
+                      </div>
+                    </div>
+
+                    {/* Sub-bloque expandible de variantes en móvil */}
+                    {expandedVariantes[producto.id] && producto.variantes && producto.variantes.length > 0 && (
+                      <div className="border-t border-orange-100 bg-orange-50/30 px-4 py-3">
+                        <h5 className="text-xs font-bold text-zinc-900 flex items-center gap-1.5 mb-2">
+                          <Sparkles className="w-3.5 h-3.5 text-orange-500" />
+                          Variantes
+                        </h5>
+                        <div className="space-y-1.5">
+                          {producto.variantes.map((v) => (
+                            <div key={v.id} className="flex items-center justify-between bg-white rounded-lg border border-orange-100 px-3 py-2">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-zinc-900 truncate">{v.nombre_variante}</p>
+                                {v.sku && <p className="text-[10px] text-zinc-400 font-mono">{v.sku}</p>}
+                              </div>
+                              <div className="text-right shrink-0 ml-3">
+                                <p className="text-xs font-bold text-zinc-900">{formatPEN(v.precio ?? producto.precio_base)}</p>
+                                <p className="text-[10px] text-zinc-500">Stk: {v.stock}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="px-4 py-2.5 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between gap-2">
+                      {producto.codigo_barras ? (
+                        <span className="font-mono text-xs text-zinc-600 bg-white border border-zinc-200 px-2 py-1 rounded-lg truncate max-w-[200px]">
+                          {producto.codigo_barras}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-zinc-400 italic">Sin código de barras</span>
+                      )}
                       <Link
                         href={`/dashboard/catalog/${producto.id}`}
-                        className="p-2.5 bg-zinc-900 text-white rounded-xl hover:bg-zinc-700 transition"
-                        title="Editar producto"
+                        className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg hover:bg-indigo-100 transition shrink-0"
                       >
-                        <Pencil className="w-5 h-5" />
+                        {producto.codigo_barras ? 'Cambiar código' : '+ Asignar código'}
                       </Link>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-3 divide-x divide-zinc-100 border-t border-zinc-100">
-                    <div className="p-3 text-center">
-                      <p className="text-[10px] text-zinc-400 uppercase font-semibold mb-0.5">Precio</p>
-                      <p className="font-bold text-zinc-900 tabular-nums text-sm">{formatPEN(producto.precio_base)}</p>
-                    </div>
-                    <div className="p-3 text-center">
-                      <p className="text-[10px] text-zinc-400 uppercase font-semibold mb-0.5">Stock</p>
-                      <p className={`font-bold tabular-nums text-sm ${isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-600' : 'text-zinc-900'}`}>
-                        {producto.stock}
-                        {isOutOfStock && <span className="block text-[9px] font-semibold text-red-400">Agotado</span>}
-                        {!isOutOfStock && isLowStock && <span className="block text-[9px] font-semibold text-amber-500">Stock bajo</span>}
-                      </p>
-                      {multiSucursal && (
-                        <div className="mt-1 flex flex-col items-center gap-0.5">
-                          {locales.map(loc => {
-                            const stockLocal = stockLocales.find(sl => sl.local_id === loc.id && sl.producto_id === producto.id)?.stock || 0
-                            return (
-                              <span key={loc.id} className="text-[9px] text-zinc-500 font-medium whitespace-nowrap">
-                                {loc.nombre}: <b className="text-zinc-700">{stockLocal}</b>
-                              </span>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-3 text-center">
-                      <p className="text-[10px] text-zinc-400 uppercase font-semibold mb-0.5">Unidad</p>
-                      <p className="font-medium text-zinc-700 text-sm">{producto.unidad}</p>
-                    </div>
-                  </div>
-
-                  <div className="px-4 py-2.5 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between gap-2">
-                    {producto.codigo_barras ? (
-                      <span className="font-mono text-xs text-zinc-600 bg-white border border-zinc-200 px-2 py-1 rounded-lg truncate max-w-[200px]">
-                        {producto.codigo_barras}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-zinc-400 italic">Sin código de barras</span>
-                    )}
-                    <Link
-                      href={`/dashboard/catalog/${producto.id}`}
-                      className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg hover:bg-indigo-100 transition shrink-0"
-                    >
-                      {producto.codigo_barras ? 'Cambiar código' : '+ Asignar código'}
-                    </Link>
-                  </div>
-                </div>
+                </Fragment>
               )
             })}
           </div>
+
 
           {/* ── VISTA DESKTOP: TABLA ── */}
           <div className="hidden md:block bg-white rounded-2xl border border-zinc-100 overflow-hidden">

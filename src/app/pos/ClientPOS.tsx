@@ -651,14 +651,14 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
                   }}
                   className="w-full flex items-center justify-between p-3 rounded-xl border border-zinc-200 hover:border-zinc-900 hover:bg-zinc-50 transition text-left"
                 >
-                  <div>
-                    <h5 className="font-bold text-sm text-zinc-900 flex items-center gap-1.5">
+                  <div className="min-w-0 flex-1 pr-3">
+                    <h5 className="font-bold text-sm text-zinc-900 flex items-center gap-1.5 truncate">
                       <Sparkles className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                      {v.nombre_variante}
+                      <span className="truncate">{v.nombre_variante}</span>
                     </h5>
-                    {v.sku && <p className="text-xs text-zinc-400 font-mono mt-0.5">SKU: {v.sku}</p>}
+                    {v.sku && <p className="text-xs text-zinc-400 font-mono mt-0.5 truncate">SKU: {v.sku}</p>}
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <p className="font-bold text-sm text-zinc-900">{formatPEN(v.precio ?? productoParaVariante.precio_base)}</p>
                     <p className="text-xs text-zinc-500">Stock: {v.stock}</p>
                   </div>

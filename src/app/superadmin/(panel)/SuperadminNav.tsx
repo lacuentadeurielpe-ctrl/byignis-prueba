@@ -9,6 +9,7 @@ import {
   Store,
   LogOut,
   DollarSign,
+  CreditCard,
 } from 'lucide-react'
 
 interface Props {
@@ -16,8 +17,9 @@ interface Props {
 }
 
 const NAV_ITEMS = [
-  { href: '/superadmin',            label: 'Dashboard',  Icon: LayoutDashboard },
-  { href: '/superadmin/clientes',   label: 'Clientes',   Icon: Store },
+  { href: '/superadmin',            label: 'Dashboard',   Icon: LayoutDashboard },
+  { href: '/superadmin/clientes',   label: 'Clientes',    Icon: Store },
+  { href: '/superadmin/prueba-pago', label: 'Prueba pago', Icon: CreditCard },
 ]
 
 export default function SuperadminNav({ session }: Props) {

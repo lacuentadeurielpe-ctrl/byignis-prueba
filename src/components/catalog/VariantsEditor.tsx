@@ -229,10 +229,10 @@ export default function VariantsEditor({
                   </div>
 
                   {/* Input para agregar nuevo valor */}
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
                     <input
                       type="text"
-                      placeholder={`Agregar opción para ${attr.nombre} (ej: Rojo, M)`}
+                      placeholder={`Opción para ${attr.nombre} (ej: Rojo, M)`}
                       value={nuevoValorTexto[attrIdx] || ''}
                       onChange={(e) => setNuevoValorTexto({ ...nuevoValorTexto, [attrIdx]: e.target.value })}
                       onKeyDown={(e) => {
@@ -243,37 +243,37 @@ export default function VariantsEditor({
                       }}
                       className="px-3 py-1.5 text-xs border border-zinc-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-400 flex-1"
                     />
-
-                    {attr.nombre.toLowerCase().includes('color') && (
-                      <div className="flex items-center gap-1">
-                        <Palette className="w-3.5 h-3.5 text-zinc-400" />
-                        <input
-                          type="color"
-                          value={nuevoValorColorHex[attrIdx] || '#000000'}
-                          onChange={(e) => setNuevoValorColorHex({ ...nuevoValorColorHex, [attrIdx]: e.target.value })}
-                          className="w-7 h-7 p-0 border border-zinc-200 rounded cursor-pointer"
-                          title="Elegir color visual"
-                        />
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => agregarValor(attrIdx)}
-                      className="px-3 py-1.5 text-xs font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-lg transition"
-                    >
-                      + Agregar
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {attr.nombre.toLowerCase().includes('color') && (
+                        <div className="flex items-center gap-1">
+                          <Palette className="w-3.5 h-3.5 text-zinc-400" />
+                          <input
+                            type="color"
+                            value={nuevoValorColorHex[attrIdx] || '#000000'}
+                            onChange={(e) => setNuevoValorColorHex({ ...nuevoValorColorHex, [attrIdx]: e.target.value })}
+                            className="w-7 h-7 p-0 border border-zinc-200 rounded cursor-pointer"
+                            title="Elegir color visual"
+                          />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => agregarValor(attrIdx)}
+                        className="flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-lg transition text-center"
+                      >
+                        + Agregar
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
 
             {/* Input agregar nuevo atributo */}
-            <div className="flex items-center gap-2 pt-2 border-t border-zinc-100">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2 border-t border-zinc-100">
               <input
                 type="text"
-                placeholder="Nombre del atributo (ej: Talla, Color, Presentación)"
+                placeholder="Nombre del atributo (ej: Talla, Color)"
                 value={nuevoAtributoNombre}
                 onChange={(e) => setNuevoAtributoNombre(e.target.value)}
                 onKeyDown={(e) => {
@@ -287,7 +287,7 @@ export default function VariantsEditor({
               <button
                 type="button"
                 onClick={agregarAtributo}
-                className="px-4 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl transition flex items-center gap-1.5"
+                className="px-4 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl transition flex items-center justify-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Crear Atributo
@@ -322,52 +322,14 @@ export default function VariantsEditor({
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-zinc-500 font-semibold">
-                      <th className="p-2.5">Variante</th>
-                      <th className="p-2.5">SKU / Código</th>
-                      <th className="p-2.5 text-right">Precio (S/)</th>
-                      <th className="p-2.5 text-right">Stock</th>
-                      <th className="p-2.5 text-center">Estado</th>
-                      <th className="p-2.5"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100">
-                    {variantes.map((v, idx) => (
-                      <tr key={idx} className="hover:bg-zinc-50/50">
-                        <td className="p-2.5 font-medium text-zinc-900">
-                          {v.nombre_variante}
-                        </td>
-                        <td className="p-2.5">
-                          <input
-                            type="text"
-                            placeholder="SKU libre"
-                            value={v.sku || ''}
-                            onChange={(e) => actualizarVarianteField(idx, 'sku', e.target.value)}
-                            className="w-28 px-2 py-1 border border-zinc-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400"
-                          />
-                        </td>
-                        <td className="p-2.5 text-right">
-                          <input
-                            type="number"
-                            step="0.01"
-                            placeholder={`Base: ${precioBase.toFixed(2)}`}
-                            value={v.precio || ''}
-                            onChange={(e) => actualizarVarianteField(idx, 'precio', e.target.value)}
-                            className="w-24 px-2 py-1 border border-zinc-200 rounded text-xs text-right focus:outline-none focus:ring-1 focus:ring-zinc-400"
-                          />
-                        </td>
-                        <td className="p-2.5 text-right">
-                          <input
-                            type="number"
-                            value={v.stock || '0'}
-                            onChange={(e) => actualizarVarianteField(idx, 'stock', e.target.value)}
-                            className="w-20 px-2 py-1 border border-zinc-200 rounded text-xs text-right font-bold focus:outline-none focus:ring-1 focus:ring-zinc-400"
-                          />
-                        </td>
-                        <td className="p-2.5 text-center">
+              <>
+                {/* Vista móvil: tarjetas */}
+                <div className="sm:hidden space-y-3">
+                  {variantes.map((v, idx) => (
+                    <div key={idx} className="p-3 bg-zinc-50 border border-zinc-100 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-zinc-900 flex-1 min-w-0 truncate">{v.nombre_variante}</span>
+                        <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
                             onClick={() => actualizarVarianteField(idx, 'activo', !v.activo)}
@@ -378,22 +340,120 @@ export default function VariantsEditor({
                           >
                             {v.activo ? 'Activo' : 'Inactivo'}
                           </button>
-                        </td>
-                        <td className="p-2.5 text-right">
                           <button
                             type="button"
                             onClick={() => eliminarVariante(idx)}
                             className="text-zinc-400 hover:text-red-500 p-1"
-                            title="Eliminar esta variante"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        </td>
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="SKU / Código"
+                        value={v.sku || ''}
+                        onChange={(e) => actualizarVarianteField(idx, 'sku', e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 bg-white"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-zinc-400 mb-0.5">Precio (S/)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder={`Base: ${precioBase.toFixed(2)}`}
+                            value={v.precio || ''}
+                            onChange={(e) => actualizarVarianteField(idx, 'precio', e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-zinc-400 mb-0.5">Stock</label>
+                          <input
+                            type="number"
+                            value={v.stock || '0'}
+                            onChange={(e) => actualizarVarianteField(idx, 'stock', e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-zinc-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-zinc-400 bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Vista desktop: tabla */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-100 bg-zinc-50 text-left text-zinc-500 font-semibold">
+                        <th className="p-2.5">Variante</th>
+                        <th className="p-2.5">SKU / Código</th>
+                        <th className="p-2.5 text-right">Precio (S/)</th>
+                        <th className="p-2.5 text-right">Stock</th>
+                        <th className="p-2.5 text-center">Estado</th>
+                        <th className="p-2.5"></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {variantes.map((v, idx) => (
+                        <tr key={idx} className="hover:bg-zinc-50/50">
+                          <td className="p-2.5 font-medium text-zinc-900">{v.nombre_variante}</td>
+                          <td className="p-2.5">
+                            <input
+                              type="text"
+                              placeholder="SKU libre"
+                              value={v.sku || ''}
+                              onChange={(e) => actualizarVarianteField(idx, 'sku', e.target.value)}
+                              className="w-28 px-2 py-1 border border-zinc-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                            />
+                          </td>
+                          <td className="p-2.5 text-right">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder={`Base: ${precioBase.toFixed(2)}`}
+                              value={v.precio || ''}
+                              onChange={(e) => actualizarVarianteField(idx, 'precio', e.target.value)}
+                              className="w-24 px-2 py-1 border border-zinc-200 rounded text-xs text-right focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                            />
+                          </td>
+                          <td className="p-2.5 text-right">
+                            <input
+                              type="number"
+                              value={v.stock || '0'}
+                              onChange={(e) => actualizarVarianteField(idx, 'stock', e.target.value)}
+                              className="w-20 px-2 py-1 border border-zinc-200 rounded text-xs text-right font-bold focus:outline-none focus:ring-1 focus:ring-zinc-400"
+                            />
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => actualizarVarianteField(idx, 'activo', !v.activo)}
+                              className={cn(
+                                'px-2 py-0.5 rounded-full text-[10px] font-semibold transition',
+                                v.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'
+                              )}
+                            >
+                              {v.activo ? 'Activo' : 'Inactivo'}
+                            </button>
+                          </td>
+                          <td className="p-2.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => eliminarVariante(idx)}
+                              className="text-zinc-400 hover:text-red-500 p-1"
+                              title="Eliminar esta variante"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </>

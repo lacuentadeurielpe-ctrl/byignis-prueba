@@ -536,19 +536,19 @@ export default function TiendaPage() {
                         : 'border-gray-200 hover:border-indigo-600 hover:bg-indigo-50/40'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1 pr-3">
                       {v.imagen_url && (
-                        <img src={v.imagen_url} alt={v.nombre_variante} className="w-10 h-10 object-cover rounded-lg border border-gray-100" />
+                        <img src={v.imagen_url} alt={v.nombre_variante} className="w-10 h-10 object-cover rounded-lg border border-gray-100 shrink-0" />
                       )}
-                      <div>
-                        <h5 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+                      <div className="min-w-0">
+                        <h5 className="font-bold text-sm text-gray-900 flex items-center gap-1.5 truncate">
                           <Sparkles className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                          {v.nombre_variante}
+                          <span className="truncate">{v.nombre_variante}</span>
                         </h5>
-                        {v.sku && <p className="text-[11px] text-gray-400 font-mono">SKU: {v.sku}</p>}
+                        {v.sku && <p className="text-[11px] text-gray-400 font-mono truncate">SKU: {v.sku}</p>}
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="font-bold text-sm text-gray-900">
                         {formatPEN(v.precio ?? productoModalVariante.precio_base ?? 0)}
                       </p>
