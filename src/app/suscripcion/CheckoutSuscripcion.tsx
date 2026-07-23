@@ -22,6 +22,7 @@ import {
   CreditCard,
   Loader2,
   ArrowLeft,
+  ArrowRight,
   Sparkles,
   Lock,
 } from 'lucide-react'
@@ -64,6 +65,10 @@ export default function CheckoutSuscripcion({
   const [sdkListo, setSdkListo]     = useState(false)
   const [procesando, setProcesando] = useState(false)
   const [error, setError]           = useState<string | null>(null)
+  // Cuando la tarjeta es rechazada (típico: antifraude de MP), se ofrece
+  // continuar en la página de Mercado Pago, donde el pago suele pasar y la
+  // activación sigue siendo automática (lleva el external_reference).
+  const [ofrecerRescate, setOfrecerRescate] = useState(false)
   const cardFormRef = useRef<{ getCardFormData: () => { token?: string; cardholderEmail?: string }; unmount?: () => void } | null>(null)
   const procesandoRef = useRef(false)
 
@@ -141,6 +146,8 @@ export default function CheckoutSuscripcion({
                 }
 
                 setError(json.error ?? 'No pudimos procesar el pago. Intenta de nuevo.')
+                // La tarjeta fue rechazada → ofrecer la vía de Mercado Pago
+                setOfrecerRescate(true)
                 setProcesando(false)
                 procesandoRef.current = false
               } catch {
@@ -344,46 +351,96 @@ export default function CheckoutSuscripcion({
                   <select id="mp-issuer" className="hidden" />
                   <select id="mp-installments" className="hidden" />
 
-                  {error && (
+                  {/* El error suelto solo cuando NO hay rescate — si lo hay, el
+                      mensaje va como título del panel para no duplicarlo. */}
+                  {error && !ofrecerRescate && (
                     <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                       {error}
                     </div>
                   )}
 
-                  <button
-                    type="submit"
-                    disabled={procesando}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4 text-lg font-bold text-white shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all hover:from-blue-400 hover:to-blue-500 hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {procesando ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Procesando pago…
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="h-5 w-5" />
-                        {primerCobroDiferido ? 'Autorizar suscripción' : 'Pagar S/ 80 y activar'}
-                      </>
-                    )}
-                  </button>
+                  {/* Rescate tras rechazo de tarjeta: continuar en Mercado Pago.
+                      Se presenta como la opción MÁS confiable (marca MP), no como
+                      un plan B sospechoso. Ahí el cliente paga con su cuenta,
+                      Yape u otra tarjeta, y muchos rechazos del formulario pasan. */}
+                  {ofrecerRescate ? (
+                    <div className="space-y-3 rounded-xl border border-[#009EE3]/30 bg-[#009EE3]/5 p-4">
+                      {/* El "qué pasó" — da el motivo de continuar en MP */}
+                      <p className="text-sm font-semibold text-white">
+                        {error ?? 'No se pudo procesar tu tarjeta aquí.'}
+                      </p>
+                      <p className="text-sm text-zinc-300">
+                        No te preocupes, es normal. Completa tu pago de forma segura en{' '}
+                        <strong className="text-white">Mercado Pago</strong>, con tu cuenta, Yape o la misma tarjeta.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={pagarConCuentaMP}
+                        disabled={procesando}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#009EE3] px-6 py-4 text-lg font-bold text-white shadow-[0_0_20px_rgba(0,158,227,0.35)] transition-all hover:bg-[#0089c7] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {procesando ? (
+                          <>
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            Redirigiendo a Mercado Pago…
+                          </>
+                        ) : (
+                          <>
+                            Continuar con Mercado Pago
+                            <ArrowRight className="h-5 w-5" />
+                          </>
+                        )}
+                      </button>
+                      <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
+                        <ShieldCheck className="h-3.5 w-3.5 text-[#009EE3]" />
+                        Pago protegido por Mercado Pago
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setOfrecerRescate(false); setError(null) }}
+                        className="w-full text-center text-xs text-zinc-500 underline transition hover:text-zinc-300"
+                      >
+                        Prefiero intentar con otra tarjeta
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="submit"
+                        disabled={procesando}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4 text-lg font-bold text-white shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all hover:from-blue-400 hover:to-blue-500 hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {procesando ? (
+                          <>
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            Procesando pago…
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="h-5 w-5" />
+                            {primerCobroDiferido ? 'Autorizar suscripción' : 'Pagar S/ 80 y activar'}
+                          </>
+                        )}
+                      </button>
 
-                  <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
-                    <ShieldCheck className="h-4 w-4 text-green-400" />
-                    Datos cifrados y procesados por Mercado Pago. Nunca vemos tu tarjeta.
-                  </div>
+                      <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
+                        <ShieldCheck className="h-4 w-4 text-green-400" />
+                        Datos cifrados y procesados por Mercado Pago. Nunca vemos tu tarjeta.
+                      </div>
 
-                  <p className="text-center text-xs text-zinc-600">
-                    ¿Prefieres pagar desde tu cuenta de Mercado Pago?{' '}
-                    <button
-                      type="button"
-                      onClick={pagarConCuentaMP}
-                      disabled={procesando}
-                      className="text-zinc-400 underline transition hover:text-white"
-                    >
-                      Hazlo aquí
-                    </button>
-                  </p>
+                      <p className="text-center text-xs text-zinc-600">
+                        ¿Prefieres pagar desde tu cuenta de Mercado Pago?{' '}
+                        <button
+                          type="button"
+                          onClick={pagarConCuentaMP}
+                          disabled={procesando}
+                          className="text-zinc-400 underline transition hover:text-white"
+                        >
+                          Hazlo aquí
+                        </button>
+                      </p>
+                    </>
+                  )}
                 </div>
               </form>
             ) : (

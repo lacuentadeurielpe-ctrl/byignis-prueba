@@ -102,14 +102,16 @@ export function mensajeErrorMP(err: unknown): string {
     ['cc_rejected_bad_filled_date',         'La fecha de vencimiento es incorrecta.'],
     ['cc_rejected_bad_filled_other',        'Hay un dato incorrecto en la tarjeta. Revisa todos los campos.'],
     ['cc_rejected_insufficient_amount',     'Tu tarjeta no tiene fondos suficientes. Intenta con otra.'],
-    ['cc_rejected_high_risk',               'Tu banco rechazó el pago por seguridad. Llámalos o usa otra tarjeta.'],
+    // Neutro a propósito: "rechazo por seguridad" asusta al cliente. Se le
+    // ofrece continuar en Mercado Pago, donde esta validacion suele pasar.
+    ['cc_rejected_high_risk',               'No pudimos completar el pago con esta tarjeta.'],
     ['cc_rejected_max_attempts',            'Demasiados intentos con esta tarjeta. Espera un momento o usa otra.'],
     ['cc_rejected_call_for_authorize',      'Tu banco necesita que autorices este pago. Llámalos y vuelve a intentar.'],
     ['cc_rejected_card_disabled',           'Tu tarjeta está inhabilitada para compras por internet. Actívala con tu banco.'],
     ['cc_rejected_duplicated_payment',      'Ya registramos un pago igual hace un momento. Revisa tu suscripción antes de reintentar.'],
     ['cc_rejected_card_error',              'Hubo un problema con la tarjeta. Intenta de nuevo o usa otra.'],
     ['cc_rejected_invalid_installments',    'Esa tarjeta no admite esta modalidad de pago. Usa otra.'],
-    ['cc_rejected_blacklist',               'Tu banco rechazó el pago. Comunícate con ellos o usa otra tarjeta.'],
+    ['cc_rejected_blacklist',               'No pudimos completar el pago con esta tarjeta.'],
     ['invalid card_token_id',               'Los datos de la tarjeta expiraron. Vuelve a ingresarlos.'],
     ['invalid_card_token',                  'Los datos de la tarjeta expiraron. Vuelve a ingresarlos.'],
   ]
