@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import { cn, matchesFuzzy } from '@/lib/utils'
 import { X, Plus, Trash2, Search, Loader2, Package, Check, CalendarClock, ScanLine, Clock } from 'lucide-react'
 import ScannerModal from '@/components/ui/ScannerModal'
+import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { AnimatePresence, motion } from 'framer-motion'
 import { formatearETADesdeISO } from '@/lib/delivery/eta-simple'
 
 interface Producto {
@@ -16,6 +18,8 @@ interface Producto {
   precio_compra: number
   stock: number
   codigo_barras?: string | null
+  tiene_variantes?: boolean
+  variantes?: any[]
 }
 
 interface Zona {
@@ -24,13 +28,15 @@ interface Zona {
   tiempo_estimado_min: number
 }
 
-interface ItemCarrito {
-  producto_id: string | null
+interface ItemNuevoPedido {
+  producto_id?: string
+  variante_id?: string
   nombre_producto: string
-  unidad: string
+  nombre_variante?: string
   cantidad: number
   precio_unitario: number
-  costo_unitario: number
+  unidad: string
+  tipo: 'catalogo' | 'manual'
 }
 
 interface NuevoPedidoModalProps {
@@ -42,9 +48,12 @@ interface NuevoPedidoModalProps {
 
 export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCreado }: NuevoPedidoModalProps) {
   const router = useRouter()
-  const [items, setItems] = useState<ItemCarrito[]>([])
+  const supabase = createClient()
+  const [items, setItems] = useState<ItemNuevoPedido[]>([])
   const [busqueda, setBusqueda] = useState('')
   const [mostrarSugerencias, setMostrarSugerencias] = useState(false)
+  const [showScanner, setShowScanner] = useState(false)
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null)
   const [itemManual, setItemManual] = useState({ nombre: '', unidad: 'und', cantidad: 1, precio: 0 })
   const [modoManual, setModoManual] = useState(false)
   const busquedaRef = useRef<HTMLInputElement>(null)
@@ -65,7 +74,6 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
 
   const [estadoInicial, setEstadoInicial] = useState<'pendiente' | 'confirmado'>('confirmado')
 
-  // ETA preview (debounced)
   const [etaPreview, setEtaPreview] = useState<{
     etaMinutos: number
     distanciaKm: number
@@ -79,42 +87,52 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
   const [showMapPopover, setShowMapPopover] = useState(false)
   const etaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Fase V: entrega programada
   const [esProgramado, setEsProgramado] = useState(false)
-  const [fechaProgramada, setFechaProgramada] = useState('')   // "YYYY-MM-DDTHH:MM" local Lima
-  const [showScanner, setShowScanner] = useState(false)
+  const [fechaProgramada, setFechaProgramada] = useState('')
   const scanBuffer = useRef('')
   const lastKeyTime = useRef(0)
 
-  // Manejador del escáner (Hardware y Software)
+  function reproducirBeep() {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(800, ctx.currentTime)
+      gain.gain.setValueAtTime(0.1, ctx.currentTime)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.1)
+    } catch (e) {}
+  }
+
   function handleScanCode(codigo: string) {
-    const p = productos.find(x => x.codigo_barras === codigo)
+    for (const prod of productos) {
+      if (prod.tiene_variantes && prod.variantes) {
+        const varianteExacta = prod.variantes.find(v => v.codigo_barras === codigo)
+        if (varianteExacta) {
+          agregarProductoConVariante(prod, varianteExacta)
+          setMostrarSugerencias(false)
+          reproducirBeep()
+          return
+        }
+      }
+    }
+
+    const p = productos.find(x => x.codigo_barras === codigo && !x.tiene_variantes)
     if (p) {
       agregarProducto(p)
-      toast.success(`Añadido al carrito: ${p.nombre}`)
-      try {
-        // Generar un beep corto sin archivos de audio externos (Web Audio API)
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-        osc.connect(gain)
-        gain.connect(ctx.destination)
-        osc.type = 'sine'
-        osc.frequency.setValueAtTime(800, ctx.currentTime)
-        gain.gain.setValueAtTime(0.1, ctx.currentTime)
-        osc.start()
-        osc.stop(ctx.currentTime + 0.1)
-      } catch (e) {}
+      setMostrarSugerencias(false)
+      reproducirBeep()
     } else {
-      toast.error(`Producto no encontrado (Código: ${codigo})`)
+      toast.error(`Código no encontrado o pertenece a producto con variantes: ${codigo}`)
     }
   }
 
-  // Escucha activa de pistola láser en segundo plano
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const now = Date.now()
-      // Si pasan más de 100ms entre teclas, se asume que es escritura humana, no escáner
       if (now - lastKeyTime.current > 100) {
         scanBuffer.current = ''
       }
@@ -132,7 +150,6 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [productos])
 
-  // ── ETA Preview debounced ────────────────────────────────────────────────
   const fetchEtaPreview = useCallback(async (dir: string, zona: string) => {
     if (dir.trim().length < 8) { setEtaPreview(null); setEtaError(null); return }
     setEtaLoading(true)
@@ -173,7 +190,6 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
     return () => { if (etaDebounceRef.current) clearTimeout(etaDebounceRef.current) }
   }, [direccion, zonaId, modalidad, fetchEtaPreview])
 
-  // Mínimo = ahora + 30 min (redondeado a los próximos 15 min) en Lima
   const minFechaProgramada = (() => {
     const d = new Date(Date.now() + 30 * 60_000)
     d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0)
@@ -184,7 +200,6 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // useMemo + busquedaDelay: evita correr Levenshtein en cada tecla (BUG-007)
   const sugerencias = useMemo(() => {
     const q = busquedaDelay.trim()
     if (q.length < 1) return []
@@ -194,18 +209,45 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
   const total = items.reduce((s, i) => s + i.cantidad * i.precio_unitario, 0)
 
   function agregarProducto(p: Producto) {
-    const existe = items.findIndex((i) => i.producto_id === p.id)
+    const existe = items.findIndex((i) => i.producto_id === p.id && !i.variante_id)
     if (existe >= 0) {
       setItems((prev) => prev.map((i, idx) => idx === existe ? { ...i, cantidad: i.cantidad + 1 } : i))
     } else {
-      setItems((prev) => [...prev, {
-        producto_id: p.id,
-        nombre_producto: p.nombre,
-        unidad: p.unidad,
-        cantidad: 1,
-        precio_unitario: p.precio_base,
-        costo_unitario: p.precio_compra,
-      }])
+      setItems((prev) => [
+        {
+          producto_id: p.id,
+          nombre_producto: p.nombre,
+          cantidad: 1,
+          precio_unitario: p.precio_base,
+          unidad: p.unidad || 'und',
+          tipo: 'catalogo',
+        },
+        ...prev,
+      ])
+    }
+    setBusqueda('')
+    setMostrarSugerencias(false)
+    busquedaRef.current?.focus()
+  }
+
+  function agregarProductoConVariante(p: Producto, v: any) {
+    const existe = items.findIndex((i) => i.producto_id === p.id && i.variante_id === v.id)
+    if (existe >= 0) {
+      setItems((prev) => prev.map((i, idx) => idx === existe ? { ...i, cantidad: i.cantidad + 1 } : i))
+    } else {
+      setItems((prev) => [
+        {
+          producto_id: p.id,
+          variante_id: v.id,
+          nombre_producto: p.nombre,
+          nombre_variante: v.nombre_variante,
+          cantidad: 1,
+          precio_unitario: v.precio ?? p.precio_base,
+          unidad: p.unidad || 'und',
+          tipo: 'catalogo',
+        },
+        ...prev,
+      ])
     }
     setBusqueda('')
     setMostrarSugerencias(false)
@@ -215,12 +257,12 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
   function agregarManual() {
     if (!itemManual.nombre.trim() || itemManual.precio <= 0) return
     setItems((prev) => [...prev, {
-      producto_id: null,
+      producto_id: undefined,
       nombre_producto: itemManual.nombre.trim(),
       unidad: itemManual.unidad.trim() || 'und',
       cantidad: itemManual.cantidad,
       precio_unitario: itemManual.precio,
-      costo_unitario: 0,
+      tipo: 'manual',
     }])
     setItemManual({ nombre: '', unidad: 'und', cantidad: 1, precio: 0 })
     setModoManual(false)
@@ -364,20 +406,77 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
                   {mostrarSugerencias && sugerencias.length > 0 && (
                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden">
                       {sugerencias.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onMouseDown={() => agregarProducto(p)}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-orange-50 transition text-left"
-                        >
-                          <div className="w-7 h-7 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
-                            <Package className="w-3.5 h-3.5 text-orange-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
-                            <p className="text-xs text-gray-400">S/{p.precio_base.toFixed(2)} / {p.unidad} · stk: {p.stock}</p>
-                          </div>
-                        </button>
+                        <div key={p.id}>
+                          <button
+                            type="button"
+                            onMouseDown={() => {
+                              if (p.tiene_variantes && p.variantes && p.variantes.length > 0) {
+                                setExpandedProductId(prev => prev === p.id ? null : p.id)
+                              } else {
+                                agregarProducto(p)
+                              }
+                            }}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 transition text-left ${expandedProductId === p.id ? 'bg-orange-50 border-b border-orange-100' : 'hover:bg-orange-50'}`}
+                          >
+                            <div className="w-7 h-7 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
+                              <Package className="w-3.5 h-3.5 text-orange-600" />
+                            </div>
+                            <div className="flex-1 min-w-0 flex items-center justify-between">
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                                  {p.tiene_variantes && (
+                                    <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[9px] font-bold shrink-0">
+                                      Variantes
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-400">S/{p.precio_base.toFixed(2)} / {p.unidad} · stk: {p.stock}</p>
+                              </div>
+                            </div>
+                          </button>
+
+                          <AnimatePresence>
+                            {expandedProductId === p.id && p.variantes && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="p-2 ml-10 mt-1 mb-2 bg-white border border-gray-100 rounded-xl shadow-sm space-y-1">
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">Selecciona una opción</p>
+                                  {p.variantes.map(v => (
+                                    <button
+                                      key={v.id}
+                                      type="button"
+                                      onMouseDown={() => agregarProductoConVariante(p, v)}
+                                      disabled={v.stock === 0}
+                                      className={`w-full flex items-center gap-2 p-2 rounded-lg border transition text-left ${v.stock === 0 ? "opacity-50 border-transparent bg-gray-50 cursor-not-allowed" : "hover:bg-gray-50 border-transparent hover:border-gray-200 cursor-pointer"}`}
+                                    >
+                                      {v.imagen_url ? (
+                                        <img src={v.imagen_url} alt={v.nombre_variante} className="w-6 h-6 rounded object-cover shrink-0 border border-gray-200" />
+                                      ) : (
+                                        <div className="w-6 h-6 rounded bg-gray-100 border border-gray-200 flex items-center justify-center shrink-0">
+                                          <Package className="w-3 h-3 text-gray-400" />
+                                        </div>
+                                      )}
+                                      <div className="flex-1 min-w-0">
+                                        <h5 className="font-semibold text-xs text-gray-800 truncate">{v.nombre_variante}</h5>
+                                        <p className="text-[10px] text-gray-500">Stk: {v.stock}</p>
+                                      </div>
+                                      <div className="shrink-0 text-right">
+                                        <p className="font-bold text-xs text-gray-900">
+                                          S/{(v.precio ?? p.precio_base).toFixed(2)}
+                                        </p>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -452,7 +551,10 @@ export default function NuevoPedidoModal({ productos, zonas, onClose, onPedidoCr
                 {items.map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{item.nombre_producto}</p>
+                      <p className="text-sm font-medium text-gray-800 truncate">
+                        {item.nombre_producto}
+                        {item.nombre_variante && <span className="text-gray-500 font-normal ml-1">({item.nombre_variante})</span>}
+                      </p>
                       <p className="text-xs text-gray-400">{item.unidad}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">

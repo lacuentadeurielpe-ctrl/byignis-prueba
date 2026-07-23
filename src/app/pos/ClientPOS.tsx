@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import Modal from '@/components/ui/Modal'
 import { Sparkles } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { usePOSStore, ProductoPOS } from '@/stores/usePOSStore'
 import { useRealtimeProductos } from '@/lib/hooks/useRealtimeProductos'
 import { type VarianteProducto } from '@/types/database'
@@ -39,7 +40,7 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
     fechaProgramada, setFechaProgramada, resetearDespuesDeVenta
   } = usePOSStore()
 
-  const [productoParaVariante, setProductoParaVariante] = useState<ProductoPOS | null>(null)
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null)
 
   const busquedaRef = useRef<HTMLInputElement>(null)
   const scanBuffer = useRef('')
@@ -99,13 +100,27 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
   }, [productos, items, cobrando, esProgramado, tipoComprobante, dniRuc, nombreCliente, telefonoCliente])
 
   function handleScanCode(codigo: string) {
-    const p = productos.find(x => x.codigo_barras === codigo)
+    // 1. Buscar si coincide con el código de barras (o sku) de alguna variante
+    for (const prod of productos) {
+      if (prod.tiene_variantes && prod.variantes) {
+        const varianteExacta = prod.variantes.find((v: any) => v.codigo_barras === codigo || v.sku === codigo)
+        if (varianteExacta) {
+          agregarItemConVariante(prod, varianteExacta)
+          setVistaMovil('carrito')
+          reproducirBeep()
+          return
+        }
+      }
+    }
+
+    // 2. Si no es variante, buscar producto padre normal (ignoramos padres con variantes)
+    const p = productos.find(x => x.codigo_barras === codigo && !x.tiene_variantes)
     if (p) {
       agregarItem(p)
       setVistaMovil('carrito')
       reproducirBeep()
     } else {
-      toast.error(`Código desconocido: ${codigo}`)
+      toast.error(`Código no encontrado o pertenece a un producto con variantes (escanea la variante directamente)`)
     }
   }
 
@@ -567,53 +582,103 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
           {mostrarSugerencias && busqueda ? (
             <div className="space-y-1">
               {sugerencias.length > 0 ? sugerencias.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    if (p.tiene_variantes && p.variantes && p.variantes.length > 0) {
-                      setProductoParaVariante(p)
-                    } else {
-                      agregarItem(p)
-                      setVistaMovil('carrito')
-                    }
-                  }}
-                  className={cn(
-                    'w-full flex items-center gap-3 p-3 text-left rounded-xl transition group border hover:shadow-sm',
-                    p.stock === 0
-                      ? 'border-amber-200 bg-amber-50/60 hover:bg-amber-50 hover:border-amber-300'
-                      : 'border-transparent hover:bg-white hover:border-zinc-200'
-                  )}
-                >
-                  <div className={cn(
-                    'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition',
-                    p.stock === 0
-                      ? 'bg-amber-100 text-amber-500 group-hover:bg-amber-500 group-hover:text-white'
-                      : 'bg-zinc-100 group-hover:bg-zinc-900 group-hover:text-white'
-                  )}>
-                    <Package className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <h4 className="font-bold text-sm text-zinc-900 truncate">{p.nombre}</h4>
-                      {p.tiene_variantes && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[9px] font-bold shrink-0">
-                          Variantes
-                        </span>
-                      )}
+                <div key={p.id} className="w-full">
+                  <button
+                    onClick={() => {
+                      if (p.tiene_variantes && p.variantes && p.variantes.length > 0) {
+                        setExpandedProductId(prev => prev === p.id ? null : p.id)
+                      } else {
+                        agregarItem(p)
+                        setVistaMovil('carrito')
+                      }
+                    }}
+                    className={cn(
+                      'w-full flex items-center gap-3 p-3 text-left rounded-xl transition group border hover:shadow-sm',
+                      p.stock === 0
+                        ? 'border-amber-200 bg-amber-50/60 hover:bg-amber-50 hover:border-amber-300'
+                        : expandedProductId === p.id
+                          ? 'border-zinc-200 bg-zinc-50 shadow-sm'
+                          : 'border-transparent hover:bg-white hover:border-zinc-200'
+                    )}
+                  >
+                    <div className={cn(
+                      'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition',
+                      p.stock === 0
+                        ? 'bg-amber-100 text-amber-500 group-hover:bg-amber-500 group-hover:text-white'
+                        : 'bg-zinc-100 group-hover:bg-zinc-900 group-hover:text-white'
+                    )}>
+                      <Package className="w-4 h-4" />
                     </div>
-                    <p className="text-xs">
-                      <span className={p.stock === 0 ? 'text-amber-600 font-semibold' : 'text-zinc-500'}>
-                        Stk: {p.stock}{p.stock === 0 ? ' — sin stock' : ''}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-bold text-sm text-zinc-900 truncate">{p.nombre}</h4>
+                        {p.tiene_variantes && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[9px] font-bold shrink-0">
+                            Variantes
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs">
+                        <span className={p.stock === 0 ? 'text-amber-600 font-semibold' : 'text-zinc-500'}>
+                          Stk: {p.stock}{p.stock === 0 ? ' — sin stock' : ''}
+                        </span>
+                        <span className="text-zinc-400"> · {formatPEN(p.precio_base)}</span>
+                      </p>
+                    </div>
+                    {p.stock === 0 && (
+                      <span className="shrink-0 text-[9px] font-bold bg-amber-200 text-amber-700 px-1.5 py-0.5 rounded-full leading-none">
+                        0
                       </span>
-                      <span className="text-zinc-400"> · {formatPEN(p.precio_base)}</span>
-                    </p>
-                  </div>
-                  {p.stock === 0 && (
-                    <span className="shrink-0 text-[9px] font-bold bg-amber-200 text-amber-700 px-1.5 py-0.5 rounded-full leading-none">
-                      0
-                    </span>
-                  )}
-                </button>
+                    )}
+                  </button>
+
+                  <AnimatePresence>
+                    {expandedProductId === p.id && p.variantes && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="p-2 ml-12 mt-1 mb-2 bg-white border border-zinc-200 rounded-xl shadow-sm space-y-1">
+                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">Selecciona una opción</p>
+                          {p.variantes.map((v: any) => (
+                            <button
+                              key={v.id}
+                              onClick={() => {
+                                agregarItemConVariante(p, v)
+                                setExpandedProductId(null)
+                                setVistaMovil('carrito')
+                              }}
+                              className={cn(
+                                "w-full flex items-center gap-2 p-2 rounded-lg border transition text-left",
+                                v.stock === 0 ? "opacity-50 border-transparent bg-zinc-50 cursor-not-allowed" : "hover:bg-zinc-50 border-transparent hover:border-zinc-200 cursor-pointer"
+                              )}
+                              disabled={v.stock === 0}
+                            >
+                              {v.imagen_url ? (
+                                <img src={v.imagen_url} alt={v.nombre_variante} className="w-7 h-7 rounded-md object-cover shrink-0 border border-zinc-200" />
+                              ) : (
+                                <div className="w-7 h-7 rounded-md bg-zinc-100 border border-zinc-200 flex items-center justify-center shrink-0">
+                                  <Package className="w-3.5 h-3.5 text-zinc-400" />
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <h5 className="font-semibold text-xs text-zinc-800 truncate">{v.nombre_variante}</h5>
+                                <p className="text-[10px] text-zinc-500">Stk: {v.stock}</p>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="font-bold text-xs text-zinc-900">
+                                  {formatPEN(v.precio ?? p.precio_base)}
+                                </p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               )) : (
                 <p className="text-center text-sm text-zinc-500 py-8">No hay resultados</p>
               )}
@@ -628,52 +693,11 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
         </div>
       </div>
 
-      {/* Modal Selección de Variante */}
-      {productoParaVariante && (
-        <Modal
-          open={!!productoParaVariante}
-          onClose={() => setProductoParaVariante(null)}
-          title={`Seleccionar opción de "${productoParaVariante.nombre}"`}
-          size="sm"
-        >
-          <div className="space-y-2 pt-2">
-            <p className="text-xs text-zinc-500 mb-3">
-              Selecciona la combinación que desea llevar el cliente:
-            </p>
-            <div className="space-y-2 max-h-72 overflow-y-auto">
-              {productoParaVariante.variantes?.map((v) => (
-                <button
-                  key={v.id}
-                  onClick={() => {
-                    agregarItemConVariante(productoParaVariante, v)
-                    setProductoParaVariante(null)
-                    setVistaMovil('carrito')
-                  }}
-                  className="w-full flex items-center justify-between p-3 rounded-xl border border-zinc-200 hover:border-zinc-900 hover:bg-zinc-50 transition text-left"
-                >
-                  <div className="min-w-0 flex-1 pr-3">
-                    <h5 className="font-bold text-sm text-zinc-900 flex items-center gap-1.5 truncate">
-                      <Sparkles className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                      <span className="truncate">{v.nombre_variante}</span>
-                    </h5>
-                    {v.sku && <p className="text-xs text-zinc-400 font-mono mt-0.5 truncate">SKU: {v.sku}</p>}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-bold text-sm text-zinc-900">{formatPEN(v.precio ?? productoParaVariante.precio_base)}</p>
-                    <p className="text-xs text-zinc-500">Stock: {v.stock}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </Modal>
-      )}
-
       {/* Scanner Modal */}
       {showScanner && (
         <ScannerModal
           onClose={() => setShowScanner(false)}
-          onScan={codigo => { handleScanCode(codigo); setShowScanner(false) }}
+          onScan={(codigo: string) => { handleScanCode(codigo); setShowScanner(false) }}
         />
       )}
 
