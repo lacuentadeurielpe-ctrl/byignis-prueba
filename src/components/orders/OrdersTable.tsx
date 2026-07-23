@@ -35,6 +35,8 @@ interface ItemPedido {
   cantidad: number
   precio_unitario: number
   subtotal: number
+  variante_id?: string | null
+  nombre_variante?: string | null
 }
 
 interface EntregaResumen {

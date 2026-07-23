@@ -6,6 +6,7 @@ import { Loader2, TrendingUp, AlertTriangle, Copy, Plus, Trash2, Package2, Recei
 import { type Producto, type Categoria } from '@/types/database'
 import DiscountRulesEditor, { type ReglaForm } from './DiscountRulesEditor'
 import ProductImagesEditor from './ProductImagesEditor'
+import VariantsEditor, { type ProductoAtributoForm, type VarianteForm } from './VariantsEditor'
 import ScannerModal from '@/components/ui/ScannerModal'
 import { cn, formatPEN } from '@/lib/utils'
 import { UNIDADES_SUNAT, normalizarUnidad, labelUnidad, UNIDAD_DEFAULT } from '@/lib/constantes/unidades'
@@ -98,9 +99,33 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
     })) ?? []
   )
 
+  const [tieneVariantes, setTieneVariantes] = useState<boolean>(producto?.tiene_variantes ?? false)
+  const [atributos, setAtributos] = useState<ProductoAtributoForm[]>(
+    producto?.atributos?.map((a) => ({
+      id: a.id,
+      nombre: a.nombre,
+      valores: a.valores?.map((v) => ({ id: v.id, valor: v.valor, color_hex: v.color_hex || undefined })) ?? [],
+    })) ?? []
+  )
+  const [variantes, setVariantes] = useState<VarianteForm[]>(
+    producto?.variantes?.map((v) => ({
+      id: v.id,
+      nombre_variante: v.nombre_variante,
+      sku: v.sku ?? '',
+      precio: v.precio?.toString() ?? '',
+      precio_compra: v.precio_compra?.toString() ?? '',
+      stock: v.stock.toString(),
+      stock_minimo: v.stock_minimo?.toString() ?? '0',
+      imagen_url: v.imagen_url ?? '',
+      activo: v.activo,
+      venta_sin_stock: v.venta_sin_stock,
+      valores_ids: v.valores_ids,
+    })) ?? []
+  )
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [seccion, setSeccion] = useState<'basico' | 'imagenes' | 'descuentos' | 'unidades'>('basico')
+  const [seccion, setSeccion] = useState<'basico' | 'imagenes' | 'descuentos' | 'unidades' | 'variantes'>('basico')
   const [showScanner, setShowScanner] = useState(false)
 
   // ── Dedup: solo para nuevo producto ─────────────────────────────────────────
@@ -203,6 +228,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
       facturable: form.facturable,
       proveedor: form.proveedor.trim() || null,
       marca: form.marca.trim() || null,
+      tiene_variantes: tieneVariantes,
       imagenes,
       reglas_descuento: reglas.map(({ id: _, ...r }) => r),
       unidades_producto: unidades.map(({ id, ...u }) => ({
@@ -225,13 +251,30 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
     })
 
     const data = await res.json()
-    setLoading(false)
 
     if (!res.ok) {
+      setLoading(false)
       setError(data.error ?? 'Error al guardar el producto.')
       return
     }
 
+    const prodId = data.id
+    if (prodId && tieneVariantes) {
+      // Guardar atributos y variantes
+      await fetch(`/api/products/${prodId}/atributos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(atributos),
+      })
+
+      await fetch(`/api/products/${prodId}/variantes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(variantes),
+      })
+    }
+
+    setLoading(false)
     onSuccess?.()
     router.push('/dashboard/catalog')
     router.refresh()
@@ -243,6 +286,7 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
       <div className="flex border-b border-zinc-100 overflow-x-auto">
         {[
           { key: 'basico', label: 'Datos del producto' },
+          { key: 'variantes', label: `Variantes${variantes.length > 0 ? ` (${variantes.length})` : ''}` },
           { key: 'imagenes', label: `Imágenes${imagenes.length > 0 ? ` (${imagenes.length})` : ''}` },
           { key: 'descuentos', label: `Descuentos${reglas.length > 0 ? ` (${reglas.length})` : ''}` },
           { key: 'unidades', label: `Unidades adicionales${unidades.length > 0 ? ` (${unidades.length})` : ''}` },
@@ -816,6 +860,19 @@ export default function ProductForm({ producto, categorias, margenMinimo = 10, i
             Agregar unidad adicional
           </button>
         </div>
+      )}
+
+      {/* ── SECCIÓN: Variantes (Tallas / Colores) ── */}
+      {seccion === 'variantes' && (
+        <VariantsEditor
+          tieneVariantes={tieneVariantes}
+          onToggleTieneVariantes={setTieneVariantes}
+          atributos={atributos}
+          onAtributosChange={setAtributos}
+          variantes={variantes}
+          onVariantesChange={setVariantes}
+          precioBase={parseFloat(form.precio_base) || 0}
+        />
       )}
 
       {error && (

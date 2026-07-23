@@ -48,24 +48,41 @@ function matchToken(token: string, texto: string): boolean {
   return false
 }
 
-// Busca un producto en el catálogo por nombre — 4 niveles de fuzzy matching
+// Busca un producto en el catálogo por nombre o variante — 4 niveles de fuzzy matching
 export function buscarProducto(nombreBuscado: string, productos: Producto[]): Producto | null {
   const termino = normalizar(nombreBuscado)
   if (!termino) return null
 
-  // 1. Coincidencia exacta normalizada
+  // 1. Coincidencia por SKU o nombre de variante directa
+  for (const p of productos) {
+    if (p.tiene_variantes && p.variantes) {
+      for (const v of p.variantes) {
+        if (v.sku && normalizar(v.sku) === termino) return p
+        if (v.nombre_variante && normalizar(v.nombre_variante) === termino) return p
+        if (v.nombre_variante && normalizar(`${p.nombre} ${v.nombre_variante}`) === termino) return p
+      }
+    }
+  }
+
+  // 2. Coincidencia exacta normalizada
   const exacto = productos.find((p) => normalizar(p.nombre) === termino)
   if (exacto) return exacto
 
-  // 2. El nombre del catálogo contiene el término completo
-  const contiene = productos.find((p) => normalizar(p.nombre).includes(termino))
+  // 3. El nombre del catálogo o variante contiene el término completo
+  const contiene = productos.find((p) => {
+    if (normalizar(p.nombre).includes(termino)) return true
+    if (p.tiene_variantes && p.variantes) {
+      return p.variantes.some(v => normalizar(v.nombre_variante).includes(termino) || normalizar(`${p.nombre} ${v.nombre_variante}`).includes(termino))
+    }
+    return false
+  })
   if (contiene) return contiene
 
-  // 3. El término contiene el nombre del catálogo (cliente dice más de lo que está en catálogo)
+  // 4. El término contiene el nombre del catálogo
   const invertido = productos.find((p) => termino.includes(normalizar(p.nombre)))
   if (invertido) return invertido
 
-  // 4. Scoring por tokens — funciona con 1 o más tokens, con plural/singular
+  // 5. Scoring por tokens — funciona con 1 o más tokens, con plural/singular
   const tokensTermino = tokenizar(termino)
   if (tokensTermino.length === 0) return null
 

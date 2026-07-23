@@ -202,6 +202,9 @@ export default function OrderDetailPane({
                   <div key={item.id} className="p-5 flex items-start justify-between hover:bg-zinc-50/50 transition-colors">
                     <div>
                       <p className="font-semibold text-zinc-900 leading-tight">{item.nombre_producto}</p>
+                      {item.nombre_variante && (
+                        <p className="text-xs text-orange-600 font-semibold mt-0.5">› {item.nombre_variante}</p>
+                      )}
                       <p className="text-sm text-zinc-500 mt-1">{item.cantidad} x {formatPEN(item.precio_unitario)}</p>
                     </div>
                     <span className="font-bold text-zinc-900">{formatPEN(item.subtotal)}</span>

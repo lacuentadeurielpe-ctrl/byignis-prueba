@@ -22,12 +22,12 @@ export class CatalogRepository {
   }
 
   /**
-   * Obtiene la lista de productos activos de una ferretería con sus categorías y reglas de descuento.
+   * Obtiene la lista de productos activos de una ferretería con sus categorías, reglas de descuento, variantes y atributos.
    */
   async listarProductosActivos(ferreteriaId: string): Promise<Producto[]> {
     const { data, error } = await this.supabase
       .from('productos')
-      .select('*, categorias(id,nombre), reglas_descuento(*)')
+      .select('*, categorias(id,nombre), reglas_descuento(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
       .eq('ferreteria_id', ferreteriaId)
       .eq('activo', true)
       .order('nombre')
@@ -45,7 +45,7 @@ export class CatalogRepository {
   async obtenerProductoConStock(ferreteriaId: string, productoId: string): Promise<any | null> {
     const { data, error } = await this.supabase
       .from('productos')
-      .select('id, nombre, unidad, stock, precio_base, codigo_interno')
+      .select('id, nombre, unidad, stock, precio_base, codigo_interno, tiene_variantes, variantes_producto(*)')
       .eq('id', productoId)
       .eq('ferreteria_id', ferreteriaId)
       .eq('activo', true)
@@ -56,6 +56,80 @@ export class CatalogRepository {
       return null
     }
     return data
+  }
+
+  /**
+   * Obtiene la lista de variantes de un producto.
+   */
+  async listarVariantesDeProducto(ferreteriaId: string, productoId: string) {
+    const { data, error } = await this.supabase
+      .from('variantes_producto')
+      .select('*')
+      .eq('producto_id', productoId)
+      .eq('ferreteria_id', ferreteriaId)
+      .order('nombre_variante')
+
+    if (error) {
+      console.error('[CatalogRepository] Error al listar variantes:', error.message)
+      return []
+    }
+    return data ?? []
+  }
+
+  /**
+   * Crea una nueva variante para un producto.
+   */
+  async crearVariante(ferreteriaId: string, variante: {
+    producto_id: string
+    nombre_variante: string
+    sku?: string | null
+    precio?: number | null
+    precio_compra?: number | null
+    stock?: number
+    stock_minimo?: number
+    imagen_url?: string | null
+    activo?: boolean
+    venta_sin_stock?: boolean
+    valores_ids: string[]
+  }) {
+    const { data, error } = await this.supabase
+      .from('variantes_producto')
+      .insert({ ...variante, ferreteria_id: ferreteriaId })
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  /**
+   * Actualiza una variante existente.
+   */
+  async actualizarVariante(ferreteriaId: string, varianteId: string, fields: Record<string, any>) {
+    const { data, error } = await this.supabase
+      .from('variantes_producto')
+      .update(fields)
+      .eq('id', varianteId)
+      .eq('ferreteria_id', ferreteriaId)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  }
+
+  /**
+   * Elimina una variante.
+   */
+  async eliminarVariante(ferreteriaId: string, varianteId: string) {
+    const { error } = await this.supabase
+      .from('variantes_producto')
+      .delete()
+      .eq('id', varianteId)
+      .eq('ferreteria_id', ferreteriaId)
+
+    if (error) throw error
+    return true
   }
 
   /**
@@ -119,6 +193,7 @@ export class CatalogRepository {
     unidad: string
     stock: number
     activo: boolean
+    tiene_variantes?: boolean
   }[]) {
     const { data, error } = await this.supabase
       .from('productos')
@@ -136,6 +211,7 @@ export class CatalogRepository {
     precio_base: number
     unidad: string
     stock: number
+    tiene_variantes?: boolean
   }) {
     const { data, error } = await this.supabase
       .from('productos')
@@ -155,7 +231,7 @@ export class CatalogRepository {
   async obtenerProductoPorCodigo(ferreteriaId: string, codigoInterno: string): Promise<Producto | null> {
     const { data, error } = await this.supabase
       .from('productos')
-      .select('*, categorias(id,nombre), reglas_descuento(*)')
+      .select('*, categorias(id,nombre), reglas_descuento(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
       .eq('ferreteria_id', ferreteriaId)
       .eq('codigo_interno', codigoInterno)
       .eq('activo', true)

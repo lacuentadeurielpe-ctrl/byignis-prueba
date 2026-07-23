@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { type VarianteProducto } from '@/types/database'
 
 export interface ProductoPOS {
   id: string
@@ -8,6 +9,8 @@ export interface ProductoPOS {
   precio_compra: number
   stock: number
   codigo_barras?: string | null
+  tiene_variantes?: boolean
+  variantes?: VarianteProducto[]
 }
 
 export interface ItemCarrito {
@@ -17,6 +20,8 @@ export interface ItemCarrito {
   cantidad: number
   precio_unitario: number
   costo_unitario: number
+  variante_id?: string | null
+  nombre_variante?: string | null
 }
 
 type TipoComprobante = 'nota_venta' | 'boleta' | 'factura'
@@ -25,6 +30,7 @@ interface POSState {
   // Estado del Carrito
   items: ItemCarrito[]
   agregarItem: (producto: ProductoPOS) => void
+  agregarItemConVariante: (producto: ProductoPOS, variante: VarianteProducto) => void
   actualizarCantidad: (idx: number, delta: number) => void
   eliminarItem: (idx: number) => void
   vaciarCarrito: () => void
@@ -71,7 +77,7 @@ export const usePOSStore = create<POSState>((set) => ({
   items: [],
   total: 0,
   agregarItem: (p) => set((state) => {
-    const existe = state.items.findIndex(i => i.producto_id === p.id)
+    const existe = state.items.findIndex(i => i.producto_id === p.id && !i.variante_id)
     let nuevos: ItemCarrito[]
     if (existe >= 0) {
       nuevos = [...state.items]
@@ -84,6 +90,26 @@ export const usePOSStore = create<POSState>((set) => ({
         cantidad: 1,
         precio_unitario: p.precio_base,
         costo_unitario: p.precio_compra
+      }]
+    }
+    return { items: nuevos, total: calcularTotal(nuevos), busqueda: '', mostrarSugerencias: false }
+  }),
+  agregarItemConVariante: (p, variante) => set((state) => {
+    const existe = state.items.findIndex(i => i.producto_id === p.id && i.variante_id === variante.id)
+    let nuevos: ItemCarrito[]
+    if (existe >= 0) {
+      nuevos = [...state.items]
+      nuevos[existe].cantidad += 1
+    } else {
+      nuevos = [...state.items, {
+        producto_id: p.id,
+        nombre_producto: p.nombre,
+        unidad: p.unidad,
+        cantidad: 1,
+        precio_unitario: variante.precio ?? p.precio_base,
+        costo_unitario: variante.precio_compra ?? p.precio_compra,
+        variante_id: variante.id,
+        nombre_variante: variante.nombre_variante,
       }]
     }
     return { items: nuevos, total: calcularTotal(nuevos), busqueda: '', mostrarSugerencias: false }

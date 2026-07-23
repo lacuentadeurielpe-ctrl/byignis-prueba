@@ -38,8 +38,9 @@ export default function ShoppingCartDrawer({ storePhone, storeName }: ShoppingCa
       }
 
       const typeLabel = item.tipo === 'digital' ? '[Digital] ' : ''
+      const variantLabel = item.nombre_variante ? ` (${item.nombre_variante})` : ''
       const priceText = item.precio_base ? `(${formatPEN(unitPrice)})` : ''
-      text += `- ${item.cantidad}x ${typeLabel}${item.nombre} ${priceText}\n`
+      text += `- ${item.cantidad}x ${typeLabel}${item.nombre}${variantLabel} ${priceText}\n`
     })
 
     const total = getTotal()
@@ -113,66 +114,74 @@ export default function ShoppingCartDrawer({ storePhone, storeName }: ShoppingCa
                             </div>
                           ) : (
                             <ul role="list" className="-my-6 divide-y divide-gray-200">
-                              {items.map((item) => (
-                                <li key={item.id} className="flex py-6">
-                                  {item.imagen && (
-                                    <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl border border-gray-200">
-                                      <img
-                                        src={item.imagen}
-                                        alt={item.nombre}
-                                        className="h-full w-full object-cover object-center"
-                                      />
-                                    </div>
-                                  )}
+                              {items.map((item) => {
+                                const cartKey = item.variante_id ? `${item.id}_${item.variante_id}` : item.id
+                                return (
+                                  <li key={cartKey} className="flex py-6">
+                                    {item.imagen && (
+                                      <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl border border-gray-200">
+                                        <img
+                                          src={item.imagen}
+                                          alt={item.nombre}
+                                          className="h-full w-full object-cover object-center"
+                                        />
+                                      </div>
+                                    )}
 
-                                  <div className="ml-4 flex flex-1 flex-col">
-                                    <div>
-                                      <div className="flex justify-between text-sm font-medium text-gray-900 mb-1">
-                                        <h3 className="line-clamp-2 leading-tight">
-                                          {item.tipo === 'digital' && <span className="mr-1">💻</span>}
-                                          {item.nombre}
-                                        </h3>
-                                        <p className="ml-4 whitespace-nowrap">
-                                          {item.precio_base ? (() => {
-                                            let p = item.precio_base || 0
-                                            if (item.descuentos && item.descuentos.length > 0) {
-                                              const descOrd = [...item.descuentos].sort((a, b) => b.cantidad_minima - a.cantidad_minima)
-                                              const d = descOrd.find(d => item.cantidad >= d.cantidad_minima)
-                                              if (d) p = d.precio_unitario
-                                            }
-                                            return formatPEN(p * item.cantidad)
-                                          })() : 'S/ --'}
-                                        </p>
+                                    <div className="ml-4 flex flex-1 flex-col">
+                                      <div>
+                                        <div className="flex justify-between text-sm font-medium text-gray-900 mb-1">
+                                          <div className="min-w-0 flex-1">
+                                            <h3 className="line-clamp-2 leading-tight">
+                                              {item.tipo === 'digital' && <span className="mr-1">💻</span>}
+                                              {item.nombre}
+                                            </h3>
+                                            {item.nombre_variante && (
+                                              <p className="text-xs text-orange-600 font-semibold mt-0.5">› {item.nombre_variante}</p>
+                                            )}
+                                          </div>
+                                          <p className="ml-4 whitespace-nowrap">
+                                            {item.precio_base ? (() => {
+                                              let p = item.precio_base || 0
+                                              if (item.descuentos && item.descuentos.length > 0) {
+                                                const descOrd = [...item.descuentos].sort((a, b) => b.cantidad_minima - a.cantidad_minima)
+                                                const d = descOrd.find(d => item.cantidad >= d.cantidad_minima)
+                                                if (d) p = d.precio_unitario
+                                              }
+                                              return formatPEN(p * item.cantidad)
+                                            })() : 'S/ --'}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-1 items-end justify-between text-sm">
+                                        <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-1 border border-gray-100">
+                                          <button
+                                            onClick={() => updateQuantity(cartKey, -1)}
+                                            className="p-1 hover:bg-white rounded-md hover:shadow-sm transition-all"
+                                          >
+                                            <Minus className="w-4 h-4 text-gray-600" />
+                                          </button>
+                                          <span className="font-medium text-gray-900 w-4 text-center">{item.cantidad}</span>
+                                          <button
+                                            onClick={() => updateQuantity(cartKey, 1)}
+                                            className="p-1 hover:bg-white rounded-md hover:shadow-sm transition-all"
+                                          >
+                                            <Plus className="w-4 h-4 text-gray-600" />
+                                          </button>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => removeItem(cartKey)}
+                                          className="font-medium text-red-600 hover:text-red-500 text-xs"
+                                        >
+                                          Eliminar
+                                        </button>
                                       </div>
                                     </div>
-                                    <div className="flex flex-1 items-end justify-between text-sm">
-                                      <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-1 border border-gray-100">
-                                        <button
-                                          onClick={() => updateQuantity(item.id, -1)}
-                                          className="p-1 hover:bg-white rounded-md hover:shadow-sm transition-all"
-                                        >
-                                          <Minus className="w-4 h-4 text-gray-600" />
-                                        </button>
-                                        <span className="font-medium text-gray-900 w-4 text-center">{item.cantidad}</span>
-                                        <button
-                                          onClick={() => updateQuantity(item.id, 1)}
-                                          className="p-1 hover:bg-white rounded-md hover:shadow-sm transition-all"
-                                        >
-                                          <Plus className="w-4 h-4 text-gray-600" />
-                                        </button>
-                                      </div>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => removeItem(item.id)}
-                                        className="font-medium text-red-600 hover:text-red-500 text-xs"
-                                      >
-                                        Eliminar
-                                      </button>
-                                    </div>
-                                  </div>
-                                </li>
-                              ))}
+                                  </li>
+                                )
+                              })}
                             </ul>
                           )}
                         </div>

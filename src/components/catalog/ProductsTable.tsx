@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Pencil, Trash2, ToggleLeft, ToggleRight, Tag, Loader2, TrendingUp, AlertTriangle, Copy, Receipt, Printer } from 'lucide-react'
+import { Pencil, Trash2, ToggleLeft, ToggleRight, Tag, Loader2, TrendingUp, AlertTriangle, Copy, Receipt, Printer, Sparkles } from 'lucide-react'
 import { type Producto, type Categoria } from '@/types/database'
 import { formatPEN, matchesFuzzy } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
@@ -100,6 +100,11 @@ export default function ProductsTable({
   const [loadingEliminar, setLoadingEliminar] = useState(false)
   const [modalDuplicados, setModalDuplicados] = useState(false)
   const [modalEtiqueta, setModalEtiqueta] = useState<Producto | null>(null)
+  const [expandedVariantes, setExpandedVariantes] = useState<Record<string, boolean>>({})
+
+  const toggleExpandVariantes = (id: string) => {
+    setExpandedVariantes(prev => ({ ...prev, [id]: !prev[id] }))
+  }
 
   // Cuenta pares de nombres idénticos (ignorando tildes/mayúsculas) para colorear el botón
   const numeroDuplicados = useMemo(() => {
@@ -185,10 +190,16 @@ export default function ProductsTable({
   }
 
   const productosFiltrados = productos.filter((p) => {
-    const matchBusqueda = matchesFuzzy(`${p.nombre} ${p.descripcion ?? ''} ${p.marca ?? ''} ${p.proveedor ?? ''} ${p.codigo_barras ?? ''} ${p.codigo_interno ?? ''}`, busqueda)
+    const variantesTexto = p.variantes?.map(v => `${v.nombre_variante} ${v.sku ?? ''}`).join(' ') ?? ''
+    const matchBusqueda = matchesFuzzy(`${p.nombre} ${p.descripcion ?? ''} ${p.marca ?? ''} ${p.proveedor ?? ''} ${p.codigo_barras ?? ''} ${p.codigo_interno ?? ''} ${variantesTexto}`, busqueda)
     const matchCategoria = categoriaFiltro === 'todas' || p.categoria_id === categoriaFiltro
     const matchActivo = !soloActivos || p.activo
-    const esBajoStock = p.stock_minimo !== null ? p.stock <= p.stock_minimo : p.stock === 0
+
+    const stockEfectivo = p.tiene_variantes && p.variantes && p.variantes.length > 0
+      ? p.variantes.reduce((acc, v) => acc + (v.stock || 0), 0)
+      : p.stock
+
+    const esBajoStock = p.stock_minimo !== null ? stockEfectivo <= p.stock_minimo : stockEfectivo === 0
     const matchStockBajo = !soloStockBajo || esBajoStock
     return matchBusqueda && matchCategoria && matchActivo && matchStockBajo
   })
@@ -412,143 +423,205 @@ export default function ProductsTable({
               </thead>
               <tbody className="divide-y divide-zinc-50">
                 {productosFiltrados.map((producto) => (
-                  <tr key={producto.id} className="hover:bg-zinc-50/60 transition">
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-500 font-semibold select-all">
-                      <span
-                        className="bg-zinc-50 border border-zinc-100 px-2 py-1 rounded-lg hover:bg-zinc-100 transition cursor-pointer flex items-center gap-1.5 w-fit"
-                        title="Click para copiar"
-                        onClick={() => {
-                          navigator.clipboard.writeText(producto.codigo_interno)
-                        }}
-                      >
-                        {producto.codigo_interno}
-                        <Copy className="w-3 h-3 text-zinc-400 shrink-0" />
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <EditableCell
-                            value={producto.nombre || ''}
-                            type="text"
-                            onSave={val => handleInlineEdit(producto.id, 'nombre', val)}
-                            isSaving={savingField?.id === producto.id && savingField?.field === 'nombre'}
-                            className="font-semibold text-zinc-900 min-w-[120px] max-w-sm"
-                          />
-                          {producto.marca && <span className="text-[9px] font-medium bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded-full">{producto.marca}</span>}
-                          {producto.proveedor && <span className="text-[9px] font-medium bg-zinc-50 border border-zinc-200 text-zinc-500 px-1.5 py-0.5 rounded-full">Prov: {producto.proveedor}</span>}
+                  <Fragment key={producto.id}>
+                    <tr className="hover:bg-zinc-50/60 transition">
+                      <td className="px-4 py-3 font-mono text-xs text-zinc-500 font-semibold select-all">
+                        <span
+                          className="bg-zinc-50 border border-zinc-100 px-2 py-1 rounded-lg hover:bg-zinc-100 transition cursor-pointer flex items-center gap-1.5 w-fit"
+                          title="Click para copiar"
+                          onClick={() => {
+                            navigator.clipboard.writeText(producto.codigo_interno)
+                          }}
+                        >
+                          {producto.codigo_interno}
+                          <Copy className="w-3 h-3 text-zinc-400 shrink-0" />
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <EditableCell
+                              value={producto.nombre || ''}
+                              type="text"
+                              onSave={val => handleInlineEdit(producto.id, 'nombre', val)}
+                              isSaving={savingField?.id === producto.id && savingField?.field === 'nombre'}
+                              className="font-semibold text-zinc-900 min-w-[120px] max-w-sm"
+                            />
+                            {producto.marca && <span className="text-[9px] font-medium bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded-full">{producto.marca}</span>}
+                            {producto.proveedor && <span className="text-[9px] font-medium bg-zinc-50 border border-zinc-200 text-zinc-500 px-1.5 py-0.5 rounded-full">Prov: {producto.proveedor}</span>}
+                          </div>
+                          {producto.descripcion && <p className="text-xs text-zinc-400 mt-0.5 whitespace-normal break-words max-w-sm">{producto.descripcion}</p>}
+                          <p className="text-xs text-zinc-400 mt-0.5">por {producto.unidad}</p>
+                          {producto.tiene_variantes && producto.variantes && producto.variantes.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandVariantes(producto.id)}
+                              className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200/60 px-2 py-0.5 rounded-full transition w-fit"
+                            >
+                              <Sparkles className="w-3 h-3 text-orange-500" />
+                              {producto.variantes.length} variante{producto.variantes.length !== 1 ? 's' : ''} {expandedVariantes[producto.id] ? '▲' : '▼'}
+                            </button>
+                          )}
                         </div>
-                        {producto.descripcion && <p className="text-xs text-zinc-400 mt-0.5 whitespace-normal break-words max-w-sm">{producto.descripcion}</p>}
-                        <p className="text-xs text-zinc-400 mt-0.5">por {producto.unidad}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {getNombreCategoria(producto.categoria_id)
-                        ? <Badge variant="blue">{getNombreCategoria(producto.categoria_id)}</Badge>
-                        : <span className="text-xs text-zinc-300">—</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end">
-                        <EditableCell
-                          value={producto.precio_base}
-                          type="number"
-                          onSave={val => handleInlineEdit(producto.id, 'precio_base', val)}
-                          isSaving={savingField?.id === producto.id && savingField?.field === 'precio_base'}
-                          className="font-bold text-zinc-900 tabular-nums text-right w-24"
-                        />
-                      </div>
-                      <div className="flex items-center justify-end gap-1 mt-0.5 flex-wrap">
-                        {igv && producto.afecto_igv && <span className="text-[9px] font-semibold bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded-full">c/IGV</span>}
-                        {igv && !producto.afecto_igv && <span className="text-[9px] font-semibold bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full">exonerado</span>}
-                        {producto.modo_negociacion && <span className="text-[9px] font-semibold bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded-full">negociable</span>}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {producto.precio_compra > 0 ? (() => {
-                        const conIgv = igv && producto.afecto_igv
-                        const precioNeto = conIgv ? producto.precio_base / 1.18 : producto.precio_base
-                        const costoNeto = conIgv ? producto.precio_compra / 1.18 : producto.precio_compra
-                        const utilidad = precioNeto - costoNeto
-                        const margen = precioNeto > 0 ? (utilidad / precioNeto) * 100 : 0
-                        const bajo = margen < margenMinimo
-                        return (
-                          <div>
-                            <div className={`flex items-center justify-end gap-1 text-sm font-semibold tabular-nums ${bajo ? 'text-red-500' : 'text-emerald-600'}`}>
-                              {bajo ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <TrendingUp className="w-3.5 h-3.5 shrink-0" />}
-                              {formatPEN(utilidad)}
-                              <span className="text-xs font-normal opacity-60">({margen.toFixed(0)}%)</span>
-                            </div>
-                            {conIgv && <p className="text-[9px] text-zinc-400 mt-0.5 text-right">sobre precio neto s/IGV</p>}
-                          </div>
-                        )
-                      })() : <span className="text-xs text-zinc-300">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {(() => {
-                        const isOutOfStock = producto.stock === 0 && !producto.venta_sin_stock
-                        const isLowStock = producto.stock_minimo !== null && producto.stock <= producto.stock_minimo
-                        const colorClass = isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-600' : 'text-zinc-700'
-                        return (
-                          <div className="flex flex-col items-end">
-                            <div className={`text-sm font-semibold tabular-nums flex justify-end ${colorClass}`}>
-                              <EditableCell
-                                value={producto.stock}
-                                type="number"
-                                onSave={val => handleInlineEdit(producto.id, 'stock', val)}
-                                isSaving={savingField?.id === producto.id && savingField?.field === 'stock'}
-                                className="text-right w-16"
-                              />
-                            </div>
-                            {producto.stock_minimo !== null && <span className="text-[9px] text-zinc-400 font-normal">mín. {producto.stock_minimo}</span>}
-                            {isOutOfStock && <span className="text-[9px] font-semibold text-red-500 flex items-center gap-0.5 mt-0.5"><AlertTriangle className="w-2.5 h-2.5 shrink-0" /> Agotado</span>}
-                            {!isOutOfStock && isLowStock && <span className="text-[9px] font-semibold text-amber-600 flex items-center gap-0.5 mt-0.5"><AlertTriangle className="w-2.5 h-2.5 shrink-0" /> Stock bajo</span>}
-                            {multiSucursal && (
-                              <div className="mt-1.5 pt-1.5 border-t border-zinc-100/50 flex flex-col items-end gap-0.5 w-full">
-                                {locales.map(loc => {
-                                  const stockLocal = stockLocales.find(sl => sl.local_id === loc.id && sl.producto_id === producto.id)?.stock || 0
-                                  return (
-                                    <span key={loc.id} className="text-[9px] text-zinc-500 font-medium whitespace-nowrap">
-                                      {loc.nombre}: <b className="text-zinc-700">{stockLocal}</b>
-                                    </span>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })()}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button onClick={() => toggleActivo(producto)} disabled={loadingToggle === producto.id} className="text-zinc-400 hover:text-zinc-600 transition">
-                        {loadingToggle === producto.id
-                          ? <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                          : producto.activo
-                            ? <ToggleRight className="w-6 h-6 text-emerald-500" />
-                            : <ToggleLeft className="w-6 h-6 text-zinc-300" />
+                      </td>
+                      <td className="px-4 py-3">
+                        {getNombreCategoria(producto.categoria_id)
+                          ? <Badge variant="blue">{getNombreCategoria(producto.categoria_id)}</Badge>
+                          : <span className="text-xs text-zinc-300">—</span>
                         }
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      {producto.reglas_descuento && producto.reglas_descuento.length > 0
-                        ? <Badge variant="orange">{producto.reglas_descuento.length} rango{producto.reglas_descuento.length !== 1 ? 's' : ''}</Badge>
-                        : <span className="text-xs text-zinc-300">—</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 justify-end">
-                        <button onClick={() => setModalEtiqueta(producto)} title="Imprimir etiquetas" className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition">
-                          <Printer className="w-4 h-4" />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end">
+                          <EditableCell
+                            value={producto.precio_base}
+                            type="number"
+                            onSave={val => handleInlineEdit(producto.id, 'precio_base', val)}
+                            isSaving={savingField?.id === producto.id && savingField?.field === 'precio_base'}
+                            className="font-bold text-zinc-900 tabular-nums text-right w-24"
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-1 mt-0.5 flex-wrap">
+                          {igv && producto.afecto_igv && <span className="text-[9px] font-semibold bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded-full">c/IGV</span>}
+                          {igv && !producto.afecto_igv && <span className="text-[9px] font-semibold bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full">exonerado</span>}
+                          {producto.modo_negociacion && <span className="text-[9px] font-semibold bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded-full">negociable</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {producto.precio_compra > 0 ? (() => {
+                          const conIgv = igv && producto.afecto_igv
+                          const precioNeto = conIgv ? producto.precio_base / 1.18 : producto.precio_base
+                          const costoNeto = conIgv ? producto.precio_compra / 1.18 : producto.precio_compra
+                          const utilidad = precioNeto - costoNeto
+                          const margen = precioNeto > 0 ? (utilidad / precioNeto) * 100 : 0
+                          const bajo = margen < margenMinimo
+                          return (
+                            <div>
+                              <div className={`flex items-center justify-end gap-1 text-sm font-semibold tabular-nums ${bajo ? 'text-red-500' : 'text-emerald-600'}`}>
+                                {bajo ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> : <TrendingUp className="w-3.5 h-3.5 shrink-0" />}
+                                {formatPEN(utilidad)}
+                                <span className="text-xs font-normal opacity-60">({margen.toFixed(0)}%)</span>
+                              </div>
+                              {conIgv && <p className="text-[9px] text-zinc-400 mt-0.5 text-right">sobre precio neto s/IGV</p>}
+                            </div>
+                          )
+                        })() : <span className="text-xs text-zinc-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {(() => {
+                          const stockEfectivo = producto.tiene_variantes && producto.variantes && producto.variantes.length > 0
+                            ? producto.variantes.reduce((sum, v) => sum + (v.stock || 0), 0)
+                            : producto.stock
+
+                          const isOutOfStock = stockEfectivo === 0 && !producto.venta_sin_stock
+                          const isLowStock = producto.stock_minimo !== null && stockEfectivo <= producto.stock_minimo
+                          const colorClass = isOutOfStock ? 'text-red-500' : isLowStock ? 'text-amber-600' : 'text-zinc-700'
+                          return (
+                            <div className="flex flex-col items-end">
+                              <div className={`text-sm font-semibold tabular-nums flex justify-end ${colorClass}`}>
+                                {producto.tiene_variantes ? (
+                                  <span className="font-bold text-zinc-900">{stockEfectivo}</span>
+                                ) : (
+                                  <EditableCell
+                                    value={producto.stock}
+                                    type="number"
+                                    onSave={val => handleInlineEdit(producto.id, 'stock', val)}
+                                    isSaving={savingField?.id === producto.id && savingField?.field === 'stock'}
+                                    className="text-right w-16"
+                                  />
+                                )}
+                              </div>
+                              {producto.stock_minimo !== null && <span className="text-[9px] text-zinc-400 font-normal">mín. {producto.stock_minimo}</span>}
+                              {isOutOfStock && <span className="text-[9px] font-semibold text-red-500 flex items-center gap-0.5 mt-0.5"><AlertTriangle className="w-2.5 h-2.5 shrink-0" /> Agotado</span>}
+                              {!isOutOfStock && isLowStock && <span className="text-[9px] font-semibold text-amber-600 flex items-center gap-0.5 mt-0.5"><AlertTriangle className="w-2.5 h-2.5 shrink-0" /> Stock bajo</span>}
+                              {multiSucursal && (
+                                <div className="mt-1.5 pt-1.5 border-t border-zinc-100/50 flex flex-col items-end gap-0.5 w-full">
+                                  {locales.map(loc => {
+                                    const stockLocal = stockLocales.find(sl => sl.local_id === loc.id && sl.producto_id === producto.id)?.stock || 0
+                                    return (
+                                      <span key={loc.id} className="text-[9px] text-zinc-500 font-medium whitespace-nowrap">
+                                        {loc.nombre}: <b className="text-zinc-700">{stockLocal}</b>
+                                      </span>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button onClick={() => toggleActivo(producto)} disabled={loadingToggle === producto.id} className="text-zinc-400 hover:text-zinc-600 transition">
+                          {loadingToggle === producto.id
+                            ? <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                            : producto.activo
+                              ? <ToggleRight className="w-6 h-6 text-emerald-500" />
+                              : <ToggleLeft className="w-6 h-6 text-zinc-300" />
+                          }
                         </button>
-                        <Link href={`/dashboard/catalog/${producto.id}`} className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition">
-                          <Pencil className="w-4 h-4" />
-                        </Link>
-                        <button onClick={() => setConfirmEliminar(producto.id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-4 py-3">
+                        {producto.reglas_descuento && producto.reglas_descuento.length > 0
+                          ? <Badge variant="orange">{producto.reglas_descuento.length} rango{producto.reglas_descuento.length !== 1 ? 's' : ''}</Badge>
+                          : <span className="text-xs text-zinc-300">—</span>
+                        }
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 justify-end">
+                          <button onClick={() => setModalEtiqueta(producto)} title="Imprimir etiquetas" className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition">
+                            <Printer className="w-4 h-4" />
+                          </button>
+                          <Link href={`/dashboard/catalog/${producto.id}`} className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition">
+                            <Pencil className="w-4 h-4" />
+                          </Link>
+                          <button onClick={() => setConfirmEliminar(producto.id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {expandedVariantes[producto.id] && producto.variantes && (
+                      <tr key={`var-${producto.id}`} className="bg-orange-50/20">
+                        <td colSpan={9} className="px-6 py-3">
+                          <div className="p-3 bg-white border border-orange-200/80 rounded-xl shadow-xs space-y-2">
+                            <h5 className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-orange-500" />
+                              Variantes de {producto.nombre}
+                            </h5>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b border-zinc-100 text-zinc-400 font-semibold text-left">
+                                    <th className="py-1 px-2">Variante</th>
+                                    <th className="py-1 px-2">SKU</th>
+                                    <th className="py-1 px-2 text-right">Precio</th>
+                                    <th className="py-1 px-2 text-right">Stock</th>
+                                    <th className="py-1 px-2 text-center">Estado</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-50">
+                                  {producto.variantes.map((v) => (
+                                    <tr key={v.id}>
+                                      <td className="py-1.5 px-2 font-medium text-zinc-900">{v.nombre_variante}</td>
+                                      <td className="py-1.5 px-2 text-zinc-500 font-mono">{v.sku || '—'}</td>
+                                      <td className="py-1.5 px-2 text-right font-bold text-zinc-900">
+                                        {formatPEN(v.precio ?? producto.precio_base)}
+                                      </td>
+                                      <td className="py-1.5 px-2 text-right font-bold text-zinc-900">{v.stock}</td>
+                                      <td className="py-1.5 px-2 text-center">
+                                        <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded-full ${v.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'}`}>
+                                          {v.activo ? 'Activo' : 'Inactivo'}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

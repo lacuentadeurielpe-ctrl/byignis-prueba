@@ -29,7 +29,7 @@ import OrderDetailPane from './OrderDetailPane'
 // ── Tipos ────────────────────────────────────────────────────────────────
 // Igual a OrdersTable
 export interface Repartidor { id: string; nombre: string; telefono: string | null; activo: boolean }
-export interface ItemPedido { id: string; nombre_producto: string; cantidad: number; precio_unitario: number; subtotal: number }
+export interface ItemPedido { id: string; nombre_producto: string; cantidad: number; precio_unitario: number; subtotal: number; variante_id?: string | null; nombre_variante?: string | null }
 export interface EntregaResumen { id: string; estado: string; vehiculos: { nombre: string; tipo: string } | null }
 export interface Pedido {
   id: string

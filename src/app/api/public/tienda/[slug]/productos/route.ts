@@ -80,7 +80,7 @@ export async function GET(
     // FLUJO FÍSICO (default)
     let query = admin
       .from('productos')
-      .select('id, nombre, descripcion, precio_base, unidad, stock, marca, imagenes, categorias(nombre)', { count: 'exact' })
+      .select('id, nombre, descripcion, precio_base, unidad, stock, marca, imagenes, tiene_variantes, categorias(nombre), variantes:variantes_producto(*), atributos:producto_atributos(*, valores:atributo_valores(*))', { count: 'exact' })
       .eq('ferreteria_id', store.id)
       .eq('activo', true)
 
@@ -119,13 +119,18 @@ export async function GET(
       nombre: p.nombre,
       categoria: p.categorias?.nombre,
       marca: p.marca,
-      stock: p.stock,
+      stock: p.tiene_variantes && p.variantes && p.variantes.length > 0
+        ? p.variantes.reduce((sum: number, v: any) => sum + (v.stock || 0), 0)
+        : p.stock,
       precio_base: config.mostrar_precios ? p.precio_base : null,
       unidad: p.unidad,
       descripcion: config.mostrar_descripciones ? p.descripcion : null,
       imagenes: config.mostrar_imagenes ? p.imagenes : [],
       descuentos: config.mostrar_precios && config.mostrar_bulk_pricing ? rulesMap[p.id] || [] : [],
-      tipo: 'fisico'
+      tipo: 'fisico',
+      tiene_variantes: p.tiene_variantes ?? false,
+      variantes: p.variantes ?? [],
+      atributos: p.atributos ?? []
     }))
 
     return NextResponse.json({

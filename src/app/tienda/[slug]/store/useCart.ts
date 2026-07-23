@@ -8,6 +8,8 @@ export interface CartItem {
   unidad: string
   imagen?: string
   tipo: 'fisico' | 'digital'
+  variante_id?: string | null
+  nombre_variante?: string | null
   descuentos?: Array<{
     cantidad_minima: number
     precio_unitario: number
@@ -19,11 +21,15 @@ interface CartState {
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
   addItem: (item: Omit<CartItem, 'cantidad'>) => void
-  removeItem: (id: string) => void
-  updateQuantity: (id: string, delta: number) => void
+  removeItem: (cartKey: string) => void
+  updateQuantity: (cartKey: string, delta: number) => void
   clearCart: () => void
   getTotal: () => number
   getTotalItems: () => number
+}
+
+function getItemKey(item: { id: string; variante_id?: string | null }): string {
+  return item.variante_id ? `${item.id}_${item.variante_id}` : item.id
 }
 
 export const useCart = create<CartState>((set, get) => ({
@@ -32,26 +38,25 @@ export const useCart = create<CartState>((set, get) => ({
   setIsOpen: (isOpen) => set({ isOpen }),
   addItem: (item) => {
     const { items } = get()
-    const existing = items.find((i) => i.id === item.id)
-    if (existing) {
-      set({
-        items: items.map((i) =>
-          i.id === item.id ? { ...i, cantidad: i.cantidad + 1 } : i
-        ),
-      })
+    const itemKey = getItemKey(item)
+    const existingIndex = items.findIndex((i) => getItemKey(i) === itemKey)
+    if (existingIndex >= 0) {
+      const newItems = [...items]
+      newItems[existingIndex].cantidad += 1
+      set({ items: newItems })
     } else {
       set({ items: [...items, { ...item, cantidad: 1 }] })
     }
   },
-  removeItem: (id) => {
-    set({ items: get().items.filter((i) => i.id !== id) })
+  removeItem: (cartKey) => {
+    set({ items: get().items.filter((i) => getItemKey(i) !== cartKey) })
   },
-  updateQuantity: (id, delta) => {
+  updateQuantity: (cartKey, delta) => {
     const { items } = get()
     set({
       items: items
         .map((i) => {
-          if (i.id === id) {
+          if (getItemKey(i) === cartKey) {
             const newQuantity = i.cantidad + delta
             return { ...i, cantidad: Math.max(0, newQuantity) }
           }

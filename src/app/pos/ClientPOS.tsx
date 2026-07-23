@@ -11,8 +11,11 @@ import ScannerModal from '@/components/ui/ScannerModal'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import Modal from '@/components/ui/Modal'
+import { Sparkles } from 'lucide-react'
 import { usePOSStore, ProductoPOS } from '@/stores/usePOSStore'
 import { useRealtimeProductos } from '@/lib/hooks/useRealtimeProductos'
+import { type VarianteProducto } from '@/types/database'
 
 interface ClientPOSProps {
   productos: ProductoPOS[]
@@ -27,7 +30,7 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
   // cajero/dispositivo) sin recargar la página.
   const productos = useRealtimeProductos(ferreteriaId, productosIniciales)
   const {
-    items, agregarItem, actualizarCantidad, eliminarItem, vaciarCarrito, total,
+    items, agregarItem, agregarItemConVariante, actualizarCantidad, eliminarItem, vaciarCarrito, total,
     busqueda, setBusqueda, mostrarSugerencias, setMostrarSugerencias,
     showScanner, setShowScanner, cobrando, setCobrando,
     nombreCliente, setNombreCliente, telefonoCliente, setTelefonoCliente,
@@ -35,6 +38,8 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
     tipoComprobante, setTipoComprobante, esProgramado, setEsProgramado,
     fechaProgramada, setFechaProgramada, resetearDespuesDeVenta
   } = usePOSStore()
+
+  const [productoParaVariante, setProductoParaVariante] = useState<ProductoPOS | null>(null)
 
   const busquedaRef = useRef<HTMLInputElement>(null)
   const scanBuffer = useRef('')
@@ -347,6 +352,9 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
               <div key={idx} className="flex items-center gap-3 bg-white p-3 rounded-xl border border-zinc-100 shadow-sm">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold text-sm text-zinc-800 truncate">{item.nombre_producto}</h3>
+                  {item.nombre_variante && (
+                    <p className="text-xs text-orange-600 font-semibold truncate">› {item.nombre_variante}</p>
+                  )}
                   <p className="text-xs text-zinc-400">{formatPEN(item.precio_unitario)} / {item.unidad}</p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -561,7 +569,14 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
               {sugerencias.length > 0 ? sugerencias.map(p => (
                 <button
                   key={p.id}
-                  onClick={() => { agregarItem(p); setVistaMovil('carrito') }}
+                  onClick={() => {
+                    if (p.tiene_variantes && p.variantes && p.variantes.length > 0) {
+                      setProductoParaVariante(p)
+                    } else {
+                      agregarItem(p)
+                      setVistaMovil('carrito')
+                    }
+                  }}
                   className={cn(
                     'w-full flex items-center gap-3 p-3 text-left rounded-xl transition group border hover:shadow-sm',
                     p.stock === 0
@@ -578,7 +593,14 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
                     <Package className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-sm text-zinc-900 truncate">{p.nombre}</h4>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="font-bold text-sm text-zinc-900 truncate">{p.nombre}</h4>
+                      {p.tiene_variantes && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[9px] font-bold shrink-0">
+                          Variantes
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs">
                       <span className={p.stock === 0 ? 'text-amber-600 font-semibold' : 'text-zinc-500'}>
                         Stk: {p.stock}{p.stock === 0 ? ' — sin stock' : ''}
@@ -605,6 +627,47 @@ export default function ClientPOS({ productos: productosIniciales, nombreFerrete
           )}
         </div>
       </div>
+
+      {/* Modal Selección de Variante */}
+      {productoParaVariante && (
+        <Modal
+          open={!!productoParaVariante}
+          onClose={() => setProductoParaVariante(null)}
+          title={`Seleccionar opción de "${productoParaVariante.nombre}"`}
+          size="sm"
+        >
+          <div className="space-y-2 pt-2">
+            <p className="text-xs text-zinc-500 mb-3">
+              Selecciona la combinación que desea llevar el cliente:
+            </p>
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {productoParaVariante.variantes?.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => {
+                    agregarItemConVariante(productoParaVariante, v)
+                    setProductoParaVariante(null)
+                    setVistaMovil('carrito')
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-zinc-200 hover:border-zinc-900 hover:bg-zinc-50 transition text-left"
+                >
+                  <div>
+                    <h5 className="font-bold text-sm text-zinc-900 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                      {v.nombre_variante}
+                    </h5>
+                    {v.sku && <p className="text-xs text-zinc-400 font-mono mt-0.5">SKU: {v.sku}</p>}
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-sm text-zinc-900">{formatPEN(v.precio ?? productoParaVariante.precio_base)}</p>
+                    <p className="text-xs text-zinc-500">Stock: {v.stock}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Scanner Modal */}
       {showScanner && (

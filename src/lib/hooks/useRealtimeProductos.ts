@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 // Mismo select que CatalogRepository.listarProductosActivos
-const SELECT_PRODUCTO = '*, categorias(id,nombre), reglas_descuento(*)'
+const SELECT_PRODUCTO = '*, categorias(id,nombre), reglas_descuento(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))'
 
 interface ProductoMinimo {
   id: string
@@ -46,7 +46,7 @@ export function useRealtimeProductos<T extends ProductoMinimo>(
         .maybeSingle()
       const completo = data as T | null
       if (!completo) return
-      setProductos(prev => prev.some(p => p.id === completo.id) ? prev : [...prev, completo])
+      setProductos(prev => prev.some(p => p.id === completo.id) ? prev.map(p => p.id === completo.id ? completo : p) : [...prev, completo])
     }
 
     const channel = supabase
@@ -86,6 +86,16 @@ export function useRealtimeProductos<T extends ProductoMinimo>(
           const id = (payload.old as { id?: string })?.id
           if (!id) return
           setProductos(prev => prev.filter(p => p.id !== id))
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'variantes_producto', filter: `ferreteria_id=eq.${ferreteriaId}` },
+        (payload) => {
+          const prodId = (payload.new as any)?.producto_id || (payload.old as any)?.producto_id
+          if (prodId) {
+            void agregarSiFalta(prodId)
+          }
         },
       )
       .subscribe()

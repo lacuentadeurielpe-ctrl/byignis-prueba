@@ -9,6 +9,8 @@ export interface ItemCotizacionInput {
   subtotal: number
   noDisponible?: boolean
   nota?: string | null
+  varianteId?: string | null
+  nombreVariante?: string | null
 }
 
 export interface PedidoInput {
@@ -38,6 +40,8 @@ export interface ItemPedidoInput {
   precioUnitario: number
   subtotal: number
   costoUnitario: number
+  varianteId?: string | null
+  nombreVariante?: string | null
 }
 
 export class VentasRepository {
@@ -82,6 +86,8 @@ export class VentasRepository {
         subtotal: i.subtotal,
         no_disponible: i.noDisponible ?? false,
         nota_disponibilidad: i.nota ?? null,
+        variante_id: i.varianteId ?? null,
+        nombre_variante: i.nombreVariante ?? null,
       }))
     )
 
@@ -178,6 +184,8 @@ export class VentasRepository {
         precio_unitario: i.precioUnitario,
         subtotal: i.subtotal,
         costo_unitario: i.costoUnitario,
+        variante_id: i.varianteId ?? null,
+        nombre_variante: i.nombreVariante ?? null,
       }))
     )
 

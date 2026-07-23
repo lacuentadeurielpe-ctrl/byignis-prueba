@@ -8,6 +8,9 @@ import { formatPEN } from '@/lib/utils'
 import { useCart, CartItem } from './store/useCart'
 import ShoppingCartDrawer from './components/ShoppingCartDrawer'
 
+import { Sparkles, Check } from 'lucide-react'
+import Modal from '@/components/ui/Modal'
+
 interface StoreInfo {
   id: string
   nombre: string
@@ -21,6 +24,22 @@ interface StoreInfo {
     mostrar_imagenes: boolean
     mostrar_bulk_pricing: boolean
   }
+}
+
+export interface VariantePublica {
+  id: string
+  nombre_variante: string
+  precio: number | null
+  stock: number
+  sku?: string | null
+  imagen_url?: string | null
+  activo?: boolean
+}
+
+export interface AtributoPublico {
+  id: string
+  nombre: string
+  valores: Array<{ id: string; valor: string; color_hex?: string | null }>
 }
 
 interface Product {
@@ -38,6 +57,9 @@ interface Product {
     precio_unitario: number
   }>
   tipo: 'fisico' | 'digital'
+  tiene_variantes?: boolean
+  variantes?: VariantePublica[]
+  atributos?: AtributoPublico[]
 }
 
 interface Categoria {
@@ -62,6 +84,9 @@ export default function TiendaPage() {
   
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
+
+  // State para modal de selección de variante en tienda pública
+  const [productoModalVariante, setProductoModalVariante] = useState<Product | null>(null)
   
   const { items: cartItems, addItem, updateQuantity, getTotalItems, setIsOpen } = useCart()
 
@@ -355,9 +380,35 @@ export default function TiendaPage() {
                           {p.categoria}
                         </span>
                       )}
-                      <h3 className="font-semibold text-gray-900 line-clamp-2 leading-tight mb-2">
+                      <h3 className="font-semibold text-gray-900 line-clamp-2 leading-tight mb-1">
                         {p.nombre}
                       </h3>
+
+                      {p.tiene_variantes && p.atributos && p.atributos.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap my-1.5">
+                          {p.atributos.map(at => (
+                            <div key={at.id} className="flex items-center gap-1 flex-wrap">
+                              {at.valores.map(v => (
+                                v.color_hex ? (
+                                  <span
+                                    key={v.id}
+                                    className="w-3.5 h-3.5 rounded-full border border-gray-300 shadow-xs inline-block"
+                                    style={{ backgroundColor: v.color_hex }}
+                                    title={`${at.nombre}: ${v.valor}`}
+                                  />
+                                ) : (
+                                  <span
+                                    key={v.id}
+                                    className="px-1.5 py-0.5 text-[9px] font-semibold bg-gray-100 text-gray-600 rounded"
+                                  >
+                                    {v.valor}
+                                  </span>
+                                )
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       
                       {store?.config.mostrar_descripciones && p.descripcion && (
                          <p className="text-xs text-gray-500 line-clamp-2 mb-4 flex-1">
@@ -397,20 +448,35 @@ export default function TiendaPage() {
                           </div>
                         ) : (
                           <button
-                            onClick={() => addItem({
-                              id: p.id,
-                              nombre: p.nombre,
-                              precio_base: p.precio_base,
-                              unidad: p.unidad,
-                              imagen: hasImages ? p.imagenes[0] : undefined,
-                              tipo: p.tipo,
-                              descuentos: p.descuentos
-                            })}
+                            onClick={() => {
+                              if (p.tiene_variantes && p.variantes && p.variantes.length > 0) {
+                                setProductoModalVariante(p)
+                              } else {
+                                addItem({
+                                  id: p.id,
+                                  nombre: p.nombre,
+                                  precio_base: p.precio_base,
+                                  unidad: p.unidad,
+                                  imagen: hasImages ? p.imagenes[0] : undefined,
+                                  tipo: p.tipo,
+                                  descuentos: p.descuentos
+                                })
+                              }
+                            }}
                             disabled={p.stock === 0 && store?.config.mostrar_sin_stock && p.tipo === 'fisico'}
                             className="w-full h-11 bg-gray-50 hover:bg-indigo-50 text-indigo-600 border border-indigo-100 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed group-hover:bg-indigo-600 group-hover:text-white"
                           >
-                            <Plus className="w-4 h-4" />
-                            Agregar
+                            {p.tiene_variantes ? (
+                              <>
+                                <Sparkles className="w-4 h-4 text-orange-500" />
+                                Opciones
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-4 h-4" />
+                                Agregar
+                              </>
+                            )}
                           </button>
                         )}
                       </div>
@@ -428,6 +494,75 @@ export default function TiendaPage() {
           </div>
         )}
       </main>
+
+      {/* Modal Selección de Variante en Tienda Pública */}
+      {productoModalVariante && (
+        <Modal
+          open={!!productoModalVariante}
+          onClose={() => setProductoModalVariante(null)}
+          title={`Opciones de "${productoModalVariante.nombre}"`}
+          size="sm"
+        >
+          <div className="space-y-3 pt-2">
+            <p className="text-xs text-gray-500">
+              Selecciona la combinación deseada:
+            </p>
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {productoModalVariante.variantes?.map((v) => {
+                const stockVal = v.stock ?? 0
+                const agotado = stockVal === 0
+                return (
+                  <button
+                    key={v.id}
+                    disabled={agotado}
+                    onClick={() => {
+                      addItem({
+                        id: productoModalVariante.id,
+                        nombre: productoModalVariante.nombre,
+                        precio_base: v.precio ?? productoModalVariante.precio_base,
+                        unidad: productoModalVariante.unidad,
+                        imagen: v.imagen_url || (productoModalVariante.imagenes?.[0]),
+                        tipo: productoModalVariante.tipo,
+                        variante_id: v.id,
+                        nombre_variante: v.nombre_variante,
+                        descuentos: productoModalVariante.descuentos
+                      })
+                      setProductoModalVariante(null)
+                      setIsOpen(true)
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-xl border transition text-left ${
+                      agotado
+                        ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                        : 'border-gray-200 hover:border-indigo-600 hover:bg-indigo-50/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {v.imagen_url && (
+                        <img src={v.imagen_url} alt={v.nombre_variante} className="w-10 h-10 object-cover rounded-lg border border-gray-100" />
+                      )}
+                      <div>
+                        <h5 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                          {v.nombre_variante}
+                        </h5>
+                        {v.sku && <p className="text-[11px] text-gray-400 font-mono">SKU: {v.sku}</p>}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-sm text-gray-900">
+                        {formatPEN(v.precio ?? productoModalVariante.precio_base ?? 0)}
+                      </p>
+                      <p className={`text-xs ${agotado ? 'text-red-500 font-bold' : 'text-gray-500'}`}>
+                        {agotado ? 'Agotado' : `Stock: ${stockVal}`}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <footer className="bg-white border-t border-gray-200 py-8 text-center">
         <p className="text-xs text-gray-400">

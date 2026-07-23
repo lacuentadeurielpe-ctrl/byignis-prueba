@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSessionInfo } from '@/lib/auth/roles'
 
-// GET /api/products — listar productos con sus reglas de descuento
+// GET /api/products — listar productos con sus reglas de descuento, variantes y atributos
 export async function GET(request: Request) {
   const session = await getSessionInfo()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from('productos')
-    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*)')
+    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
     .eq('ferreteria_id', session.ferreteriaId)
     .order('nombre', { ascending: true })
 
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   const supabase = await createClient()
   const body = await request.json()
-  const { reglas_descuento, unidades_producto: unidadesInput, ...productoData } = body
+  const { reglas_descuento, unidades_producto: unidadesInput, atributos, variantes, ...productoData } = body
 
   // Validaciones básicas
   if (!productoData.nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 })
@@ -124,10 +124,10 @@ export async function POST(request: Request) {
     await supabase.from('unidades_producto').insert(unidades)
   }
 
-  // Retornar producto completo con reglas y unidades
+  // Retornar producto completo con reglas, unidades, variantes y atributos
   const { data: productoCompleto } = await supabase
     .from('productos')
-    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*)')
+    .select('*, categorias(id, nombre), reglas_descuento(*), unidades_producto(*), variantes_producto(*), producto_atributos(*, valores:atributo_valores(*))')
     .eq('id', producto.id).single()
 
   return NextResponse.json(productoCompleto, { status: 201 })

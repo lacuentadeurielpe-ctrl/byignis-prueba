@@ -280,6 +280,43 @@ export interface Categoria {
   orden: number
 }
 
+export interface ProductoAtributo {
+  id: string
+  ferreteria_id: string
+  producto_id: string
+  nombre: string
+  orden: number
+  created_at?: string
+  valores?: AtributoValor[]
+}
+
+export interface AtributoValor {
+  id: string
+  atributo_id: string
+  valor: string
+  color_hex?: string | null
+  orden: number
+}
+
+export interface VarianteProducto {
+  id: string
+  ferreteria_id: string
+  producto_id: string
+  sku?: string | null
+  nombre_variante: string
+  precio?: number | null
+  precio_compra?: number | null
+  stock: number
+  stock_minimo?: number
+  imagen_url?: string | null
+  activo: boolean
+  venta_sin_stock: boolean
+  valores_ids: string[]
+  created_at?: string
+  updated_at?: string
+  valores?: AtributoValor[]
+}
+
 export interface Producto {
   id: string
   ferreteria_id: string
@@ -299,6 +336,7 @@ export interface Producto {
   codigo_interno: string         // código interno autogenerado
   facturable: boolean            // admite envío a SUNAT (comprado con factura)
   activo: boolean
+  tiene_variantes?: boolean      // indica si utiliza variantes (tallas, colores, etc.)
   proveedor?: string | null
   marca?: string | null
   imagenes?: string[]
@@ -308,6 +346,8 @@ export interface Producto {
   categorias?: Categoria
   reglas_descuento?: ReglaDescuento[]
   unidades_producto?: UnidadProducto[]
+  atributos?: ProductoAtributo[]
+  variantes?: VarianteProducto[]
 }
 
 export interface UnidadProducto {
