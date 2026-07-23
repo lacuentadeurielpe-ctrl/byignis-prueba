@@ -15,6 +15,8 @@ export interface ItemNuevoPedido {
   cantidad: number
   precio_unitario: number
   costo_unitario: number
+  variante_id?: string | null
+  nombre_variante?: string | null
 }
 
 export interface PedidoPayload {
@@ -114,7 +116,9 @@ export class OrdersService {
         precioOriginal: i.precio_unitario,
         precioUnitario: i.precio_unitario,
         subtotal: i.cantidad * i.precio_unitario,
-        costoUnitario: i.costo_unitario
+        costoUnitario: i.costo_unitario,
+        varianteId: i.variante_id ?? null,
+        nombreVariante: i.nombre_variante ?? null
       }))
     )
 
